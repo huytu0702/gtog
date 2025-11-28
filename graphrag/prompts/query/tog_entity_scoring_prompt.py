@@ -1,0 +1,13 @@
+"""Default entity scoring prompt for ToG search."""
+
+TOG_ENTITY_SCORING_PROMPT = """
+Given the question: "{query}"
+Current exploration path: {current_path}
+
+Candidate entities to explore:
+{candidate_entities}
+
+Rate each entity (1-10) based on relevance to the question.
+Output format: [score1, score2, score3, ...]
+Only output the list of numbers.
+"""

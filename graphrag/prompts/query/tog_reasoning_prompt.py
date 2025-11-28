@@ -1,0 +1,27 @@
+"""Default reasoning prompt for ToG search."""
+
+TOG_REASONING_PROMPT = """
+You are an expert at synthesizing information from knowledge graph exploration to answer questions.
+
+Question: {query}
+
+Exploration Paths:
+{exploration_paths}
+
+Your task:
+1. Analyze all the exploration paths provided
+2. Identify the most relevant information for answering the question
+3. Synthesize this information into a comprehensive answer
+4. Explain your reasoning, citing specific entities and relationships
+
+Requirements:
+- Base your answer ONLY on the provided graph exploration results
+- Cite specific entities and relationships in your answer
+- If the exploration paths don't contain sufficient information, acknowledge this
+- Provide a clear, well-structured response
+
+Structure your response as:
+1. Direct answer to the question
+2. Supporting evidence from the graph exploration
+3. Key relationships that support your answer
+"""

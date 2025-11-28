@@ -32,6 +32,9 @@ from graphrag.query.structured_search.local_search.mixed_context import (
     LocalSearchMixedContext,
 )
 from graphrag.query.structured_search.local_search.search import LocalSearch
+from graphrag.query.structured_search.tog_search.search import ToGSearch
+from graphrag.query.structured_search.tog_search.pruning import LLMPruning, SemanticPruning
+from graphrag.query.structured_search.tog_search.reasoning import ToGReasoning
 from graphrag.tokenizer.get_tokenizer import get_tokenizer
 from graphrag.vector_stores.base import BaseVectorStore
 
@@ -299,5 +302,72 @@ def get_basic_search_engine(
             "k": bs_config.k,
             "max_context_tokens": bs_config.max_context_tokens,
         },
+        callbacks=callbacks,
+    )
+
+
+def get_tog_search_engine(
+    config: GraphRagConfig,
+    entities: list[Entity],
+    relationships: list[Relationship],
+    response_type: str,
+    callbacks: list[QueryCallbacks] | None = None,
+) -> ToGSearch:
+    """Create a ToG search engine based on data + configuration."""
+
+    chat_model_settings = config.get_language_model_config(
+        config.tog_search.chat_model_id
+    )
+
+    chat_model = ModelManager().get_or_create_chat_model(
+        name="tog_search_chat",
+        model_type=chat_model_settings.type,
+        config=chat_model_settings,
+    )
+
+    embedding_model_settings = config.get_language_model_config(
+        config.tog_search.embedding_model_id
+    )
+
+    embedding_model = ModelManager().get_or_create_embedding_model(
+        name="tog_search_embedding",
+        model_type=embedding_model_settings.type,
+        config=embedding_model_settings,
+    )
+
+    tokenizer = get_tokenizer(model_config=chat_model_settings)
+
+    # Create pruning strategy
+    if config.tog_search.prune_strategy == "llm":
+        pruning_strategy = LLMPruning(
+            model=chat_model,
+            temperature=config.tog_search.temperature_exploration,
+            relation_scoring_prompt=config.tog_search.relation_scoring_prompt,
+            entity_scoring_prompt=config.tog_search.entity_scoring_prompt,
+        )
+    elif config.tog_search.prune_strategy == "semantic":
+        pruning_strategy = SemanticPruning(
+            embedding_model=embedding_model
+        )
+    else:
+        raise ValueError(f"Unknown pruning strategy: {config.tog_search.prune_strategy}")
+
+    # Create reasoning module
+    reasoning_module = ToGReasoning(
+        model=chat_model,
+        temperature=config.tog_search.temperature_reasoning,
+        reasoning_prompt=config.tog_search.reasoning_prompt,
+    )
+
+    return ToGSearch(
+        model=chat_model,
+        entities=entities,
+        relationships=relationships,
+        tokenizer=tokenizer,
+        pruning_strategy=pruning_strategy,
+        reasoning_module=reasoning_module,
+        width=config.tog_search.width,
+        depth=config.tog_search.depth,
+        num_retain_entity=config.tog_search.num_retain_entity,
         callbacks=callbacks,
     )

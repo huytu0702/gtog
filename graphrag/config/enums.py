@@ -134,6 +134,7 @@ class SearchMethod(Enum):
     GLOBAL = "global"
     DRIFT = "drift"
     BASIC = "basic"
+    TOG = "tog"
 
     def __str__(self):
         """Return the string representation of the enum value."""

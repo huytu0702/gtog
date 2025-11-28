@@ -495,6 +495,7 @@ def _query_cli(
         run_drift_search,
         run_global_search,
         run_local_search,
+        run_tog_search,
     )
 
     match method:
@@ -534,6 +535,15 @@ def _query_cli(
             )
         case SearchMethod.BASIC:
             run_basic_search(
+                config_filepath=config,
+                data_dir=data,
+                root_dir=root,
+                streaming=streaming,
+                query=query,
+                verbose=verbose,
+            )
+        case SearchMethod.TOG:
+            run_tog_search(
                 config_filepath=config,
                 data_dir=data,
                 root_dir=root,

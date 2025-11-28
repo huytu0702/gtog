@@ -35,6 +35,7 @@ from graphrag.config.models.summarize_descriptions_config import (
     SummarizeDescriptionsConfig,
 )
 from graphrag.config.models.text_embedding_config import TextEmbeddingConfig
+from graphrag.config.models.tog_search_config import ToGSearchConfig
 from graphrag.config.models.umap_config import UmapConfig
 from graphrag.config.models.vector_store_config import VectorStoreConfig
 from graphrag.language_model.providers.litellm.services.rate_limiter.rate_limiter_factory import (
@@ -337,6 +338,11 @@ class GraphRagConfig(BaseModel):
         description="The basic search configuration.", default=BasicSearchConfig()
     )
     """The basic search configuration."""
+
+    tog_search: ToGSearchConfig = Field(
+        description="The ToG search configuration.", default=ToGSearchConfig()
+    )
+    """The ToG search configuration."""
 
     def _validate_vector_store_db_uri(self) -> None:
         """Validate the vector store configuration."""

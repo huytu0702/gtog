@@ -38,6 +38,7 @@ from graphrag.query.factory import (
     get_drift_search_engine,
     get_global_search_engine,
     get_local_search_engine,
+    get_tog_search_engine,
 )
 from graphrag.query.indexer_adapters import (
     read_indexer_communities,
@@ -1224,3 +1225,93 @@ async def multi_index_basic_search(
         query=query,
         callbacks=callbacks,
     )
+
+
+@validate_call(config={"arbitrary_types_allowed": True})
+async def tog_search(
+    config: GraphRagConfig,
+    entities: pd.DataFrame,
+    relationships: pd.DataFrame,
+    query: str,
+    callbacks: list[QueryCallbacks] | None = None,
+    verbose: bool = False,
+) -> tuple[
+    str | dict[str, Any] | list[dict[str, Any]],
+    str | list[pd.DataFrame] | dict[str, pd.DataFrame],
+]:
+    """Perform a ToG search and return the context data and response.
+
+    Parameters
+    ----------
+    - config (GraphRagConfig): A graphrag configuration (from settings.yaml)
+    - entities (pd.DataFrame): A DataFrame containing the final entities (from entities.parquet)
+    - relationships (pd.DataFrame): A DataFrame containing the final relationships (from relationships.parquet)
+    - query (str): The user query to search for.
+
+    Returns
+    -------
+    TODO: Document the search response type and format.
+    """
+    init_loggers(config=config, verbose=verbose, filename="query.log")
+
+    callbacks = callbacks or []
+    full_response = ""
+    context_data = {}
+
+    def on_context(context: Any) -> None:
+        nonlocal context_data
+        context_data = context
+
+    local_callbacks = NoopQueryCallbacks()
+    local_callbacks.on_context = on_context
+    callbacks.append(local_callbacks)
+
+    logger.debug("Executing ToG search query: %s", query)
+    async for chunk in tog_search_streaming(
+        config=config,
+        entities=entities,
+        relationships=relationships,
+        query=query,
+        callbacks=callbacks,
+    ):
+        full_response += chunk
+    logger.debug("Query response: %s", truncate(full_response, 400))
+    return full_response, context_data
+
+
+@validate_call(config={"arbitrary_types_allowed": True})
+def tog_search_streaming(
+    config: GraphRagConfig,
+    entities: pd.DataFrame,
+    relationships: pd.DataFrame,
+    query: str,
+    callbacks: list[QueryCallbacks] | None = None,
+    verbose: bool = False,
+) -> AsyncGenerator:
+    """Perform a ToG search and return the context data and response via a generator.
+
+    Parameters
+    ----------
+    - config (GraphRagConfig): A graphrag configuration (from settings.yaml)
+    - entities (pd.DataFrame): A DataFrame containing the final entities (from entities.parquet)
+    - relationships (pd.DataFrame): A DataFrame containing the final relationships (from relationships.parquet)
+    - query (str): The user query to search for.
+
+    Returns
+    -------
+    TODO: Document the search response type and format.
+    """
+    init_loggers(config=config, verbose=verbose, filename="query.log")
+
+    entities_ = read_indexer_entities(entities, communities=None, community_level=None)
+    relationships_ = read_indexer_relationships(relationships)
+
+    logger.debug("Executing streaming ToG search query: %s", query)
+    search_engine = get_tog_search_engine(
+        config=config,
+        entities=entities_,
+        relationships=relationships_,
+        response_type="detailed",  # ToG always provides detailed responses
+        callbacks=callbacks,
+    )
+    return search_engine.stream_search(query=query)

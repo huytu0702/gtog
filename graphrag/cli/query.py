@@ -532,3 +532,75 @@ def _resolve_output_files(
             else:
                 dataframe_dict[optional_file] = None
     return dataframe_dict
+
+
+def run_tog_search(
+    config_filepath: Path | None,
+    data_dir: Path | None,
+    root_dir: Path,
+    streaming: bool,
+    query: str,
+    verbose: bool,
+):
+    """Perform a ToG search with a given query.
+
+    Loads index files required for ToG search and calls the Query API.
+    """
+    root = root_dir.resolve()
+    cli_overrides = {}
+    if data_dir:
+        cli_overrides["output.base_dir"] = str(data_dir)
+    config = load_config(root, config_filepath, cli_overrides)
+
+    dataframe_dict = _resolve_output_files(
+        config=config,
+        output_list=[
+            "entities",
+            "relationships",
+        ],
+    )
+
+    final_entities: pd.DataFrame = dataframe_dict["entities"]
+    final_relationships: pd.DataFrame = dataframe_dict["relationships"]
+
+    if streaming:
+        async def run_streaming_search():
+            full_response = ""
+            context_data = {}
+
+            def on_context(context: Any) -> None:
+                nonlocal context_data
+                context_data = context
+
+            callbacks = NoopQueryCallbacks()
+            callbacks.on_context = on_context
+
+            async for stream_chunk in api.tog_search_streaming(
+                config=config,
+                entities=final_entities,
+                relationships=final_relationships,
+                query=query,
+                callbacks=[callbacks],
+                verbose=verbose,
+            ):
+                full_response += stream_chunk
+                print(stream_chunk, end="")
+                sys.stdout.flush()
+            print()
+            return full_response, context_data
+
+        return asyncio.run(run_streaming_search())
+
+    # not streaming
+    response, context_data = asyncio.run(
+        api.tog_search(
+            config=config,
+            entities=final_entities,
+            relationships=final_relationships,
+            query=query,
+            verbose=verbose,
+        )
+    )
+    print(response)
+
+    return response, context_data
