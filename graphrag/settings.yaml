@@ -12,7 +12,7 @@ models:
     auth_type: api_key
     api_key: ${GOOGLE_API_KEY}
     model_provider: gemini
-    model: text-embedding-001
+    model: embedding-001
 
 # Input configuration
 input:
@@ -40,7 +40,7 @@ chunks:
 # Graph extraction workflow
 extract_graph:
   model_id: default_chat_model
-  prompt: "prompts/extract_graph.txt"
+  prompt: "prompts/index/extract_graph.py"
   entity_types: [organization, person, geo, event]
   max_gleanings: 1
 
@@ -53,14 +53,14 @@ embed_text:
 # Community reports
 community_reports:
   model_id: default_chat_model
-  prompt: "prompts/community_report.txt"
+  prompt: "prompts/index/community_report.py"
   max_length: 2000
   max_input_length: 8000
 
 # Summarization
 summarize_descriptions:
   model_id: default_chat_model
-  prompt: "prompts/summarize_descriptions.txt"
+  prompt: "prompts/index/summarize_descriptions.py"
   max_length: 500
   max_input_length: 3000
 
@@ -79,3 +79,16 @@ global_search:
   map_max_length: 1000
   reduce_max_length: 2000
   max_context_tokens: 8000
+
+# ToG (Think-on-Graph) search configuration
+tog_search:
+  chat_model_id: default_chat_model
+  embedding_model_id: default_embedding_model
+  width: 3
+  depth: 3
+  prune_strategy: llm
+  num_retain_entity: 5
+  temperature_exploration: 0.4
+  temperature_reasoning: 0.0
+  max_context_tokens: 8000
+  max_exploration_paths: 10

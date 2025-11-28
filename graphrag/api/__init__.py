@@ -22,6 +22,8 @@ from graphrag.api.query import (
     multi_index_drift_search,
     multi_index_global_search,
     multi_index_local_search,
+    tog_search,
+    tog_search_streaming,
 )
 from graphrag.prompt_tune.types import DocSelectionType
 
@@ -37,6 +39,8 @@ __all__ = [  # noqa: RUF022
     "drift_search_streaming",
     "basic_search",
     "basic_search_streaming",
+    "tog_search",
+    "tog_search_streaming",
     "multi_index_basic_search",
     "multi_index_drift_search",
     "multi_index_global_search",

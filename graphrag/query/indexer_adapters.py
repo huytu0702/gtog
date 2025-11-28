@@ -142,26 +142,31 @@ def read_indexer_entities(
     community_level: int | None,
 ) -> list[Entity]:
     """Read in the Entities from the raw indexing outputs."""
-    community_join = communities.explode("entity_ids").loc[
-        :, ["community", "level", "entity_ids"]
-    ]
-    nodes_df = entities.merge(
-        community_join, left_on="id", right_on="entity_ids", how="left"
-    )
+    if communities is not None:
+        community_join = communities.explode("entity_ids").loc[
+            :, ["community", "level", "entity_ids"]
+        ]
+        nodes_df = entities.merge(
+            community_join, left_on="id", right_on="entity_ids", how="left"
+        )
 
-    if community_level is not None:
-        nodes_df = _filter_under_community_level(nodes_df, community_level)
+        if community_level is not None:
+            nodes_df = _filter_under_community_level(nodes_df, community_level)
 
-    nodes_df = nodes_df.loc[:, ["id", "community"]]
-    nodes_df["community"] = nodes_df["community"].fillna(-1)
-    # group entities by id and degree and remove duplicated community IDs
-    nodes_df = nodes_df.groupby(["id"]).agg({"community": set}).reset_index()
-    nodes_df["community"] = nodes_df["community"].apply(
-        lambda x: [str(int(i)) for i in x]
-    )
-    final_df = nodes_df.merge(entities, on="id", how="inner").drop_duplicates(
-        subset=["id"]
-    )
+        nodes_df = nodes_df.loc[:, ["id", "community"]]
+        nodes_df["community"] = nodes_df["community"].fillna(-1)
+        # group entities by id and degree and remove duplicated community IDs
+        nodes_df = nodes_df.groupby(["id"]).agg({"community": set}).reset_index()
+        nodes_df["community"] = nodes_df["community"].apply(
+            lambda x: [str(int(i)) for i in x]
+        )
+        final_df = nodes_df.merge(entities, on="id", how="inner").drop_duplicates(
+            subset=["id"]
+        )
+    else:
+        # No communities data provided - use entities directly with empty community list
+        final_df = entities.copy()
+        final_df["community"] = [[] for _ in range(len(final_df))]
     # read entity dataframe to knowledge model objects
     return read_entities(
         df=final_df,

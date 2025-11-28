@@ -71,11 +71,13 @@ class LLMPruning(PruningStrategy):
             relations=relations_text
         )
 
-        messages = [{"role": "user", "content": prompt}]
-        response = await self.model.async_generate(
-            messages=messages,
-            temperature=self.temperature,
-        )
+        response = ""
+        async for chunk in self.model.achat_stream(
+            prompt=prompt,
+            history=[],
+            model_parameters={"temperature": self.temperature},
+        ):
+            response += chunk
 
         # Parse scores
         scores = self._parse_scores(response, len(relations))
@@ -108,11 +110,13 @@ class LLMPruning(PruningStrategy):
             candidate_entities=entities_text
         )
 
-        messages = [{"role": "user", "content": prompt}]
-        response = await self.model.async_generate(
-            messages=messages,
-            temperature=self.temperature,
-        )
+        response = ""
+        async for chunk in self.model.achat_stream(
+            prompt=prompt,
+            history=[],
+            model_parameters={"temperature": self.temperature},
+        ):
+            response += chunk
 
         return self._parse_scores(response, len(entities))
 
@@ -149,15 +153,12 @@ class SemanticPruning(PruningStrategy):
             return []
 
         # Embed query
-        query_embedding = await self.embedding_model.async_generate(
-            inputs=[query]
-        )
-        query_emb = np.array(query_embedding[0])
+        query_emb = np.array(await self.embedding_model.aembed(text=query))
 
         # Embed relation descriptions
         relation_texts = [rel_desc for rel_desc, _, _, _ in relations]
-        relation_embeddings = await self.embedding_model.async_generate(
-            inputs=relation_texts
+        relation_embeddings = await self.embedding_model.aembed_batch(
+            text_list=relation_texts
         )
 
         # Compute cosine similarities

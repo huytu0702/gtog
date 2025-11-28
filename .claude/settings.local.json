@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(graphrag --help:*)",
+      "Bash(dir:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

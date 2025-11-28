@@ -32,11 +32,13 @@ class ToGReasoning:
         # Replace placeholders in the prompt
         prompt = self.reasoning_prompt.format(query=query, exploration_paths=paths_text)
 
-        messages = [{"role": "user", "content": prompt}]
-        answer = await self.model.async_generate(
-            messages=messages,
-            temperature=self.temperature,
-        )
+        answer = ""
+        async for chunk in self.model.achat_stream(
+            prompt=prompt,
+            history=[],
+            model_parameters={"temperature": self.temperature},
+        ):
+            answer += chunk
 
         # Extract reasoning paths for transparency
         reasoning_paths = [self._path_to_string(node) for node in exploration_paths]
@@ -94,11 +96,13 @@ Respond with:
 
 Response:"""
 
-        messages = [{"role": "user", "content": prompt}]
-        response = await self.model.async_generate(
-            messages=messages,
-            temperature=0.0,
-        )
+        response = ""
+        async for chunk in self.model.achat_stream(
+            prompt=prompt,
+            history=[],
+            model_parameters={"temperature": 0.0},
+        ):
+            response += chunk
 
         if response.strip().upper().startswith("YES:"):
             answer = response[4:].strip()
