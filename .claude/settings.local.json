@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(graphrag --help:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(uvicorn:*)"
     ],
     "deny": [],
     "ask": []

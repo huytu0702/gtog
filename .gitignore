@@ -58,3 +58,12 @@ docsite/
 
 # Jupyter notebook
 .ipynb_checkpoints/
+
+# Windows special files
+nul
+
+# Generated output and cache directories
+test-project/output/
+test-project/cache/
+*.parquet
+*.lance

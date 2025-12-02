@@ -10,7 +10,7 @@ models:
     model_provider: openai
     auth_type: api_key # or azure_managed_identity
     api_key: ${GRAPHRAG_API_KEY} # set this in the generated .env file, or remove if managed identity
-    model: gpt-4o-mini
+    model: gpt-4-turbo-preview
     # api_base: https://<instance>.openai.azure.com
     # api_version: 2024-05-01-preview
     model_supports_json: true # recommended if this is available for your model.
@@ -144,16 +144,3 @@ basic_search:
   chat_model_id: default_chat_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/basic_search_system_prompt.txt"
-
-# ToG (Think-on-Graph) search configuration
-tog_search:
-  chat_model_id: default_chat_model
-  embedding_model_id: default_embedding_model
-  width: 3
-  depth: 3
-  prune_strategy: llm
-  num_retain_entity: 5
-  temperature_exploration: 0.4
-  temperature_reasoning: 0.0
-  max_context_tokens: 8000
-  max_exploration_paths: 10
