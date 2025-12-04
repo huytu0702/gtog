@@ -32,6 +32,7 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
         cli_overrides={
             "input.storage.type": "file",
             "input.storage.base_dir": str(collection_dir / "input"),
+            "input.file_pattern": ".*\\.(txt|md)$",
             "output.type": "file",  
             "output.base_dir": str(collection_dir / "output"),
             "cache.type": "file",
