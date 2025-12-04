@@ -156,9 +156,13 @@ class GraphRagConfig(BaseModel):
             if self.input.storage.base_dir.strip() == "":
                 msg = "input storage base directory is required for file input storage. Please rerun `graphrag init` and set the input storage configuration."
                 raise ValueError(msg)
-            self.input.storage.base_dir = str(
-                (Path(self.root_dir) / self.input.storage.base_dir).resolve()
-            )
+            base_path = Path(self.input.storage.base_dir)
+            if base_path.is_absolute():
+                self.input.storage.base_dir = str(base_path.resolve())
+            else:
+                self.input.storage.base_dir = str(
+                    (Path(self.root_dir) / self.input.storage.base_dir).resolve()
+                )
 
     chunks: ChunkingConfig = Field(
         description="The chunking configuration to use.",
@@ -178,9 +182,13 @@ class GraphRagConfig(BaseModel):
             if self.output.base_dir.strip() == "":
                 msg = "output base directory is required for file output. Please rerun `graphrag init` and set the output configuration."
                 raise ValueError(msg)
-            self.output.base_dir = str(
-                (Path(self.root_dir) / self.output.base_dir).resolve()
-            )
+            base_path = Path(self.output.base_dir)
+            if base_path.is_absolute():
+                self.output.base_dir = str(base_path.resolve())
+            else:
+                self.output.base_dir = str(
+                    (Path(self.root_dir) / self.output.base_dir).resolve()
+                )
 
     outputs: dict[str, StorageConfig] | None = Field(
         description="A list of output configurations used for multi-index query.",
@@ -195,9 +203,13 @@ class GraphRagConfig(BaseModel):
                     if output.base_dir.strip() == "":
                         msg = "Output base directory is required for file output. Please rerun `graphrag init` and set the output configuration."
                         raise ValueError(msg)
-                    output.base_dir = str(
-                        (Path(self.root_dir) / output.base_dir).resolve()
-                    )
+                    base_path = Path(output.base_dir)
+                    if base_path.is_absolute():
+                        output.base_dir = str(base_path.resolve())
+                    else:
+                        output.base_dir = str(
+                            (Path(self.root_dir) / output.base_dir).resolve()
+                        )
 
     update_index_output: StorageConfig = Field(
         description="The output configuration for the updated index.",
@@ -213,9 +225,13 @@ class GraphRagConfig(BaseModel):
             if self.update_index_output.base_dir.strip() == "":
                 msg = "update_index_output base directory is required for file output. Please rerun `graphrag init` and set the update_index_output configuration."
                 raise ValueError(msg)
-            self.update_index_output.base_dir = str(
-                (Path(self.root_dir) / self.update_index_output.base_dir).resolve()
-            )
+            base_path = Path(self.update_index_output.base_dir)
+            if base_path.is_absolute():
+                self.update_index_output.base_dir = str(base_path.resolve())
+            else:
+                self.update_index_output.base_dir = str(
+                    (Path(self.root_dir) / self.update_index_output.base_dir).resolve()
+                )
 
     cache: CacheConfig = Field(
         description="The cache configuration.", default=CacheConfig()
@@ -233,9 +249,13 @@ class GraphRagConfig(BaseModel):
             if self.reporting.base_dir.strip() == "":
                 msg = "Reporting base directory is required for file reporting. Please rerun `graphrag init` and set the reporting configuration."
                 raise ValueError(msg)
-            self.reporting.base_dir = str(
-                (Path(self.root_dir) / self.reporting.base_dir).resolve()
-            )
+            base_path = Path(self.reporting.base_dir)
+            if base_path.is_absolute():
+                self.reporting.base_dir = str(base_path.resolve())
+            else:
+                self.reporting.base_dir = str(
+                    (Path(self.root_dir) / self.reporting.base_dir).resolve()
+                )
 
     vector_store: dict[str, VectorStoreConfig] = Field(
         description="The vector store configuration.",
@@ -351,7 +371,7 @@ class GraphRagConfig(BaseModel):
                 if not store.db_uri or store.db_uri.strip == "":
                     msg = "Vector store URI is required for LanceDB. Please rerun `graphrag init` and set the vector store configuration."
                     raise ValueError(msg)
-                store.db_uri = str((Path(self.root_dir) / store.db_uri).resolve())
+                store.db_uri = str((Path(self.root_dir) / store.db_uri).resolve()) if not Path(store.db_uri).is_absolute() else str(Path(store.db_uri).resolve())
 
     def _validate_factories(self) -> None:
         """Validate the factories used in the configuration."""
