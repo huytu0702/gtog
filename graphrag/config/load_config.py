@@ -179,7 +179,7 @@ def load_config(
     ValidationError
         If there are pydantic validation errors when instantiating the config.
     """
-    root = root_dir.resolve()
+    root = Path(root_dir).resolve()
     config_path = _get_config_path(root, config_filepath)
     _load_dotenv(config_path)
     config_extension = config_path.suffix

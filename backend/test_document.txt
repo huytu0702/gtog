@@ -1,0 +1,44 @@
+# GraphRAG Technology Overview
+
+GraphRAG is an advanced knowledge graph-based retrieval-augmented generation system that enhances large language model capabilities through structured knowledge representation.
+
+## Core Components
+
+### Knowledge Graph Construction
+GraphRAG builds a comprehensive knowledge graph from unstructured text data. The system extracts entities, relationships, and communities to create a hierarchical understanding of information. This graph-based approach enables more nuanced and contextual information retrieval compared to traditional vector-based methods.
+
+### Search Methods
+
+#### Global Search
+Global Search provides high-level overviews across the entire dataset. It leverages community structures within the knowledge graph to summarize broad themes and patterns. This method is ideal for understanding the main topics and getting a comprehensive view of the information landscape.
+
+#### Local Search
+Local Search focuses on specific entities and their immediate context. It excels at answering detailed questions about particular subjects by examining direct relationships and associated information. This method provides precise, fact-based responses grounded in the source documents.
+
+#### Tree-of-Graph (ToG) Search
+ToG Search represents an innovative approach that combines reasoning with graph traversal. It explores the knowledge graph iteratively, following paths of relevance while building evidence-based answers. This method is particularly effective for complex questions requiring multi-step reasoning and relationship analysis.
+
+#### DRIFT Search
+DRIFT (Dynamic Reasoning with Informed Feature Traversal) Search adapts its exploration strategy based on the query. It performs multi-hop reasoning across the knowledge graph, discovering indirect connections and relationships that may not be immediately apparent. This method is valuable for understanding how different concepts and entities are interconnected.
+
+## Applications
+
+GraphRAG is applicable in various domains:
+- Research paper analysis and literature review
+- Enterprise knowledge management
+- Legal document analysis
+- Medical information retrieval
+- Customer support knowledge bases
+
+## Benefits
+
+The key advantages of GraphRAG include:
+- Enhanced contextual understanding through graph structures
+- Multiple search strategies for different query types
+- Scalable processing of large document collections
+- Evidence-based responses with source attribution
+- Discovery of hidden relationships and patterns
+
+## Technical Architecture
+
+GraphRAG integrates with large language models for entity extraction, relationship identification, and answer generation. The indexing pipeline processes documents through chunking, entity recognition, community detection, and embedding generation. The resulting knowledge graph serves as a rich semantic layer that enhances retrieval quality and reasoning capabilities.
