@@ -143,7 +143,7 @@ class StorageService:
                 # Check if indexed (has output files)
                 indexed = False
                 if output_dir.exists():
-                    required_files = ["create_final_entities.parquet", "create_final_communities.parquet"]
+                    required_files = ["entities.parquet", "communities.parquet"]
                     indexed = all((output_dir / f).exists() for f in required_files)
                 
                 collections.append(CollectionResponse(
@@ -183,7 +183,7 @@ class StorageService:
         # Check if indexed
         indexed = False
         if output_dir.exists():
-            required_files = ["create_final_entities.parquet", "create_final_communities.parquet"]
+            required_files = ["entities.parquet", "communities.parquet"]
             indexed = all((output_dir / f).exists() for f in required_files)
         
         return CollectionResponse(

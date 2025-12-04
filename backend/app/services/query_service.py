@@ -52,14 +52,16 @@ class QueryService:
         
         # Load required dataframes
         entities = pd.read_parquet(data_paths["entities"])
+        communities = pd.read_parquet(data_paths["communities"])
         community_reports = pd.read_parquet(data_paths["community_reports"])
         
         logger.info(f"Global search for collection {collection_id}: {query}")
         
-        # Perform search
-        result = await api.global_search(
+        # Perform search - API returns (response, context_data) tuple
+        response_text, context_data = await api.global_search(
             config=config,
-            nodes=entities,
+            entities=entities,
+            communities=communities,
             community_reports=community_reports,
             community_level=community_level,
             dynamic_community_selection=dynamic_community_selection,
@@ -69,8 +71,8 @@ class QueryService:
         
         return SearchResponse(
             query=query,
-            response=result.response,
-            context_data=result.context_data,
+            response=response_text,
+            context_data=None,  # Avoid serialization issues with pandas DataFrames
             method=SearchMethod.GLOBAL,
         )
     
@@ -104,6 +106,7 @@ class QueryService:
         
         # Load required dataframes
         entities = pd.read_parquet(data_paths["entities"])
+        communities = pd.read_parquet(data_paths["communities"])
         community_reports = pd.read_parquet(data_paths["community_reports"])
         text_units = pd.read_parquet(data_paths["text_units"])
         relationships = pd.read_parquet(data_paths["relationships"])
@@ -115,11 +118,11 @@ class QueryService:
         
         logger.info(f"Local search for collection {collection_id}: {query}")
         
-        # Perform search
-        result = await api.local_search(
+        # Perform search - API returns (response, context_data) tuple
+        response_text, context_data = await api.local_search(
             config=config,
-            nodes=entities,
             entities=entities,
+            communities=communities,
             community_reports=community_reports,
             text_units=text_units,
             relationships=relationships,
@@ -131,8 +134,8 @@ class QueryService:
         
         return SearchResponse(
             query=query,
-            response=result.response,
-            context_data=result.context_data,
+            response=response_text,
+            context_data=None,  # Avoid serialization issues with pandas DataFrames
             method=SearchMethod.LOCAL,
         )
     
@@ -163,26 +166,21 @@ class QueryService:
         # Load required dataframes
         entities = pd.read_parquet(data_paths["entities"])
         relationships = pd.read_parquet(data_paths["relationships"])
-        text_units = pd.read_parquet(data_paths["text_units"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
         
         logger.info(f"ToG search for collection {collection_id}: {query}")
         
-        # Perform search
-        result = await api.tog_search(
+        # Perform search - API returns (response, context_data) tuple
+        response_text, context_data = await api.tog_search(
             config=config,
-            nodes=entities,
-            edges=relationships,
             entities=entities,
-            text_units=text_units,
-            community_reports=community_reports,
+            relationships=relationships,
             query=query,
         )
         
         return SearchResponse(
             query=query,
-            response=result.response,
-            context_data=result.context_data,
+            response=response_text,
+            context_data=None,  # Avoid serialization issues with pandas DataFrames
             method=SearchMethod.TOG,
         )
     
@@ -216,17 +214,18 @@ class QueryService:
         
         # Load required dataframes
         entities = pd.read_parquet(data_paths["entities"])
+        communities = pd.read_parquet(data_paths["communities"])
         community_reports = pd.read_parquet(data_paths["community_reports"])
         text_units = pd.read_parquet(data_paths["text_units"])
         relationships = pd.read_parquet(data_paths["relationships"])
         
         logger.info(f"DRIFT search for collection {collection_id}: {query}")
         
-        # Perform search
-        result = await api.drift_search(
+        # Perform search - API returns (response, context_data) tuple
+        response_text, context_data = await api.drift_search(
             config=config,
-            nodes=entities,
             entities=entities,
+            communities=communities,
             community_reports=community_reports,
             text_units=text_units,
             relationships=relationships,
@@ -237,8 +236,8 @@ class QueryService:
         
         return SearchResponse(
             query=query,
-            response=result.response,
-            context_data=result.context_data,
+            response=response_text,
+            context_data=None,  # Avoid serialization issues with pandas DataFrames
             method=SearchMethod.DRIFT,
         )
 

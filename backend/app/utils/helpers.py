@@ -60,10 +60,10 @@ def validate_collection_indexed(collection_id: str) -> Tuple[bool, Optional[str]
     
     # Check for essential parquet files
     required_files = [
-        "create_final_entities.parquet",
-        "create_final_communities.parquet",
-        "create_final_community_reports.parquet",
-        "create_final_text_units.parquet",
+        "entities.parquet",
+        "communities.parquet",
+        "community_reports.parquet",
+        "text_units.parquet",
     ]
     
     missing_files = []
@@ -92,21 +92,21 @@ def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
     
     # Common files for all methods
     paths = {
-        "entities": output_dir / "create_final_entities.parquet",
-        "communities": output_dir / "create_final_communities.parquet",
-        "community_reports": output_dir / "create_final_community_reports.parquet",
+        "entities": output_dir / "entities.parquet",
+        "communities": output_dir / "communities.parquet",
+        "community_reports": output_dir / "community_reports.parquet",
     }
     
     # Method-specific files
     if method in ["local", "drift", "tog"]:
         paths.update({
-            "text_units": output_dir / "create_final_text_units.parquet",
-            "relationships": output_dir / "create_final_relationships.parquet",
+            "text_units": output_dir / "text_units.parquet",
+            "relationships": output_dir / "relationships.parquet",
         })
     
     if method == "local":
         # Local search may use covariates if available
-        covariates_path = output_dir / "create_final_covariates.parquet"
+        covariates_path = output_dir / "covariates.parquet"
         if covariates_path.exists():
             paths["covariates"] = covariates_path
     
