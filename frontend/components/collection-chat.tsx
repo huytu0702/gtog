@@ -71,12 +71,15 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:h-[600px]">
             {/* Chat Area */}
-            <div className="lg:col-span-3 flex flex-col h-full">
-                <NBCard className="flex-1 flex flex-col p-0 overflow-hidden bg-gray-50">
+            <div className="lg:col-span-3 flex flex-col h-[600px] lg:h-full min-h-0">
+                <NBCard className="flex-1 h-full flex flex-col p-0 overflow-hidden bg-gray-50">
                     {/* Messages */}
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+                    <div
+                        ref={scrollRef}
+                        className="flex-1 overflow-y-auto p-6 space-y-6 [&::-webkit-scrollbar]:w-3 [&::-webkit-scrollbar-track]:bg-white [&::-webkit-scrollbar-thumb]:bg-black [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-white"
+                    >
                         {messages.map((msg, idx) => (
                             <div
                                 key={idx}
