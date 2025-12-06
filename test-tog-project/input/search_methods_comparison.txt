@@ -1,0 +1,91 @@
+# GraphRAG Search Methods Comparison
+
+This document provides an overview of different search methods available in GraphRAG, focusing on their unique characteristics and use cases.
+
+## Global Search
+
+Global search is designed for high-level questions that require understanding the entire dataset. It operates by:
+
+- Using community-level analysis to identify main themes
+- Aggregating information across all documents
+- Providing comprehensive summaries of the entire knowledge graph
+
+Best use cases:
+- "What are the main topics in this dataset?"
+- "Give me an overview of the key themes"
+- "What are the major trends across all documents?"
+
+## Local Search
+
+Local search focuses on specific entities and their immediate context. It:
+
+- Retrieves entities directly related to the query
+- Explores the neighborhood around target entities
+- Provides detailed, factual information about specific topics
+
+Best use cases:
+- "What do we know about [specific entity]?"
+- "Tell me about [person/organization]"
+- "What are the details of [concept]?"
+
+## DRIFT Search
+
+DRIFT (Dynamic Reasoning and Investigation for Finding Truth) search combines local and global approaches:
+
+- Starts with local entity exploration
+- Dynamically expands to include community context
+- Adapts the search strategy based on findings
+- Provides progressive refinement of results
+
+Best use cases:
+- "How are [entity A] and [entity B] connected?"
+- "What is the relationship between different concepts?"
+- "Trace the connections between multiple entities"
+
+## ToG (Think-on-Graph) Search
+
+ToG search implements deep reasoning through iterative graph traversal:
+
+- Performs multi-hop exploration using beam search
+- Uses LLM-guided pruning to focus on relevant paths
+- Maintains exploration history for explainability
+- Generates evidence-based answers with reasoning chains
+
+Key features:
+- **Exploration Stage**: Iteratively expands through the knowledge graph
+- **Reasoning Stage**: Synthesizes information from explored paths
+- **Pruning Strategies**: LLM-based, BM25, or semantic similarity
+- **Configurable Depth**: Controls exploration depth and width
+
+Best use cases:
+- "How does A influence B through intermediary factors?"
+- "What are the paths from entity X to concept Y?"
+- "Analyze the complex relationships between multiple entities"
+- "What are the causal chains in this dataset?"
+
+## Method Selection Guide
+
+| Question Type | Recommended Method | Reason |
+|---------------|-------------------|--------|
+| Dataset overview | Global | Broad coverage across all data |
+| Specific entity details | Local | Focused, factual information |
+| Entity relationships | DRIFT | Adaptive exploration of connections |
+| Complex reasoning | ToG | Multi-hop analysis with evidence |
+| Simple lookup | Basic | Fast, direct retrieval |
+
+## Performance Considerations
+
+- **Speed**: Basic < Local < Global < DRIFT < ToG
+- **Detail Level**: Basic < Local < Global < DRIFT < ToG
+- **Resource Usage**: ToG requires more API calls due to iterative exploration
+- **Accuracy**: All methods provide accurate results, but ToG offers better explainability for complex queries
+
+## Configuration Tips
+
+For ToG search optimization:
+- Start with `width: 3, depth: 3` for balanced performance
+- Use `gpt-4o-mini` for cost-effective exploration
+- Set `temperature_exploration: 0.4` for balanced creativity
+- Set `temperature_reasoning: 0.0` for factual answers
+
+This comparison helps users choose the appropriate search method based on their specific query requirements and performance constraints.

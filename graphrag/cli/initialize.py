@@ -30,6 +30,11 @@ from graphrag.prompts.query.global_search_reduce_system_prompt import (
 )
 from graphrag.prompts.query.local_search_system_prompt import LOCAL_SEARCH_SYSTEM_PROMPT
 from graphrag.prompts.query.question_gen_system_prompt import QUESTION_SYSTEM_PROMPT
+from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
+from graphrag.prompts.query.tog_relation_scoring_prompt import (
+    TOG_RELATION_SCORING_PROMPT,
+)
+from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +91,9 @@ def initialize_project_at(path: Path, force: bool) -> None:
         "local_search_system_prompt": LOCAL_SEARCH_SYSTEM_PROMPT,
         "basic_search_system_prompt": BASIC_SEARCH_SYSTEM_PROMPT,
         "question_gen_system_prompt": QUESTION_SYSTEM_PROMPT,
+        "tog_entity_scoring_prompt": TOG_ENTITY_SCORING_PROMPT,
+        "tog_relation_scoring_prompt": TOG_RELATION_SCORING_PROMPT,
+        "tog_reasoning_prompt": TOG_REASONING_PROMPT,
     }
 
     for name, content in prompts.items():

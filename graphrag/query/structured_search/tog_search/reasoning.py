@@ -3,6 +3,7 @@ from graphrag.language_model.protocol.base import ChatModel
 from .state import ExplorationNode
 from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
 
+
 class ToGReasoning:
     """Handles final reasoning and answer generation."""
 
@@ -30,15 +31,62 @@ class ToGReasoning:
         paths_text = self._format_paths(exploration_paths)
 
         # Replace placeholders in the prompt
-        prompt = self.reasoning_prompt.format(query=query, exploration_paths=paths_text)
+        try:
+            # If reasoning_prompt is a file path, read it
+            if hasattr(
+                self.reasoning_prompt, "endswith"
+            ) and self.reasoning_prompt.endswith(".txt"):
+                import os
+
+                if os.path.exists(self.reasoning_prompt):
+                    with open(self.reasoning_prompt, "r", encoding="utf-8") as f:
+                        prompt_template = f.read()
+                else:
+                    prompt_template = TOG_REASONING_PROMPT
+            else:
+                prompt_template = self.reasoning_prompt
+
+            prompt = prompt_template.format(query=query, exploration_paths=paths_text)
+        except KeyError as e:
+            # Fallback if prompt has different placeholders
+            prompt = f"""
+You are an expert at synthesizing information from knowledge graph exploration to answer questions.
+
+Question: {query}
+
+Exploration Paths:
+{paths_text}
+
+Your task:
+1. Analyze all the exploration paths provided
+2. Identify the most relevant information for answering the question
+3. Synthesize this information into a comprehensive answer
+4. Explain your reasoning, citing specific entities and relationships
+
+Requirements:
+- Base your answer ONLY on the provided graph exploration results
+- Cite specific entities and relationships in your answer
+- If the exploration paths don't contain sufficient information, acknowledge this
+- Provide a clear, well-structured response
+
+Structure your response as:
+1. Direct answer to the question
+2. Supporting evidence from the graph exploration
+3. Key relationships that support your answer
+"""
 
         answer = ""
-        async for chunk in self.model.achat_stream(
-            prompt=prompt,
-            history=[],
-            model_parameters={"temperature": self.temperature},
-        ):
-            answer += chunk
+        try:
+            async for chunk in self.model.achat_stream(
+                prompt=prompt,
+                history=[],
+                model_parameters={"temperature": self.temperature},
+            ):
+                answer += chunk
+
+        except Exception as e:
+            # Fallback response if LLM call fails
+            answer = f"Error generating answer: {str(e)}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
 
         # Extract reasoning paths for transparency
         reasoning_paths = [self._path_to_string(node) for node in exploration_paths]

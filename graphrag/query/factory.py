@@ -33,7 +33,10 @@ from graphrag.query.structured_search.local_search.mixed_context import (
 )
 from graphrag.query.structured_search.local_search.search import LocalSearch
 from graphrag.query.structured_search.tog_search.search import ToGSearch
-from graphrag.query.structured_search.tog_search.pruning import LLMPruning, SemanticPruning
+from graphrag.query.structured_search.tog_search.pruning import (
+    LLMPruning,
+    SemanticPruning,
+)
 from graphrag.query.structured_search.tog_search.reasoning import ToGReasoning
 from graphrag.tokenizer.get_tokenizer import get_tokenizer
 from graphrag.vector_stores.base import BaseVectorStore
@@ -346,11 +349,11 @@ def get_tog_search_engine(
             entity_scoring_prompt=config.tog_search.entity_scoring_prompt,
         )
     elif config.tog_search.prune_strategy == "semantic":
-        pruning_strategy = SemanticPruning(
-            embedding_model=embedding_model
-        )
+        pruning_strategy = SemanticPruning(embedding_model=embedding_model)
     else:
-        raise ValueError(f"Unknown pruning strategy: {config.tog_search.prune_strategy}")
+        raise ValueError(
+            f"Unknown pruning strategy: {config.tog_search.prune_strategy}"
+        )
 
     # Create reasoning module
     reasoning_module = ToGReasoning(
@@ -370,4 +373,5 @@ def get_tog_search_engine(
         depth=config.tog_search.depth,
         num_retain_entity=config.tog_search.num_retain_entity,
         callbacks=callbacks,
+        debug=True,  # Enable debug by default to show exploration paths
     )
