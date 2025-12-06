@@ -373,6 +373,7 @@ def get_tog_search_engine(
         tokenizer=tokenizer,
         pruning_strategy=pruning_strategy,
         reasoning_module=reasoning_module,
+        embedding_model=embedding_model,  # For semantic entity linking (like ToG paper)
         width=config.tog_search.width,
         depth=config.tog_search.depth,
         num_retain_entity=config.tog_search.num_retain_entity,

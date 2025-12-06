@@ -145,17 +145,18 @@ basic_search:
   embedding_model_id: default_embedding_model
   prompt: "prompts/basic_search_system_prompt.txt"
 
+# ToG (Think-on-Graph) search configuration
 tog_search:
   chat_model_id: default_chat_model
   embedding_model_id: default_embedding_model
-  width: 3
-  depth: 3
-  prune_strategy: llm
-  num_retain_entity: 5
-  temperature_exploration: 0.4
-  temperature_reasoning: 0.0
-  max_context_tokens: 8000
-  max_exploration_paths: 10
+  width: 3                          # Beam width for exploration
+  depth: 3                          # Maximum exploration depth
+  prune_strategy: llm               # Options: llm, semantic, bm25
+  num_retain_entity: 5              # Entities to retain per level
+  temperature_exploration: 0.4      # LLM temperature for exploration
+  temperature_reasoning: 0.0        # LLM temperature for final answer
+  max_context_tokens: 8000          # Maximum context tokens
+  max_exploration_paths: 10         # Maximum exploration paths
   relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"
   entity_scoring_prompt: "prompts/tog_entity_scoring_prompt.txt"
   reasoning_prompt: "prompts/tog_reasoning_prompt.txt"

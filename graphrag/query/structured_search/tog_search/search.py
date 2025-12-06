@@ -1,6 +1,6 @@
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator, List, Optional
 from graphrag.callbacks.query_callbacks import QueryCallbacks
-from graphrag.language_model.protocol.base import ChatModel
+from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
 from graphrag.tokenizer.tokenizer import Tokenizer
@@ -16,6 +16,8 @@ class ToGSearch:
 
     Implements iterative graph exploration with LLM-guided pruning
     and reasoning over discovered paths.
+    
+    Uses embedding-based entity linking (like original ToG paper).
     """
 
     def __init__(
@@ -26,6 +28,7 @@ class ToGSearch:
         tokenizer: Tokenizer,
         pruning_strategy: PruningStrategy,
         reasoning_module: ToGReasoning,
+        embedding_model: Optional[EmbeddingModel] = None,
         width: int = 3,
         depth: int = 3,
         num_retain_entity: int = 5,
@@ -33,7 +36,10 @@ class ToGSearch:
         debug: bool = False,
     ):
         self.model = model
-        self.explorer = GraphExplorer(entities, relationships)
+        self.embedding_model = embedding_model
+        self.explorer = GraphExplorer(
+            entities, relationships, embedding_model=embedding_model
+        )
         self.tokenizer = tokenizer
         self.pruning_strategy = pruning_strategy
         self.reasoning_module = reasoning_module
@@ -52,10 +58,15 @@ class ToGSearch:
 
     async def stream_search(self, query: str) -> AsyncGenerator[str, None]:
         """Perform ToG search with streaming output."""
-        # Find initial entities
-        starting_entities = self.explorer.find_starting_entities(
-            query, top_k=self.width
-        )
+        # Find initial entities using semantic similarity (like ToG paper)
+        if self.embedding_model:
+            starting_entities = await self.explorer.find_starting_entities_semantic(
+                query, top_k=self.width
+            )
+        else:
+            starting_entities = self.explorer.find_starting_entities(
+                query, top_k=self.width
+            )
 
         if not starting_entities:
             available_entities = list(self.explorer.entities.keys())[:10]
