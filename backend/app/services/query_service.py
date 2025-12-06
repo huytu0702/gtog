@@ -172,6 +172,16 @@ class QueryService:
         relationships = pd.read_parquet(data_paths["relationships"])
 
         logger.info(f"ToG search for collection {collection_id}: {query}")
+        logger.info(
+            f"Loaded {len(entities)} entities and {len(relationships)} relationships"
+        )
+
+        # Debug: Show entity names
+        if len(entities) > 0:
+            entity_names = entities["title"].tolist()[:10]
+            logger.info(f"Available entities: {entity_names}")
+        else:
+            logger.warning("No entities found in parquet file")
 
         # Perform search - API returns (response, context_data) tuple
         response_text, context_data = await api.tog_search(

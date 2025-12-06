@@ -58,7 +58,8 @@ class ToGSearch:
         )
 
         if not starting_entities:
-            yield "No relevant entities found for the query. Please try a different query with more specific terms."
+            available_entities = list(self.explorer.entities.keys())[:10]
+            yield f"No relevant entities found for query '{query}'. Available entities: {available_entities}"
             return
 
         # Initialize search state

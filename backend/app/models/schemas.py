@@ -13,7 +13,13 @@ from .enums import IndexStatus, SearchMethod
 class CollectionCreate(BaseModel):
     """Request model for creating a collection."""
 
-    name: str = Field(..., min_length=1, max_length=100, pattern="^[a-zA-Z0-9_-]+$")
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        pattern="^[a-zA-Z0-9_-]+$",
+        description="Collection name (letters, numbers, underscores, hyphens only)",
+    )
     description: Optional[str] = Field(None, max_length=500)
 
 

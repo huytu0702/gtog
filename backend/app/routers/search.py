@@ -36,7 +36,9 @@ async def global_search(collection_id: str, request: GlobalSearchRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing global search")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.post("/local", response_model=SearchResponse)
@@ -57,7 +59,9 @@ async def local_search(collection_id: str, request: LocalSearchRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing local search")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.post("/tog", response_model=SearchResponse)
@@ -76,7 +80,42 @@ async def tog_search(collection_id: str, request: ToGSearchRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing ToG search")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+@router.get("/tog/debug")
+async def get_tog_entities(collection_id: str):
+    """Debug endpoint to see entities available for ToG search."""
+    try:
+        from ..utils import get_search_data_paths
+        import pandas as pd
+
+        data_paths = get_search_data_paths(collection_id, "tog")
+        entities_df = pd.read_parquet(data_paths["entities"])
+
+        entities_info = []
+        for _, row in entities_df.head(20).iterrows():
+            entities_info.append({
+                "id": row["title"],
+                "description": row["description"][:100] + "..."
+                if len(row["description"]) > 100
+                else row["description"],
+                "type": row.get("type", "unknown"),
+            })
+
+        return {
+            "collection_id": collection_id,
+            "total_entities": len(entities_df),
+            "showing_first": len(entities_info),
+            "entities": entities_info,
+        }
+    except Exception as e:
+        logger.exception("Error getting ToG entities")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @router.post("/drift", response_model=SearchResponse)
@@ -97,4 +136,6 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing DRIFT search")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )

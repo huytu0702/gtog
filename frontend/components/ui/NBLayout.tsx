@@ -13,7 +13,7 @@ export function NBLayout({ children }: NBLayoutProps) {
             <header className="border-b-3 border-black bg-white sticky top-0 z-50">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
                     <Link href="/" className="text-2xl font-black tracking-tighter hover:underline decoration-4 decoration-main">
-                        GraphRAG<span className="text-main">.UI</span>
+                        GraphRAG<span className="text-main">.TOG</span>
                     </Link>
                     <nav className="flex items-center gap-4">
                         <Link href="/" className="font-bold hover:underline decoration-2">

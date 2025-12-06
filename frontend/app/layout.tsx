@@ -4,8 +4,8 @@ import { Providers } from "@/components/providers";
 import { NBLayout } from "@/components/ui/NBLayout";
 
 export const metadata: Metadata = {
-  title: "GraphRAG UI",
-  description: "Neo-Brutalism Interface for GraphRAG",
+  title: "GraphRAG TOG",
+  description: "Neo-Brutalism Interface for GraphRAG TOG",
 };
 
 export default function RootLayout({

@@ -14,6 +14,8 @@ class GraphExplorer:
     ):
         self.entities = {e.id: e for e in entities}
         self.relationships = relationships
+        print(f"[DEBUG] GraphExplorer loaded {len(entities)} entities")
+        print(f"[DEBUG] Entity IDs: {list(self.entities.keys())[:10]}")
         self._build_adjacency()
 
     def _build_adjacency(self):
@@ -62,46 +64,95 @@ class GraphExplorer:
     def find_starting_entities(self, query: str, top_k: int = 3) -> List[str]:
         """
         Find starting entities for exploration based on query.
-        Uses simple keyword matching - can be enhanced with embeddings.
+        Uses improved keyword matching with fuzzy scoring.
         """
         query_lower = query.lower()
+        query_tokens = set(query_lower.split())
         candidates = []
 
         for entity_id, entity in self.entities.items():
             title_lower = entity.title.lower()
             desc_lower = (entity.description or "").lower()
-
-            # Simple scoring based on keyword presence
-            score = 0.0
-            if query_lower in title_lower:
-                score += 10.0
-            if query_lower in desc_lower:
-                score += 5.0
-
-            # Token overlap scoring
-            query_tokens = set(query_lower.split())
             title_tokens = set(title_lower.split())
             desc_tokens = set(desc_lower.split())
 
-            score += len(query_tokens & title_tokens) * 2.0
-            score += len(query_tokens & desc_tokens) * 1.0
+            # Enhanced scoring system
+            score = 0.0
 
-            # Partial matching for individual query tokens
+            # Exact match bonus
+            if query_lower in title_lower:
+                score += 20.0  # Higher bonus for exact title match
+            if query_lower in desc_lower:
+                score += 10.0  # Bonus for exact description match
+
+            # Token overlap scoring (more lenient)
+            title_overlap = len(query_tokens & title_tokens)
+            desc_overlap = len(query_tokens & desc_tokens)
+            score += title_overlap * 4.0  # Increased weight for title overlap
+            score += desc_overlap * 2.0  # Weight for description overlap
+
+            # Partial word matching (even more lenient)
             for token in query_tokens:
-                if token in title_lower:
-                    score += 3.0
-                if token in desc_lower:
-                    score += 1.5
+                if len(token) > 2:  # Only consider longer tokens
+                    if token in title_lower:
+                        score += 2.0
+                    elif token in desc_lower:
+                        score += 1.0
+                else:  # Single character tokens
+                    if token in title_lower:
+                        score += 1.0
+                    elif token in desc_lower:
+                        score += 0.5
 
-            if score > 0:
+            # Length penalty for very short matches
+            if len(title_lower) < len(query_lower) * 0.3:
+                score *= 0.8  # Penalty for very short titles
+
+            if score > 0.5:  # Lower threshold for inclusion
                 candidates.append((entity_id, score))
 
-        # If no candidates found, return some entities anyway
+        # Enhanced fallback strategy
         if not candidates and self.entities:
-            # Return first few entities as fallback
-            entity_ids = list(self.entities.keys())[:top_k]
-            return entity_ids
+            # Try to find entities with any query token match
+            fallback_candidates = []
+            for entity_id, entity in self.entities.items():
+                title_lower = entity.title.lower()
+                desc_lower = (entity.description or "").lower()
 
-        # Return top-k
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [eid for eid, _ in candidates[:top_k]]
+                # Very lenient matching for fallback
+                for token in query_tokens:
+                    if len(token) > 1 and (token in title_lower or token in desc_lower):
+                        fallback_score = 2.0  # Minimal score for fallback
+                        fallback_candidates.append((entity_id, fallback_score))
+                        break
+
+            if fallback_candidates:
+                candidates = fallback_candidates
+            else:
+                # Last resort: return entities with most common words
+                common_words = {"search", "method", "technique", "approach", "system"}
+                for entity_id, entity in self.entities.items():
+                    title_lower = entity.title.lower()
+                    for word in common_words:
+                        if word in title_lower:
+                            candidates.append((entity_id, 1.0))
+                            break
+                    if len(candidates) >= top_k:
+                        break
+
+        # Return top-k (or all if less than k)
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            result = [eid for eid, _ in candidates[:top_k]]
+            print(
+                f"[DEBUG] Found {len(candidates)} candidates, returning top {len(result)}: {result}"
+            )
+            return result
+        elif self.entities:
+            # Absolute fallback: return first entities
+            entity_ids = list(self.entities.keys())[:top_k]
+            print(f"[DEBUG] No candidates, using fallback: {entity_ids}")
+            return entity_ids
+        else:
+            print("[DEBUG] No entities available")
+            return []
