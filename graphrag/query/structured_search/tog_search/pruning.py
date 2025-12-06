@@ -234,3 +234,141 @@ class SemanticPruning(PruningStrategy):
             scores.append(score)
 
         return scores
+
+
+class BM25Pruning(PruningStrategy):
+    """Uses BM25 algorithm for lexical matching (from ToG paper)."""
+
+    def __init__(self, k1: float = 1.5, b: float = 0.75):
+        """
+        Initialize BM25 pruning.
+        
+        Args:
+            k1: Term frequency saturation parameter (default 1.5)
+            b: Document length normalization parameter (default 0.75)
+        """
+        self.k1 = k1
+        self.b = b
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Simple tokenization."""
+        import re
+        # Lowercase and split on non-alphanumeric
+        return re.findall(r'\w+', text.lower())
+
+    def _compute_bm25_scores(
+        self, query: str, documents: List[str]
+    ) -> List[float]:
+        """Compute BM25 scores for documents given a query."""
+        if not documents:
+            return []
+        
+        # Tokenize
+        query_tokens = self._tokenize(query)
+        doc_tokens_list = [self._tokenize(doc) for doc in documents]
+        
+        # Compute document frequencies
+        doc_count = len(documents)
+        df = {}  # document frequency for each term
+        for doc_tokens in doc_tokens_list:
+            unique_tokens = set(doc_tokens)
+            for token in unique_tokens:
+                df[token] = df.get(token, 0) + 1
+        
+        # Average document length
+        avg_dl = sum(len(dt) for dt in doc_tokens_list) / max(doc_count, 1)
+        
+        # Compute BM25 score for each document
+        scores = []
+        for doc_tokens in doc_tokens_list:
+            score = 0.0
+            dl = len(doc_tokens)
+            term_freq = {}
+            for token in doc_tokens:
+                term_freq[token] = term_freq.get(token, 0) + 1
+            
+            for token in query_tokens:
+                if token not in term_freq:
+                    continue
+                
+                tf = term_freq[token]
+                doc_freq = df.get(token, 0)
+                
+                # IDF component
+                idf = np.log((doc_count - doc_freq + 0.5) / (doc_freq + 0.5) + 1)
+                
+                # TF component with saturation
+                tf_component = (tf * (self.k1 + 1)) / (
+                    tf + self.k1 * (1 - self.b + self.b * dl / max(avg_dl, 1))
+                )
+                
+                score += idf * tf_component
+            
+            scores.append(score)
+        
+        return scores
+
+    async def score_relations(
+        self,
+        query: str,
+        entity_name: str,
+        relations: List[Tuple[str, str, str, float]],
+    ) -> List[Tuple[str, str, str, float, float]]:
+        """Score relations using BM25."""
+
+        if not relations:
+            return []
+
+        # Create searchable text for each relation
+        relation_texts = [
+            f"{entity_name} {direction} {rel_desc}"
+            for rel_desc, _, direction, _ in relations
+        ]
+
+        # Compute BM25 scores
+        bm25_scores = self._compute_bm25_scores(query, relation_texts)
+        
+        # Normalize scores to 1-10 range
+        max_score = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1
+        normalized_scores = [
+            max(1.0, min(10.0, (s / max_score) * 9 + 1))
+            for s in bm25_scores
+        ]
+
+        return [
+            (rel_desc, target_id, direction, weight, score)
+            for (rel_desc, target_id, direction, weight), score in zip(
+                relations, normalized_scores
+            )
+        ]
+
+    async def score_entities(
+        self,
+        query: str,
+        current_path: str,
+        entities: List[Tuple[str, str, str]],
+    ) -> List[float]:
+        """Score entities using BM25."""
+
+        if not entities:
+            return []
+
+        # Create searchable text for each entity
+        entity_texts = [
+            f"{name} {desc}" for _, name, desc in entities
+        ]
+
+        # Combine query with current path context
+        search_text = f"{query} {current_path}"
+        
+        # Compute BM25 scores
+        bm25_scores = self._compute_bm25_scores(search_text, entity_texts)
+        
+        # Normalize scores to 1-10 range
+        max_score = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1
+        normalized_scores = [
+            max(1.0, min(10.0, (s / max_score) * 9 + 1))
+            for s in bm25_scores
+        ]
+
+        return normalized_scores

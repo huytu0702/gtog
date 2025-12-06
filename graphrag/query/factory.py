@@ -36,6 +36,7 @@ from graphrag.query.structured_search.tog_search.search import ToGSearch
 from graphrag.query.structured_search.tog_search.pruning import (
     LLMPruning,
     SemanticPruning,
+    BM25Pruning,
 )
 from graphrag.query.structured_search.tog_search.reasoning import ToGReasoning
 from graphrag.tokenizer.get_tokenizer import get_tokenizer
@@ -350,9 +351,12 @@ def get_tog_search_engine(
         )
     elif config.tog_search.prune_strategy == "semantic":
         pruning_strategy = SemanticPruning(embedding_model=embedding_model)
+    elif config.tog_search.prune_strategy == "bm25":
+        pruning_strategy = BM25Pruning()
     else:
         raise ValueError(
-            f"Unknown pruning strategy: {config.tog_search.prune_strategy}"
+            f"Unknown pruning strategy: {config.tog_search.prune_strategy}. "
+            f"Valid options are: 'llm', 'semantic', 'bm25'"
         )
 
     # Create reasoning module

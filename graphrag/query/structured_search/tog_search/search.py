@@ -196,7 +196,6 @@ class ToGSearch:
                     yield "\n"
 
             yield f"=== ToG REASONING ANSWER ===\n\n"
-            yield f"=== ToG REASONING ANSWER ===\n\n"
             yield answer
         except Exception as e:
             # Fallback response if reasoning fails

@@ -1,13 +1,60 @@
-"""Default relation scoring prompt for ToG search."""
+"""Default relation scoring prompt for ToG search.
 
-TOG_RELATION_SCORING_PROMPT = """
-Given the question: "{query}"
-Currently exploring entity: {entity_name}
+Based on the original ToG paper (ICLR 2024) prompts.
+"""
+
+TOG_RELATION_SCORING_PROMPT = """You are an expert at evaluating the relevance of knowledge graph relations for answering questions.
+
+Given a question and available relations from an entity, score each relation based on how likely it leads to answering the question.
+Each relation should get a score from 1-10 (higher = more relevant).
+
+## Examples:
+
+### Example 1:
+Question: "Name the president of the country whose main spoken language was Brahui in 1980?"
+Entity: Brahui Language
+Available relations:
+1. [outgoing] language.human_language.main_country
+2. [outgoing] language.human_language.language_family
+3. [outgoing] language.human_language.countries_spoken_in
+
+Reasoning:
+- Relation 1 (main_country) is highly relevant (9/10) as it directly relates to finding the country
+- Relation 2 (language_family) is less relevant (2/10) as it doesn't help find the president
+- Relation 3 (countries_spoken_in) is moderately relevant (6/10) as it provides country information
+
+Output: [9, 2, 6]
+
+### Example 2:
+Question: "Who is the author of the book that won the Pulitzer Prize in 2020?"
+Entity: Pulitzer Prize
+Available relations:
+1. [outgoing] award.award_winning_work
+2. [outgoing] award.award_category
+3. [incoming] person.awards_received
+
+Reasoning:
+- Relation 1 (award_winning_work) is highly relevant (9/10) as it leads to the winning book
+- Relation 2 (award_category) is less relevant (3/10) as it's about categories not winners
+- Relation 3 (awards_received) is moderately relevant (5/10) as it connects to people
+
+Output: [9, 3, 5]
+
+---
+
+Now score the following:
+
+Question: "{query}"
+Entity: {entity_name}
 
 Available relations:
 {relations}
 
 Score each relation (1-10) based on how likely it leads to answering the question.
-Output format: [score1, score2, score3, ...]
-Only output the list of numbers.
+Consider:
+- Direct relevance to the question's intent
+- Whether the relation leads toward the answer
+- The semantic connection between the relation and question
+
+Output ONLY a list of numbers in brackets, e.g., [8, 3, 6, 4]
 """

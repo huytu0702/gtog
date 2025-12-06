@@ -1,7 +1,10 @@
+import logging
 from typing import List, Tuple
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
 from .state import ExplorationNode, ToGSearchState
+
+logger = logging.getLogger(__name__)
 
 
 class GraphExplorer:
@@ -14,8 +17,8 @@ class GraphExplorer:
     ):
         self.entities = {e.id: e for e in entities}
         self.relationships = relationships
-        print(f"[DEBUG] GraphExplorer loaded {len(entities)} entities")
-        print(f"[DEBUG] Entity IDs: {list(self.entities.keys())[:10]}")
+        logger.debug(f"GraphExplorer loaded {len(entities)} entities")
+        logger.debug(f"Entity IDs (first 10): {list(self.entities.keys())[:10]}")
         self._build_adjacency()
 
     def _build_adjacency(self):
@@ -144,15 +147,15 @@ class GraphExplorer:
         if candidates:
             candidates.sort(key=lambda x: x[1], reverse=True)
             result = [eid for eid, _ in candidates[:top_k]]
-            print(
-                f"[DEBUG] Found {len(candidates)} candidates, returning top {len(result)}: {result}"
+            logger.debug(
+                f"Found {len(candidates)} candidates, returning top {len(result)}: {result}"
             )
             return result
         elif self.entities:
             # Absolute fallback: return first entities
             entity_ids = list(self.entities.keys())[:top_k]
-            print(f"[DEBUG] No candidates, using fallback: {entity_ids}")
+            logger.debug(f"No candidates, using fallback: {entity_ids}")
             return entity_ids
         else:
-            print("[DEBUG] No entities available")
+            logger.debug("No entities available")
             return []

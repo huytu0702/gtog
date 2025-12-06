@@ -94,31 +94,59 @@ Structure your response as:
         return answer, reasoning_paths
 
     def _format_paths(self, nodes: List[ExplorationNode]) -> str:
-        """Format exploration paths as readable text."""
-        paths = []
-        for i, node in enumerate(nodes, 1):
-            path_str = self._path_to_string(node)
-            paths.append(f"Path {i}: {path_str}")
-            paths.append(f"  Final entity: {node.entity_name}")
-            paths.append(f"  Description: {node.entity_description[:200]}...")
-            paths.append("")
-
-        return "\n".join(paths)
+        """Format exploration paths as knowledge triplets (ToG paper format)."""
+        triplets = []
+        seen_triplets = set()
+        
+        for node in nodes:
+            # Extract triplets from the path
+            node_triplets = self._extract_triplets(node)
+            for triplet in node_triplets:
+                triplet_str = f'("{triplet[0]}", {triplet[1]}, "{triplet[2]}")'
+                if triplet_str not in seen_triplets:
+                    triplets.append(triplet_str)
+                    seen_triplets.add(triplet_str)
+        
+        if not triplets:
+            # Fallback: just list entities with descriptions
+            paths = []
+            for i, node in enumerate(nodes, 1):
+                desc = node.entity_description[:150] if node.entity_description else "No description"
+                paths.append(f"- Entity {i}: {node.entity_name} - {desc}...")
+            return "\n".join(paths)
+        
+        return "\n".join([f"- {t}" for t in triplets])
+    
+    def _extract_triplets(self, node: ExplorationNode) -> List[tuple]:
+        """Extract knowledge triplets from a path."""
+        triplets = []
+        current = node
+        
+        while current.parent is not None:
+            # Create triplet: (parent_entity, relation, current_entity)
+            triplet = (
+                current.parent.entity_name,
+                current.relation_from_parent or "related_to",
+                current.entity_name
+            )
+            triplets.append(triplet)
+            current = current.parent
+        
+        return list(reversed(triplets))
 
     def _path_to_string(self, node: ExplorationNode) -> str:
-        """Convert exploration path to string."""
-        path = node.get_path()
-        if not path:
+        """Convert exploration path to triplet-based string."""
+        triplets = self._extract_triplets(node)
+        
+        if not triplets:
             return node.entity_name
-
-        path_parts = [node.entity_name]
-        current = node
-        while current.parent is not None:
-            path_parts.insert(0, f"{current.relation_from_parent}")
-            path_parts.insert(0, current.parent.entity_name)
-            current = current.parent
-
-        return " -> ".join(path_parts)
+        
+        # Format as chain of triplets
+        parts = []
+        for source, relation, target in triplets:
+            parts.append(f"{source} --[{relation}]--> {target}")
+        
+        return " | ".join(parts)
 
     async def check_early_termination(
         self,
