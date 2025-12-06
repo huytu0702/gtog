@@ -15,6 +15,10 @@ router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["d
 async def upload_document(collection_id: str, file: UploadFile = File(...)):
     """Upload a document to a collection."""
     try:
+        # Validate file extension
+        if not file.filename.lower().endswith(('.txt', '.md')):
+            raise ValueError("Only .txt and .md files are supported")
+            
         result = await storage_service.upload_document(collection_id, file)
         logger.info(f"Uploaded document {file.filename} to collection {collection_id}")
         return result

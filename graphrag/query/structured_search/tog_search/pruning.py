@@ -1,8 +1,11 @@
 from typing import List, Tuple
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 import numpy as np
-from graphrag.prompts.query.tog_relation_scoring_prompt import TOG_RELATION_SCORING_PROMPT
+from graphrag.prompts.query.tog_relation_scoring_prompt import (
+    TOG_RELATION_SCORING_PROMPT,
+)
 from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
+
 
 class PruningStrategy:
     """Base class for pruning strategies."""
@@ -45,7 +48,9 @@ class LLMPruning(PruningStrategy):
     ):
         self.model = model
         self.temperature = temperature
-        self.relation_scoring_prompt = relation_scoring_prompt or TOG_RELATION_SCORING_PROMPT
+        self.relation_scoring_prompt = (
+            relation_scoring_prompt or TOG_RELATION_SCORING_PROMPT
+        )
         self.entity_scoring_prompt = entity_scoring_prompt or TOG_ENTITY_SCORING_PROMPT
 
     async def score_relations(
@@ -61,14 +66,12 @@ class LLMPruning(PruningStrategy):
 
         # Build relations text
         relations_text = "\n".join([
-            f"{i+1}. [{direction}] {rel_desc} (weight: {weight:.2f})"
+            f"{i + 1}. [{direction}] {rel_desc} (weight: {weight:.2f})"
             for i, (rel_desc, _, direction, weight) in enumerate(relations)
         ])
 
         prompt = self.relation_scoring_prompt.format(
-            query=query,
-            entity_name=entity_name,
-            relations=relations_text
+            query=query, entity_name=entity_name, relations=relations_text
         )
 
         response = ""
@@ -85,7 +88,9 @@ class LLMPruning(PruningStrategy):
         # Combine with relation data
         return [
             (rel_desc, target_id, direction, weight, score)
-            for (rel_desc, target_id, direction, weight), score in zip(relations, scores)
+            for (rel_desc, target_id, direction, weight), score in zip(
+                relations, scores
+            )
         ]
 
     async def score_entities(
@@ -100,14 +105,12 @@ class LLMPruning(PruningStrategy):
             return []
 
         entities_text = "\n".join([
-            f"{i+1}. {name}: {desc[:100]}..."
+            f"{i + 1}. {name}: {desc[:100]}..."
             for i, (_, name, desc) in enumerate(entities)
         ])
 
         prompt = self.entity_scoring_prompt.format(
-            query=query,
-            current_path=current_path,
-            candidate_entities=entities_text
+            query=query, current_path=current_path, candidate_entities=entities_text
         )
 
         response = ""
@@ -124,9 +127,29 @@ class LLMPruning(PruningStrategy):
         """Parse score list from LLM response."""
         import re
 
-        # Try to extract list of numbers
-        numbers = re.findall(r'\d+\.?\d*', response)
-        scores = [float(n) for n in numbers[:expected_count]]
+        # Clean response and try to extract list pattern first
+        response = response.strip()
+
+        # Try to match list pattern: [1, 2, 3] or 1, 2, 3
+        list_match = re.search(r"\[([\d\s,\.]+)\]", response)
+        if list_match:
+            numbers_str = list_match.group(1)
+        else:
+            # Look for comma-separated numbers
+            numbers_str = response
+
+        # Extract numbers
+        numbers = re.findall(r"\d+\.?\d*", numbers_str)
+        scores = []
+
+        for num_str in numbers[:expected_count]:
+            try:
+                score = float(num_str)
+                # Clamp to 1-10 range
+                score = max(1.0, min(10.0, score))
+                scores.append(score)
+            except ValueError:
+                scores.append(5.0)  # Default score
 
         # If not enough scores, pad with uniform distribution
         while len(scores) < expected_count:
@@ -174,7 +197,9 @@ class SemanticPruning(PruningStrategy):
 
         return [
             (rel_desc, target_id, direction, weight, score)
-            for (rel_desc, target_id, direction, weight), score in zip(relations, scores)
+            for (rel_desc, target_id, direction, weight), score in zip(
+                relations, scores
+            )
         ]
 
     async def score_entities(
@@ -189,9 +214,7 @@ class SemanticPruning(PruningStrategy):
             return []
 
         # Embed query
-        query_embedding = await self.embedding_model.async_generate(
-            inputs=[query]
-        )
+        query_embedding = await self.embedding_model.async_generate(inputs=[query])
         query_emb = np.array(query_embedding[0])
 
         # Embed entity descriptions

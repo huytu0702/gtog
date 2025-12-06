@@ -9,6 +9,7 @@ from .exploration import GraphExplorer
 from .pruning import PruningStrategy, LLMPruning, SemanticPruning
 from .reasoning import ToGReasoning
 
+
 class ToGSearch:
     """
     ToG (Think-on-Graph) Search Engine for GraphRAG.
@@ -29,6 +30,7 @@ class ToGSearch:
         depth: int = 3,
         num_retain_entity: int = 5,
         callbacks: List[QueryCallbacks] | None = None,
+        debug: bool = False,
     ):
         self.model = model
         self.explorer = GraphExplorer(entities, relationships)
@@ -39,6 +41,7 @@ class ToGSearch:
         self.depth = depth
         self.num_retain_entity = num_retain_entity
         self.callbacks = callbacks or []
+        self._debug = debug
 
     async def search(self, query: str) -> str:
         """Perform ToG search and return answer."""
@@ -50,8 +53,14 @@ class ToGSearch:
     async def stream_search(self, query: str) -> AsyncGenerator[str, None]:
         """Perform ToG search with streaming output."""
         # Find initial entities
-        starting_entities = self.explorer.find_starting_entities(query, top_k=self.width)
-        
+        starting_entities = self.explorer.find_starting_entities(
+            query, top_k=self.width
+        )
+
+        if not starting_entities:
+            yield "No relevant entities found for the query. Please try a different query with more specific terms."
+            return
+
         # Initialize search state
         state = ToGSearchState(
             query=query,
@@ -59,7 +68,7 @@ class ToGSearch:
             nodes_by_depth={0: []},
             finished_paths=[],
             max_depth=self.depth,
-            beam_width=self.width
+            beam_width=self.width,
         )
 
         # Create initial nodes from starting entities
@@ -72,7 +81,7 @@ class ToGSearch:
                 depth=0,
                 score=1.0,  # Initial score for starting nodes
                 parent=None,
-                relation_from_parent=None
+                relation_from_parent=None,
             )
             state.add_node(initial_node)
 
@@ -80,7 +89,7 @@ class ToGSearch:
         while state.current_depth < state.max_depth:
             # Get current frontier
             current_nodes = state.get_current_frontier()
-            
+
             if not current_nodes:
                 break  # No more nodes to explore
 
@@ -92,20 +101,18 @@ class ToGSearch:
             for node in current_nodes:
                 # Get relations for current entity
                 relations = self.explorer.get_relations(node.entity_id)
-                
+
                 if not relations:
                     continue  # No relations to explore from this node
 
                 # Score relations
                 scored_relations = await self.pruning_strategy.score_relations(
-                    query,
-                    node.entity_name,
-                    relations
+                    query, node.entity_name, relations
                 )
 
                 # Keep top entities based on scores
                 scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
-                top_relations = scored_relations[:self.num_retain_entity]
+                top_relations = scored_relations[: self.num_retain_entity]
 
                 # Create new exploration nodes
                 for rel_desc, target_id, direction, weight, score in top_relations:
@@ -118,23 +125,33 @@ class ToGSearch:
                             depth=next_depth,
                             score=score,
                             parent=node,
-                            relation_from_parent=rel_desc
+                            relation_from_parent=rel_desc,
                         )
                         next_level_nodes.append(new_node)
 
+                        # Debug: show exploration step
+                        if hasattr(self, "_debug") and self._debug:
+                            yield f"[DEPTH {next_depth}] {node.entity_name} --[{rel_desc}]--> {target_name} (score: {score:.2f})\n"
+
             # Add next level nodes to state
             state.nodes_by_depth[next_depth] = next_level_nodes
-            
+
             # Prune to beam width
             state.current_depth = next_depth
             state.prune_current_frontier()
 
             # Check for early termination
-            should_terminate, answer = await self.reasoning_module.check_early_termination(
+            (
+                should_terminate,
+                answer,
+            ) = await self.reasoning_module.check_early_termination(
                 query, state.get_current_frontier()
             )
-            
+
             if should_terminate and answer:
+                yield f"=== ToG EARLY TERMINATION ===\n"
+                yield f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n"
+                yield f"=== ToG REASONING ANSWER ===\n\n"
                 yield answer
                 return
 
@@ -142,10 +159,53 @@ class ToGSearch:
         all_paths = []
         for depth_nodes in state.nodes_by_depth.values():
             all_paths.extend(depth_nodes)
-        
+
+        if not all_paths:
+            yield "No exploration paths were generated. The knowledge graph may not contain relevant information for this query."
+            return
+
         # Use reasoning module to generate final answer
-        answer, reasoning_paths = await self.reasoning_module.generate_answer(
-            query, all_paths
-        )
-        
-        yield answer
+        try:
+            answer, reasoning_paths = await self.reasoning_module.generate_answer(
+                query, all_paths
+            )
+
+            # Show exploration paths before answer
+            yield f"=== ToG EXPLORATION ANALYSIS ===\n"
+            yield f"Query: {query}\n"
+            yield f"Max Depth: {self.depth}, Beam Width: {self.width}\n"
+            yield f"Total exploration paths found: {len(all_paths)}\n"
+            yield f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n"
+
+            yield f"=== EXPLORATION PATHS (with scores) ===\n"
+            for i, path in enumerate(reasoning_paths, 1):
+                yield f"Path {i}: {path}\n"
+
+            # Show path details with scores
+            yield f"\n=== PATH DETAILS ===\n"
+            for depth in range(self.depth + 1):
+                depth_nodes = [node for node in all_paths if node.depth == depth]
+                if depth_nodes:
+                    yield f"Depth {depth}:\n"
+                    for node in depth_nodes:
+                        parent_info = (
+                            f" (from: {node.parent.entity_name})" if node.parent else ""
+                        )
+                        yield f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n"
+                    yield "\n"
+
+            yield f"=== ToG REASONING ANSWER ===\n\n"
+            yield f"=== ToG REASONING ANSWER ===\n\n"
+            yield answer
+        except Exception as e:
+            # Fallback response if reasoning fails
+            paths_summary = "\n".join([
+                f"- {node.entity_name}: {node.entity_description[:100]}..."
+                for node in all_paths[:5]
+            ])
+            yield f"""Error during reasoning: {str(e)}
+
+However, I found these relevant entities during exploration:
+{paths_summary}
+
+Based on the exploration, I found {len(all_paths)} potential paths. Please try rephrasing your query or check if the entities are relevant to your question."""

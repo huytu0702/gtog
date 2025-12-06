@@ -145,7 +145,6 @@ basic_search:
   embedding_model_id: default_embedding_model
   prompt: "prompts/basic_search_system_prompt.txt"
 
-# ToG (Think-on-Graph) search configuration
 tog_search:
   chat_model_id: default_chat_model
   embedding_model_id: default_embedding_model
@@ -157,3 +156,6 @@ tog_search:
   temperature_reasoning: 0.0
   max_context_tokens: 8000
   max_exploration_paths: 10
+  relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"
+  entity_scoring_prompt: "prompts/tog_entity_scoring_prompt.txt"
+  reasoning_prompt: "prompts/tog_reasoning_prompt.txt"

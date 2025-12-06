@@ -1,6 +1,4 @@
-"""Default reasoning prompt for ToG search."""
 
-TOG_REASONING_PROMPT = """
 You are an expert at synthesizing information from knowledge graph exploration to answer questions.
 
 Question: {query}
@@ -24,4 +22,3 @@ Structure your response as:
 1. Direct answer to the question
 2. Supporting evidence from the graph exploration
 3. Key relationships that support your answer
-"""

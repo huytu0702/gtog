@@ -3,6 +3,7 @@ from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
 from .state import ExplorationNode, ToGSearchState
 
+
 class GraphExplorer:
     """Handles graph traversal and relation/entity retrieval."""
 
@@ -31,7 +32,9 @@ class GraphExplorer:
                 self.incoming[rel.target] = []
             self.incoming[rel.target].append((rel.description, rel.source, rel.weight))
 
-    def get_relations(self, entity_id: str, bidirectional: bool = True) -> List[Tuple[str, str, str, float]]:
+    def get_relations(
+        self, entity_id: str, bidirectional: bool = True
+    ) -> List[Tuple[str, str, str, float]]:
         """
         Get all relations for an entity.
         Returns: List of (relation_description, target_entity_id, direction, weight)
@@ -83,8 +86,21 @@ class GraphExplorer:
             score += len(query_tokens & title_tokens) * 2.0
             score += len(query_tokens & desc_tokens) * 1.0
 
+            # Partial matching for individual query tokens
+            for token in query_tokens:
+                if token in title_lower:
+                    score += 3.0
+                if token in desc_lower:
+                    score += 1.5
+
             if score > 0:
                 candidates.append((entity_id, score))
+
+        # If no candidates found, return some entities anyway
+        if not candidates and self.entities:
+            # Return first few entities as fallback
+            entity_ids = list(self.entities.keys())[:top_k]
+            return entity_ids
 
         # Return top-k
         candidates.sort(key=lambda x: x[1], reverse=True)
