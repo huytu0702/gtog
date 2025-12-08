@@ -559,9 +559,574 @@ async def stream_search(self, query: str):
 
 ---
 
-## 4. Retrieval Components - Chi tiết
+## 4. DRIFT Search - Dynamic Reasoning and Iterative Follow-up Thinking
 
-### 4.1. Entity Extraction & Ranking
+### 4.1. Kiến trúc tổng quan
+
+DRIFT (Dynamic Reasoning and Iterative Follow-up Thinking) kết hợp cả Global và Local search thông qua một quy trình lặp:
+1. **Primer Phase**: Phân tích global (community reports) để tạo câu hỏi con
+2. **Iterative Search**: Dùng Local Search trả lời từng câu hỏi con
+3. **Follow-up Generation**: Từ mỗi câu trả lời, sinh ra câu hỏi follow-up mới
+4. **Reduce Phase**: Tổng hợp tất cả answers thành câu trả lời cuối cùng
+
+```mermaid
+flowchart TD
+    A[User Query] --> B[PRIMER PHASE]
+    
+    subgraph "Primer: Global Analysis"
+        B --> C[HyDE Query Expansion]
+        C --> D[Embed Expanded Query]
+        D --> E[Similarity Search<br/>Top-K Community Reports]
+        E --> F[LLM Decomposition]
+        F --> G[Initial Sub-queries<br/>+ Intermediate Answer]
+    end
+    
+    G --> H[Query State Graph]
+    H --> I{ITERATION LOOP}
+    
+    subgraph "Iterative Local Search"
+        I --> J[Rank Incomplete Actions]
+        J --> K[Select Top-K Follow-ups]
+        K --> L1[Local Search 1]
+        K --> L2[Local Search 2]
+        K --> L3[Local Search K]
+        
+        L1 --> M1[Answer + Score<br/>+ New Follow-ups]
+        L2 --> M2[Answer + Score<br/>+ New Follow-ups]
+        L3 --> M3[Answer + Score<br/>+ New Follow-ups]
+        
+        M1 --> N[Update Query Graph]
+        M2 --> N
+        M3 --> N
+    end
+    
+    N --> O{Max Depth<br/>Reached?}
+    O -->|No| I
+    O -->|Yes| P[REDUCE PHASE]
+    
+    subgraph "Reduce: Synthesis"
+        P --> Q[Extract All Answers<br/>from Graph]
+        Q --> R[LLM Synthesis]
+        R --> S[Final Comprehensive Answer]
+    end
+    
+    style A fill:#e1f5ff
+    style S fill:#c8e6c9
+    style F fill:#fff9c4
+    style N fill:#ffe0b2
+    style R fill:#ffccbc
+```
+
+### 4.2. Query State Graph
+
+DRIFT sử dụng NetworkX MultiDiGraph để quản lý state:
+
+```mermaid
+graph TD
+    subgraph "Query State as Directed Graph"
+        Q0[Original Query]
+        Q1[Sub-query 1]
+        Q2[Sub-query 2]
+        Q3[Sub-query 3]
+        
+        Q1_1[Follow-up 1.1]
+        Q1_2[Follow-up 1.2]
+        Q2_1[Follow-up 2.1]
+        
+        Q0 -->|primer| Q1
+        Q0 -->|primer| Q2
+        Q0 -->|primer| Q3
+        
+        Q1 -->|depth 1| Q1_1
+        Q1 -->|depth 1| Q1_2
+        Q2 -->|depth 1| Q2_1
+        
+        Q1_1 -.->|answer exists| A1["Answer 1.1<br/>(score: 8.5)"]
+        Q2 -.->|answer exists| A2["Answer 2<br/>(score: 9.0)"]
+        
+        style Q0 fill:#e3f2fd
+        style A1 fill:#c8e6c9
+        style A2 fill:#c8e6c9
+        style Q1_2 fill:#fff9c4
+        style Q3 fill:#fff9c4
+    end
+```
+
+**Node Properties:**
+- `query`: Câu hỏi
+- `answer`: Câu trả lời (None nếu chưa complete)
+- `score`: Độ liên quan (float hoặc -inf)
+- `follow_ups`: List các câu hỏi con
+- `metadata`: Context data, token counts
+
+**Edge Properties:**
+- `weight`: Mức độ quan trọng của follow-up
+
+### 4.3. Chi tiết từng Phase
+
+#### Phase 1: Primer - Global Decomposition
+
+```python
+# File: graphrag/query/structured_search/drift_search/primer.py
+
+class DRIFTPrimer:
+    async def search(self, query: str, top_k_reports: pd.DataFrame):
+        """
+        Phân tích query dựa trên community reports để tạo sub-queries.
+        
+        Steps:
+        1. Split reports into folds (for parallel processing)
+        2. Decompose query for each fold
+        3. Return initial actions
+        """
+        # 1. Split reports into multiple folds
+        report_folds = self.split_reports(top_k_reports)
+        
+        # 2. Parallel decomposition
+        tasks = [
+            self.decompose_query(query, fold) 
+            for fold in report_folds
+        ]
+        results = await asyncio.gather(*tasks)
+        
+        # 3. Package results
+        return SearchResult(
+            response=results,  # List of decomposed sub-queries
+            context_data={"top_k_reports": top_k_reports}
+        )
+    
+    async def decompose_query(self, query: str, reports: pd.DataFrame):
+        """
+        Decompose query into sub-queries using LLM.
+        
+        Returns JSON:
+        {
+            "intermediate_answer": "Partial answer from community reports",
+            "follow_up_queries": ["sub-query 1", "sub-query 2", ...],
+            "score": 8.5
+        }
+        """
+        community_reports = "\n\n".join(reports["full_content"].tolist())
+        
+        prompt = DRIFT_PRIMER_PROMPT.format(
+            query=query,
+            community_reports=community_reports
+        )
+        
+        response = await self.chat_model.achat(prompt, json=True)
+        return json.loads(response.output.content)
+```
+
+**HyDE (Hypothetical Document Embeddings)**
+
+```python
+# File: graphrag/query/structured_search/drift_search/primer.py
+
+class PrimerQueryProcessor:
+    async def expand_query(self, query: str):
+        """
+        Expand query bằng cách tạo hypothetical answer theo template.
+        
+        Ví dụ:
+        Query: "What is GraphRAG?"
+        Template: (random community report structure)
+        Output: Hypothetical detailed answer về GraphRAG
+        """
+        template = random.choice(self.reports).full_content
+        
+        prompt = f"""Create a hypothetical answer to: {query}
+        
+        Format it to follow this template:
+        {template}
+        
+        Ensure no new entities not in the original query."""
+        
+        text = await self.chat_model.achat(prompt)
+        return text
+    
+    async def __call__(self, query: str):
+        """Expand và embed query."""
+        hyde_query = await self.expand_query(query)
+        return self.text_embedder.embed(hyde_query)
+```
+
+#### Phase 2: Iterative Local Search
+
+```python
+# File: graphrag/query/structured_search/drift_search/search.py
+
+class DRIFTSearch:
+    async def search(self, query: str, reduce: bool = True):
+        """
+        Main DRIFT search loop.
+        """
+        # 1. PRIMER PHASE (if query state is empty)
+        if not self.query_state.graph:
+            # Get top-K community reports via HyDE
+            primer_context = await self.context_builder.build_context(query)
+            
+            # Decompose query
+            primer_response = await self.primer.search(
+                query=query,
+                top_k_reports=primer_context
+            )
+            
+            # Convert to DriftAction and add to graph
+            init_action = self._process_primer_results(query, primer_response)
+            self.query_state.add_action(init_action)
+            self.query_state.add_all_follow_ups(init_action, init_action.follow_ups)
+        
+        # 2. ITERATIVE SEARCH LOOP
+        epochs = 0
+        while epochs < self.config.n_depth:
+            # Get incomplete actions (unanswered queries)
+            actions = self.query_state.rank_incomplete_actions()
+            if len(actions) == 0:
+                break
+            
+            # Select top-K follow-ups
+            actions = actions[:self.config.drift_k_followups]
+            
+            # Execute local search for each action (parallel)
+            results = await self._search_step(
+                global_query=query,
+                search_engine=self.local_search,
+                actions=actions
+            )
+            
+            # Update graph with results
+            for action in results:
+                self.query_state.add_action(action)
+                self.query_state.add_all_follow_ups(action, action.follow_ups)
+            
+            epochs += 1
+        
+        # 3. REDUCE PHASE
+        if reduce:
+            response_state, context_data, context_text = self.query_state.serialize()
+            reduced_response = await self._reduce_response(
+                responses=response_state,
+                query=query
+            )
+            return reduced_response
+        
+        return self.query_state.serialize()
+```
+
+**DriftAction Class:**
+
+```python
+# File: graphrag/query/structured_search/drift_search/action.py
+
+class DriftAction:
+    """
+    Represents a query node in the graph.
+    """
+    def __init__(self, query: str, answer: str = None, follow_ups: list = None):
+        self.query = query
+        self.answer = answer  # None if incomplete
+        self.score = None
+        self.follow_ups = follow_ups or []
+        self.metadata = {
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+        }
+    
+    @property
+    def is_complete(self):
+        """Action is complete if it has an answer."""
+        return self.answer is not None
+    
+    async def search(self, search_engine, global_query: str):
+        """
+        Execute local search for this action.
+        
+        Returns:
+        - self with updated answer, score, follow_ups
+        """
+        if self.is_complete:
+            return self
+        
+        # Local search with drift_query context
+        search_result = await search_engine.search(
+            drift_query=global_query,  # Original global query
+            query=self.query            # Sub-query
+        )
+        
+        # Parse JSON response
+        response = json.loads(search_result.response)
+        
+        self.answer = response.get("response")
+        self.score = response.get("score", float("-inf"))
+        self.follow_ups = response.get("follow_up_queries", [])
+        
+        # Update metadata
+        self.metadata["llm_calls"] += 1
+        self.metadata["prompt_tokens"] += search_result.prompt_tokens
+        self.metadata["output_tokens"] += search_result.output_tokens
+        
+        return self
+```
+
+#### Phase 3: Reduce
+
+```python
+async def _reduce_response(self, responses: dict, query: str):
+    """
+    Synthesize all answers into final response.
+    
+    Input responses structure:
+    {
+        "nodes": [
+            {"query": "...", "answer": "...", "score": 8.5},
+            {"query": "...", "answer": "...", "score": 9.0},
+            ...
+        ],
+        "edges": [...]
+    }
+    """
+    # Extract all answers
+    reduce_responses = [
+        node["answer"]
+        for node in responses.get("nodes", [])
+        if node.get("answer")
+    ]
+    
+    # Build reduce prompt
+    search_prompt = self.reduce_system_prompt.format(
+        context_data=reduce_responses,
+        response_type=self.response_type
+    )
+    
+    # LLM synthesis
+    model_response = await self.model.achat(
+        prompt=query,
+        history=[{"role": "system", "content": search_prompt}]
+    )
+    
+    return model_response.output.content
+```
+
+### 4.4. Ví dụ thực tế
+
+**Câu hỏi:** "Impact của AI trên healthcare và các thách thức?"
+
+**PRIMER PHASE:**
+
+```
+HyDE Expansion:
+Query: "Impact của AI trên healthcare..."
+→ Expanded: "AI đang cách mạng hóa healthcare thông qua machine learning 
+   cho medical imaging, predictive analytics cho disease diagnosis..."
+
+Similarity Search:
+Top-3 Community Reports:
+1. Community #45: "Healthcare AI Applications" (similarity: 0.92)
+2. Community #78: "AI Ethics and Challenges" (similarity: 0.88)
+3. Community #12: "Medical Technology Innovation" (similarity: 0.85)
+
+LLM Decomposition (parallel on 3 reports):
+Fold 1 (Report #45):
+{
+  "intermediate_answer": "AI applications trong healthcare bao gồm medical 
+                          imaging analysis, disease prediction, và drug discovery...",
+  "follow_up_queries": [
+    "Các ứng dụng cụ thể của AI trong medical imaging?",
+    "AI giúp drug discovery như thế nào?"
+  ],
+  "score": 9.0
+}
+
+Fold 2 (Report #78):
+{
+  "intermediate_answer": "Thách thức chính bao gồm data privacy, 
+                          algorithmic bias, và regulatory compliance...",
+  "follow_up_queries": [
+    "Làm thế nào để đảm bảo AI không bias trong medical decisions?",
+    "Quy định nào đang được áp dụng cho AI trong healthcare?"
+  ],
+  "score": 8.5
+}
+```
+
+**Query State after Primer:**
+
+```
+Graph nodes:
+- Original Query (depth 0)
+  ├─ Sub-query 1: "Các ứng dụng cụ thể của AI trong medical imaging?" [INCOMPLETE]
+  ├─ Sub-query 2: "AI giúp drug discovery như thế nào?" [INCOMPLETE]
+  ├─ Sub-query 3: "Làm thế nào để đảm bảo AI không bias?" [INCOMPLETE]
+  └─ Sub-query 4: "Quy định nào áp dụng cho AI healthcare?" [INCOMPLETE]
+```
+
+**ITERATION 1:**
+
+```
+Rank incomplete actions → All 4 have no score yet, random shuffle
+Select top 2 (drift_k_followups=2):
+  - Sub-query 1: "Các ứng dụng cụ thể của AI trong medical imaging?"
+  - Sub-query 3: "Làm thế nào để đảm bảo AI không bias?"
+
+Execute Local Search (parallel):
+
+Action 1 Result:
+{
+  "response": "AI trong medical imaging bao gồm:
+               1. X-ray analysis với CNN models
+               2. MRI segmentation
+               3. CT scan anomaly detection...",
+  "score": 9.2,
+  "follow_up_queries": [
+    "Độ chính xác của AI trong detecting cancer từ X-ray?",
+    "So sánh AI vs radiologist trong MRI reading?"
+  ]
+}
+
+Action 3 Result:
+{
+  "response": "Để tránh bias cần:
+               1. Diverse training data
+               2. Fairness metrics
+               3. Regular auditing...",
+  "score": 8.7,
+  "follow_up_queries": [
+    "Metrics nào được dùng để measure fairness trong medical AI?"
+  ]
+}
+
+Update Graph:
+- Sub-query 1: COMPLETE (answer exists, score=9.2)
+  └─ New follow-up: "Độ chính xác của AI trong detecting cancer từ X-ray?" [INCOMPLETE]
+  └─ New follow-up: "So sánh AI vs radiologist trong MRI reading?" [INCOMPLETE]
+- Sub-query 3: COMPLETE (answer exists, score=8.7)
+  └─ New follow-up: "Metrics nào để measure fairness?" [INCOMPLETE]
+```
+
+**ITERATION 2:**
+
+```
+Ranked incomplete actions (by score from parent or random):
+1. "Độ chính xác của AI trong detecting cancer từ X-ray?"
+2. "So sánh AI vs radiologist trong MRI reading?"
+3. "Metrics nào để measure fairness?"
+4. Sub-query 2: "AI giúp drug discovery như thế nào?"
+5. Sub-query 4: "Quy định nào áp dụng cho AI healthcare?"
+
+Select top 2:
+... (continue iterating)
+```
+
+**REDUCE PHASE:**
+
+```
+All completed answers:
+1. (score 9.2): "AI trong medical imaging bao gồm..."
+2. (score 9.0): "AI applications trong healthcare bao gồm..."
+3. (score 8.7): "Để tránh bias cần..."
+4. (score 8.5): "Thách thức chính bao gồm..."
+5. ...
+
+Reduce Prompt:
+"Given these intermediate answers about AI in healthcare, 
+ synthesize a comprehensive response to: 
+ 'Impact của AI trên healthcare và các thách thức?'"
+
+Final Answer:
+AI đang có impact sâu rộng trong healthcare:
+
+**Ứng dụng chính:**
+1. Medical Imaging: AI phân tích X-ray, MRI, CT scans với độ chính xác cao,
+   hỗ trợ radiologists trong detecting cancer và các bệnh lý...
+2. Drug Discovery: AI giúp tăng tốc quá trình phát hiện thuốc mới...
+3. Predictive Analytics: Dự đoán disease progression, readmission risks...
+
+**Thách thức:**
+1. Data Privacy: Bảo vệ patient data trong training models
+2. Algorithmic Bias: Đảm bảo fairness cho mọi demographic groups
+3. Regulatory Compliance: Tuân thủ FDA, HIPAA, và các quy định khác
+4. Clinical Validation: Chứng minh hiệu quả trong real-world settings
+
+[Comprehensive synthesized answer...]
+```
+
+### 4.5. So sánh DRIFT với các phương pháp khác
+
+| Aspect | Local Search | Global Search | DRIFT | ToG |
+|--------|--------------|---------------|-------|-----|
+| **Scope** | Narrow (entity-focused) | Broad (all communities) | **Adaptive** | Graph paths |
+| **Query Decomposition** | ❌ No | ❌ No | ✅ **Automatic** | ❌ No |
+| **Iterative Refinement** | ❌ No | ❌ No | ✅ **Yes** | ✅ Yes |
+| **Follow-up Handling** | ❌ Manual | ❌ Manual | ✅ **Automatic** | Via exploration |
+| **Context Type** | Local+Community | Community only | **Both** | Entity+Relations |
+| **Best For** | Simple facts | Dataset overview | **Complex, multi-faceted questions** | Reasoning chains |
+| **Latency** | Low (~2s) | Medium (~5-10s) | **Medium-High (~5-15s)** | High (~10-30s) |
+| **LLM Calls** | 1 | K+1 | **Primer + Depth*K + 1** | Depth*K |
+
+**Khi nào dùng DRIFT:**
+- ✅ Câu hỏi phức tạp cần nhiều angles (e.g., "Impact và challenges của X?")
+- ✅ Cần comprehensive answer covering nhiều sub-topics
+- ✅ Dataset lớn với nhiều communities
+- ✅ Muốn balance giữa global overview và local details
+- ❌ KHÔNG dùng cho simple factual questions → Local Search tốt hơn
+
+### 4.6. Configuration & Tuning
+
+```python
+# File: graphrag/config/models/drift_search_config.py
+
+class DRIFTSearchConfig:
+    # Primer settings
+    primer_folds: int = 1                    # Parallel decomposition folds
+    drift_k_followups: int = 3               # Top-K follow-ups per iteration
+    
+    # Iteration settings
+    n_depth: int = 2                         # Max iteration depth
+    
+    # Local search settings (reused for each action)
+    local_search_text_unit_prop: float = 0.5
+    local_search_community_prop: float = 0.25
+    local_search_top_k_mapped_entities: int = 10
+    local_search_top_k_relationships: int = 10
+    local_search_max_data_tokens: int = 8000
+    
+    # Reduce settings
+    reduce_max_tokens: int = 2000
+    reduce_temperature: float = 0.0
+
+# Tuning guidelines:
+# 1. primer_folds: Tăng for faster primer (parallel), nhưng dùng nhiều tokens
+# 2. drift_k_followups: Balance giữa breadth (nhiều follow-ups) và depth
+# 3. n_depth: Tăng for deeper exploration, nhưng exponential cost
+#    - depth=1: Primer only
+#    - depth=2: Primer + 1 round of follow-ups (recommended)
+#    - depth=3+: Very expensive, use carefully
+```
+
+**Cost Analysis:**
+
+```
+Example: drift_k_followups=3, n_depth=2, primer_folds=2
+
+LLM calls:
+- Primer decomposition: 2 folds = 2 calls
+- Iteration 1: 3 local searches = 3 calls
+- Iteration 2: 3 local searches = 3 calls (assuming 3 new follow-ups)
+- Reduce: 1 call
+Total: 2 + 3 + 3 + 1 = 9 LLM calls
+
+Comparison:
+- Local Search: 1 call
+- Global Search (10 communities): 10 + 1 = 11 calls
+- DRIFT: ~9 calls (but more comprehensive)
+```
+
+---
+
+## 5. Retrieval Components - Chi tiết
+
+### 5.1. Entity Extraction & Ranking
 
 ```python
 # File: graphrag/query/context_builder/entity_extraction.py
@@ -602,7 +1167,7 @@ def map_query_to_entities(
     return selected_entities
 ```
 
-### 4.2. Relationship Filtering
+### 5.2. Relationship Filtering
 
 ```python
 # File: graphrag/query/context_builder/local_context.py
@@ -655,7 +1220,7 @@ def _filter_relationships(
     return in_network + out_network[:budget]
 ```
 
-### 4.3. Text Unit Ranking
+### 5.3. Text Unit Ranking
 
 ```python
 # File: graphrag/query/structured_search/local_search/mixed_context.py
@@ -709,23 +1274,27 @@ def _build_text_unit_context(
 
 ---
 
-## 5. So sánh các phương thức Retrieve
+## 6. So sánh các phương thức Retrieve
 
 | Feature | Local Search | Global Search | ToG Search | DRIFT | Basic |
 |---------|--------------|---------------|------------|-------|-------|
-| **Use Case** | Specific questions | Overview questions | Complex reasoning | Hybrid | Simple lookup |
-| **Entity-based** | ✅ Top-K semantic | ❌ All communities | ✅ Iterative exploration | ✅ Hybrid | ❌ Text-only |
-| **LLM Calls** | 1 | K (map) + 1 (reduce) | N*depth (pruning) + 1 | 2+ | 1 |
-| **Latency** | Low (~2s) | Medium (~5-10s) | High (~10-30s) | Medium | Very Low (~1s) |
-| **Context Type** | Mixed (entities, rels, communities, texts) | Community reports only | Graph paths | Local + Global | Text embeddings only |
+| **Use Case** | Specific questions | Overview questions | Complex reasoning | **Multi-faceted complex questions** | Simple lookup |
+| **Entity-based** | ✅ Top-K semantic | ❌ All communities | ✅ Iterative exploration | ✅ **Adaptive (both)** | ❌ Text-only |
+| **Query Decomposition** | ❌ No | ❌ No | ❌ No | ✅ **Automatic via LLM** | ❌ No |
+| **Iterative Refinement** | ❌ No | ❌ No | ✅ Yes (exploration) | ✅ **Yes (follow-ups)** | ❌ No |
+| **LLM Calls** | 1 | K (map) + 1 (reduce) | N*depth (pruning) + 1 | **Primer + Depth×K + 1** | 1 |
+| **Latency** | Low (~2s) | Medium (~5-10s) | High (~10-30s) | **Medium-High (~5-15s)** | Very Low (~1s) |
+| **Context Type** | Mixed (entities, rels, communities, texts) | Community reports only | Graph paths | **Both (Global primer + Local iterations)** | Text embeddings only |
 | **Token Budget** | 8000 (configurable) | 8000 per batch | Dynamic | Dynamic | 8000 |
-| **Best For** | "Who is X?" | "Summarize themes" | "How X relates to Y?" | General purpose | Keyword search |
+| **Best For** | "Who is X?" | "Summarize themes" | "How X relates to Y?" | **"Impact và challenges của X?"** | Keyword search |
+| **Explainability** | Medium | Low | High (paths shown) | **High (query graph + intermediate answers)** | Low |
+| **Parallelization** | ❌ Single call | ✅ Map phase | ❌ Sequential | ✅ **Per iteration** | ❌ Single call |
 
 ---
 
-## 6. Ví dụ End-to-End
+## 7. Ví dụ End-to-End
 
-### Ví dụ 1: Local Search
+### 7.1. Ví dụ 1: Local Search
 
 **Input:**
 ```python
@@ -763,7 +1332,7 @@ Tesla đang phát triển nhiều công nghệ tiên tiến, bao gồm:
 ...
 ```
 
-### Ví dụ 2: Global Search
+### 7.2. Ví dụ 2: Global Search
 
 **Input:**
 ```python
@@ -803,7 +1372,7 @@ Năm 2024 chứng kiến các xu hướng AI chính:
 ...
 ```
 
-### Ví dụ 3: ToG Search
+### 7.3. Ví dụ 3: ToG Search
 
 **Input:**
 ```python
@@ -845,11 +1414,77 @@ như iPod và iTunes, cuối cùng dẫn đến iPhone năm 2007 - sản phẩm�
 ngành công nghiệp di động...
 ```
 
+### 7.4. Ví dụ 4: DRIFT Search
+
+**Input:**
+```python
+drift_search_engine = get_drift_search_engine(
+    config=config,
+    reports=reports,
+    entities=entities,
+    relationships=relationships,
+    text_units=text_units,
+    description_embedding_store=vector_store
+)
+
+result = await drift_search_engine.search(
+    "Chiến lược và thách thức của Tesla trong việc phát triển autonomous driving?"
+)
+```
+
+**Output:**
+```
+=== PRIMER PHASE ===
+HyDE Expansion: "Tesla đang phát triển công nghệ autonomous driving..."
+Top-3 Communities: 
+  - "Electric Vehicle Innovation"
+  - "AI in Transportation"
+  - "Automotive Industry Challenges"
+
+Decomposed Sub-queries:
+1. "Chiến lược kỹ thuật của Tesla trong autonomous driving?"
+   → Intermediate Answer: "Tesla sử dụng vision-only approach..."
+   → Follow-ups: ["So sánh vision vs Lidar?", "Neural network architecture?"]
+
+2. "Thách thức regulatory cho Tesla FSD?"
+   → Intermediate Answer: "Tesla đối mặt với regulations từ NHTSA..."
+   → Follow-ups: ["Incidents và investigations?", "Compliance requirements?"]
+
+=== ITERATION 1 ===
+Processing 3 follow-ups in parallel...
+✓ "So sánh vision vs Lidar?" → Answer (score: 9.1)
+✓ "Neural network architecture?" → Answer (score: 8.8)
+✓ "Incidents và investigations?" → Answer (score: 8.5)
+  → New follow-ups generated: ["Latest NHTSA findings?", ...]
+
+=== ITERATION 2 ===
+Processing 3 more follow-ups...
+...
+
+=== REDUCE PHASE ===
+Synthesizing 12 intermediate answers...
+
+Final Answer:
+**Chiến lược của Tesla:**
+1. Vision-only Approach: Tesla loại bỏ radar/lidar, chỉ dùng cameras với 
+   neural networks, cho phép scale nhanh và cost-effective...
+2. Data Flywheel: Fleet learning từ hàng triệu vehicles cung cấp training data...
+3. Hardware-Software Integration: Thiết kế custom chips (FSD computer)...
+
+**Thách thức chính:**
+1. Technical: Pure vision approach có limitations trong adverse weather...
+2. Regulatory: NHTSA investigations về FSD safety incidents...
+3. Public Perception: High-profile accidents ảnh hưởng trust...
+4. Competitive Pressure: Waymo, Cruise dùng lidar approach...
+
+[Comprehensive answer with details from 12+ intermediate searches...]
+```
+
 ---
 
-## 7. Performance Tuning
+## 8. Performance Tuning
 
-### 7.1. Local Search Optimization
+### 8.1. Local Search Optimization
 
 ```python
 # Tối ưu token budget
@@ -866,7 +1501,7 @@ context_builder_params = {
 # - Lower top_k = faster but might miss relevant info
 ```
 
-### 7.2. Global Search Optimization
+### 8.2. Global Search Optimization
 
 ```python
 # Tối ưu parallelization
@@ -882,7 +1517,7 @@ global_search_params = {
 # - Larger max_data_tokens = more comprehensive but takes more tokens
 ```
 
-### 7.3. ToG Search Optimization
+### 8.3. ToG Search Optimization
 
 ```python
 # Tối ưu exploration
@@ -902,16 +1537,35 @@ tog_search_params = {
 
 ---
 
-## 8. Kết luận
+## 9. Kết luận
 
 GraphRAG cung cấp một hệ thống retrieve linh hoạt với nhiều strategies:
 - **Local Search**: Tốt nhất cho câu hỏi cụ thể, fast (~2s)
 - **Global Search**: Tổng quan toàn dataset, comprehensive
 - **ToG Search**: Reasoning phức tạp trên graph, explainable paths
-- **DRIFT**: Hybrid approach, balanced
+- **DRIFT Search**: Hybrid iterative approach, tự động decompose query và follow-up
+- **Basic Search**: Simple embedding-based lookup
 
 **Best Practices:**
-1. Sử dụng Local Search làm mặc định
-2. Global Search cho overview/summarization tasks
-3. ToG Search khi cần explanation và reasoning chains
-4. Tune các tham số dựa trên latency requirements và quality needs
+1. **Sử dụng Local Search** làm mặc định cho factual questions
+2. **Global Search** cho overview/summarization tasks
+3. **DRIFT Search** cho complex multi-faceted questions cần nhiều perspectives
+4. **ToG Search** khi cần explanation và reasoning chains trên graph
+5. Tune các tham số dựa trên latency requirements và quality needs
+
+**Decision Tree:**
+```
+Câu hỏi của bạn:
+├─ Simple fact about specific entity? → Local Search
+├─ Overview/summary of entire dataset? → Global Search
+├─ Complex question với nhiều aspects? → DRIFT Search
+├─ Reasoning path between entities? → ToG Search
+└─ Just keyword lookup? → Basic Search
+```
+
+**Performance vs Quality Trade-off:**
+```
+Speed:  Basic > Local > DRIFT ≈ Global > ToG
+Quality: DRIFT ≈ ToG > Global > Local > Basic
+Cost:   Basic < Local < Global < DRIFT < ToG
+```
