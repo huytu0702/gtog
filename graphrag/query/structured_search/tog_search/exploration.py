@@ -10,6 +10,7 @@ import numpy as np
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
 from graphrag.language_model.protocol.base import EmbeddingModel
+from graphrag.vector_stores.base import BaseVectorStore
 from .state import ExplorationNode, ToGSearchState
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class GraphExplorer:
     """Handles graph traversal and relation/entity retrieval.
-    
+
     Uses embedding similarity for entity linking (like original ToG paper).
     """
 
@@ -26,28 +27,31 @@ class GraphExplorer:
         entities: List[Entity],
         relationships: List[Relationship],
         embedding_model: Optional[EmbeddingModel] = None,
+        entity_embedding_store: Optional[BaseVectorStore] = None,
     ):
         """
         Initialize the GraphExplorer.
-        
+
         Args:
             entities: List of entities in the knowledge graph
             relationships: List of relationships between entities
             embedding_model: Optional embedding model for semantic entity linking
+            entity_embedding_store: Optional vector store with pre-computed entity embeddings
         """
         self.entities = {e.id: e for e in entities}
         self.entity_list = entities  # Keep original list for embedding
         self.relationships = relationships
         self.embedding_model = embedding_model
-        
+        self.entity_embedding_store = entity_embedding_store
+
         # Cache for entity embeddings
         self._entity_embeddings: Optional[np.ndarray] = None
         self._entity_texts: Optional[List[str]] = None
-        
+
         logger.debug(f"GraphExplorer loaded {len(entities)} entities")
         logger.debug(f"Entity IDs (first 10): {list(self.entities.keys())[:10]}")
         logger.debug(f"Embedding model available: {embedding_model is not None}")
-        
+
         self._build_adjacency()
 
     def _build_adjacency(self):
@@ -97,16 +101,54 @@ class GraphExplorer:
         """Compute and cache embeddings for all entities."""
         if self._entity_embeddings is not None:
             return  # Already computed
-        
+
+        # Priority 1: Use pre-computed embeddings from vector store
+        if self.entity_embedding_store and self.entity_list:
+            try:
+                embeddings = []
+                self._entity_texts = []
+
+                for entity in self.entity_list:
+                    # Try to get pre-computed embedding from vector store
+                    doc = self.entity_embedding_store.search_by_id(entity.id)
+                    if doc and doc.vector:
+                        embeddings.append(doc.vector)
+                        self._entity_texts.append(
+                            f"{entity.title}: {entity.description or ''}"[:500]
+                        )
+                    else:
+                        # Fallback: compute embedding if not found in store
+                        if self.embedding_model:
+                            text = f"{entity.title}: {entity.description or ''}"[:500]
+                            emb = await self.embedding_model.aembed(text=text)
+                            embeddings.append(emb)
+                            self._entity_texts.append(text)
+                        else:
+                            logger.warning(
+                                f"No embedding found for entity {entity.id} and no embedding model available"
+                            )
+                            return
+
+                self._entity_embeddings = np.array(embeddings)
+                logger.debug(
+                    f"Loaded embeddings for {len(self._entity_texts)} entities from vector store"
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load pre-computed embeddings: {e}, falling back to computing"
+                )
+
+        # Priority 2: Fallback computing embeddings (original logic)
         if not self.embedding_model or not self.entity_list:
             return
-        
+
         # Create text representations for each entity
         self._entity_texts = [
             f"{e.title}: {e.description or ''}"[:500]  # Limit length
             for e in self.entity_list
         ]
-        
+
         try:
             # Batch embed all entities
             embeddings = await self.embedding_model.aembed_batch(
@@ -123,43 +165,45 @@ class GraphExplorer:
     ) -> List[str]:
         """
         Find starting entities using embedding similarity (like ToG paper).
-        
+
         Uses SentenceTransformer-style dot product scoring.
         """
         if not self.embedding_model:
             logger.debug("No embedding model, falling back to keyword matching")
             return self.find_starting_entities_keyword(query, top_k)
-        
+
         # Ensure entity embeddings are computed
         await self._compute_entity_embeddings()
-        
+
         if self._entity_embeddings is None:
             logger.debug("Entity embeddings not available, falling back to keyword")
             return self.find_starting_entities_keyword(query, top_k)
-        
+
         try:
             # Embed the query
             query_embedding = await self.embedding_model.aembed(text=query)
             query_emb = np.array(query_embedding)
-            
+
             # Compute dot product scores (like ToG paper uses util.dot_score)
             scores = np.dot(self._entity_embeddings, query_emb)
-            
+
             # Get top-k indices
             top_indices = np.argsort(scores)[::-1][:top_k]
-            
+
             # Map back to entity IDs
             result = [self.entity_list[i].id for i in top_indices]
-            
+
             logger.debug(
                 f"Semantic entity linking: top {top_k} entities with scores "
                 f"{[f'{self.entity_list[i].title}: {scores[i]:.3f}' for i in top_indices]}"
             )
-            
+
             return result
-            
+
         except Exception as e:
-            logger.warning(f"Semantic entity linking failed: {e}, falling back to keyword")
+            logger.warning(
+                f"Semantic entity linking failed: {e}, falling back to keyword"
+            )
             return self.find_starting_entities_keyword(query, top_k)
 
     def find_starting_entities_keyword(self, query: str, top_k: int = 3) -> List[str]:
@@ -230,7 +274,7 @@ class GraphExplorer:
     def find_starting_entities(self, query: str, top_k: int = 3) -> List[str]:
         """
         Find starting entities (sync version, uses keyword matching).
-        
+
         For semantic matching, use find_starting_entities_semantic() instead.
         """
         return self.find_starting_entities_keyword(query, top_k)

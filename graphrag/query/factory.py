@@ -5,6 +5,7 @@
 
 from graphrag.callbacks.query_callbacks import QueryCallbacks
 from graphrag.config.models.graph_rag_config import GraphRagConfig
+from graphrag.config.embeddings import entity_description_embedding
 from graphrag.data_model.community import Community
 from graphrag.data_model.community_report import CommunityReport
 from graphrag.data_model.covariate import Covariate
@@ -40,6 +41,7 @@ from graphrag.query.structured_search.tog_search.pruning import (
 )
 from graphrag.query.structured_search.tog_search.reasoning import ToGReasoning
 from graphrag.tokenizer.get_tokenizer import get_tokenizer
+from graphrag.utils.api import get_embedding_store
 from graphrag.vector_stores.base import BaseVectorStore
 
 
@@ -316,8 +318,17 @@ def get_tog_search_engine(
     relationships: list[Relationship],
     response_type: str,
     callbacks: list[QueryCallbacks] | None = None,
+    entity_text_embeddings: Optional[BaseVectorStore] = None,
 ) -> ToGSearch:
     """Create a ToG search engine based on data + configuration."""
+
+    # Create entity embedding store if not provided
+    if entity_text_embeddings is None:
+        vector_store_args = config.vector_store.model_dump()
+        entity_text_embeddings = get_embedding_store(
+            config_args=vector_store_args,
+            embedding_name=entity_description_embedding,
+        )
 
     chat_model_settings = config.get_language_model_config(
         config.tog_search.chat_model_id
@@ -374,6 +385,7 @@ def get_tog_search_engine(
         pruning_strategy=pruning_strategy,
         reasoning_module=reasoning_module,
         embedding_model=embedding_model,  # For semantic entity linking (like ToG paper)
+        entity_text_embeddings=entity_text_embeddings,  # Pre-computed entity embeddings
         width=config.tog_search.width,
         depth=config.tog_search.depth,
         num_retain_entity=config.tog_search.num_retain_entity,

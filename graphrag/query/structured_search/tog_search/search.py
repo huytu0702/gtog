@@ -4,6 +4,7 @@ from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
 from graphrag.tokenizer.tokenizer import Tokenizer
+from graphrag.vector_stores.base import BaseVectorStore
 from .state import ToGSearchState, ExplorationNode
 from .exploration import GraphExplorer
 from .pruning import PruningStrategy, LLMPruning, SemanticPruning
@@ -16,7 +17,7 @@ class ToGSearch:
 
     Implements iterative graph exploration with LLM-guided pruning
     and reasoning over discovered paths.
-    
+
     Uses embedding-based entity linking (like original ToG paper).
     """
 
@@ -29,6 +30,7 @@ class ToGSearch:
         pruning_strategy: PruningStrategy,
         reasoning_module: ToGReasoning,
         embedding_model: Optional[EmbeddingModel] = None,
+        entity_text_embeddings: Optional[BaseVectorStore] = None,
         width: int = 3,
         depth: int = 3,
         num_retain_entity: int = 5,
@@ -38,7 +40,10 @@ class ToGSearch:
         self.model = model
         self.embedding_model = embedding_model
         self.explorer = GraphExplorer(
-            entities, relationships, embedding_model=embedding_model
+            entities,
+            relationships,
+            embedding_model=embedding_model,
+            entity_embedding_store=entity_text_embeddings,
         )
         self.tokenizer = tokenizer
         self.pruning_strategy = pruning_strategy

@@ -19,7 +19,7 @@ Backwards compatibility is not guaranteed at this time.
 
 import logging
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from pydantic import validate_call
@@ -55,6 +55,7 @@ from graphrag.utils.api import (
     truncate,
     update_context_data,
 )
+from graphrag.vector_stores.base import BaseVectorStore
 from graphrag.utils.cli import redact
 
 # Initialize standard logger
@@ -1266,6 +1267,13 @@ async def tog_search(
     local_callbacks.on_context = on_context
     callbacks.append(local_callbacks)
 
+    # Load entity description embedding store
+    vector_store_args = config.vector_store.model_dump()
+    entity_text_embeddings = get_embedding_store(
+        config_args=vector_store_args,
+        embedding_name=entity_description_embedding,
+    )
+
     logger.debug("Executing ToG search query: %s", query)
     async for chunk in tog_search_streaming(
         config=config,
@@ -1273,6 +1281,7 @@ async def tog_search(
         relationships=relationships,
         query=query,
         callbacks=callbacks,
+        entity_text_embeddings=entity_text_embeddings,
     ):
         full_response += chunk
     logger.debug("Query response: %s", truncate(full_response, 400))
@@ -1286,6 +1295,7 @@ def tog_search_streaming(
     relationships: pd.DataFrame,
     query: str,
     callbacks: list[QueryCallbacks] | None = None,
+    entity_text_embeddings: Optional[BaseVectorStore] = None,
     verbose: bool = False,
 ) -> AsyncGenerator:
     """Perform a ToG search and return the context data and response via a generator.
@@ -1306,6 +1316,13 @@ def tog_search_streaming(
     entities_ = read_indexer_entities(entities, communities=None, community_level=None)
     relationships_ = read_indexer_relationships(relationships)
 
+    # Load entity description embedding store
+    vector_store_args = config.vector_store.model_dump()
+    entity_text_embeddings = get_embedding_store(
+        config_args=vector_store_args,
+        embedding_name=entity_description_embedding,
+    )
+
     logger.debug("Executing streaming ToG search query: %s", query)
     search_engine = get_tog_search_engine(
         config=config,
@@ -1313,5 +1330,6 @@ def tog_search_streaming(
         relationships=relationships_,
         response_type="detailed",  # ToG always provides detailed responses
         callbacks=callbacks,
+        entity_text_embeddings=entity_text_embeddings,
     )
     return search_engine.stream_search(query=query)
