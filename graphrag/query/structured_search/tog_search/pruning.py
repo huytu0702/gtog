@@ -1,10 +1,14 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
+from graphrag.vector_stores.base import BaseVectorStore
 import numpy as np
+import logging
 from graphrag.prompts.query.tog_relation_scoring_prompt import (
     TOG_RELATION_SCORING_PROMPT,
 )
 from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
+
+logger = logging.getLogger(__name__)
 
 
 class PruningStrategy:
@@ -161,8 +165,15 @@ class LLMPruning(PruningStrategy):
 class SemanticPruning(PruningStrategy):
     """Uses embedding similarity for pruning."""
 
-    def __init__(self, embedding_model: EmbeddingModel):
+    def __init__(
+        self,
+        embedding_model: EmbeddingModel,
+        entity_embedding_store: Optional[BaseVectorStore] = None,
+    ):
         self.embedding_model = embedding_model
+        self.entity_embedding_store = entity_embedding_store
+        self._entity_embeddings: Optional[np.ndarray] = None
+        self._entity_texts: Optional[List[str]] = None
 
     async def score_relations(
         self,
@@ -213,27 +224,65 @@ class SemanticPruning(PruningStrategy):
         if not entities:
             return []
 
+        # Load entity embeddings (pre-computed or computed)
+        await self._load_entity_embeddings(entities)
+
         # Embed query
-        query_embedding = await self.embedding_model.async_generate(inputs=[query])
-        query_emb = np.array(query_embedding[0])
+        query_emb = np.array(await self.embedding_model.aembed(text=query))
 
-        # Embed entity descriptions
-        entity_texts = [f"{name}: {desc}" for _, name, desc in entities]
-        entity_embeddings = await self.embedding_model.async_generate(
-            inputs=entity_texts
-        )
-
-        # Compute similarities
+        # Compute similarities using pre-computed embeddings
         scores = []
-        for ent_emb in entity_embeddings:
-            ent_emb = np.array(ent_emb)
+        for i, ent_emb in enumerate(self._entity_embeddings):
             similarity = np.dot(query_emb, ent_emb) / (
                 np.linalg.norm(query_emb) * np.linalg.norm(ent_emb)
             )
-            score = (similarity + 1) * 5
+            score = (similarity + 1) * 5  # Scale to 1-10 range
             scores.append(score)
 
         return scores
+
+    async def _load_entity_embeddings(
+        self, entities: List[Tuple[str, str, str]]
+    ) -> None:
+        """Load pre-computed embeddings for entities."""
+        if self._entity_embeddings is not None:
+            return  # Already cached
+
+        # Priority 1: Use pre-computed embeddings from vector store
+        if self.entity_embedding_store:
+            try:
+                embeddings = []
+                self._entity_texts = []
+
+                for entity_id, name, desc in entities:
+                    # Try to get pre-computed embedding from vector store
+                    doc = self.entity_embedding_store.search_by_id(entity_id)
+                    if doc and doc.vector:
+                        embeddings.append(doc.vector)
+                        self._entity_texts.append(f"{name}: {desc}")
+                    else:
+                        # Fallback: compute embedding if not found in store
+                        text = f"{name}: {desc}"
+                        emb = await self.embedding_model.aembed(text=text)
+                        embeddings.append(emb)
+                        self._entity_texts.append(text)
+
+                self._entity_embeddings = np.array(embeddings)
+                logger.debug(
+                    f"Loaded embeddings for {len(self._entity_texts)} entities from vector store"
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load pre-computed embeddings: {e}, falling back to computing"
+                )
+
+        # Priority 2: Compute all embeddings
+        entity_texts = [f"{name}: {desc}" for _, name, desc in entities]
+        embeddings = await self.embedding_model.aembed_batch(text_list=entity_texts)
+        self._entity_embeddings = np.array(embeddings)
+        self._entity_texts = entity_texts
+        logger.debug(f"Computed embeddings for {len(self._entity_texts)} entities")
 
 
 class BM25Pruning(PruningStrategy):
@@ -242,7 +291,7 @@ class BM25Pruning(PruningStrategy):
     def __init__(self, k1: float = 1.5, b: float = 0.75):
         """
         Initialize BM25 pruning.
-        
+
         Args:
             k1: Term frequency saturation parameter (default 1.5)
             b: Document length normalization parameter (default 0.75)
@@ -253,20 +302,19 @@ class BM25Pruning(PruningStrategy):
     def _tokenize(self, text: str) -> List[str]:
         """Simple tokenization."""
         import re
-        # Lowercase and split on non-alphanumeric
-        return re.findall(r'\w+', text.lower())
 
-    def _compute_bm25_scores(
-        self, query: str, documents: List[str]
-    ) -> List[float]:
+        # Lowercase and split on non-alphanumeric
+        return re.findall(r"\w+", text.lower())
+
+    def _compute_bm25_scores(self, query: str, documents: List[str]) -> List[float]:
         """Compute BM25 scores for documents given a query."""
         if not documents:
             return []
-        
+
         # Tokenize
         query_tokens = self._tokenize(query)
         doc_tokens_list = [self._tokenize(doc) for doc in documents]
-        
+
         # Compute document frequencies
         doc_count = len(documents)
         df = {}  # document frequency for each term
@@ -274,10 +322,10 @@ class BM25Pruning(PruningStrategy):
             unique_tokens = set(doc_tokens)
             for token in unique_tokens:
                 df[token] = df.get(token, 0) + 1
-        
+
         # Average document length
         avg_dl = sum(len(dt) for dt in doc_tokens_list) / max(doc_count, 1)
-        
+
         # Compute BM25 score for each document
         scores = []
         for doc_tokens in doc_tokens_list:
@@ -286,26 +334,26 @@ class BM25Pruning(PruningStrategy):
             term_freq = {}
             for token in doc_tokens:
                 term_freq[token] = term_freq.get(token, 0) + 1
-            
+
             for token in query_tokens:
                 if token not in term_freq:
                     continue
-                
+
                 tf = term_freq[token]
                 doc_freq = df.get(token, 0)
-                
+
                 # IDF component
                 idf = np.log((doc_count - doc_freq + 0.5) / (doc_freq + 0.5) + 1)
-                
+
                 # TF component with saturation
                 tf_component = (tf * (self.k1 + 1)) / (
                     tf + self.k1 * (1 - self.b + self.b * dl / max(avg_dl, 1))
                 )
-                
+
                 score += idf * tf_component
-            
+
             scores.append(score)
-        
+
         return scores
 
     async def score_relations(
@@ -327,12 +375,11 @@ class BM25Pruning(PruningStrategy):
 
         # Compute BM25 scores
         bm25_scores = self._compute_bm25_scores(query, relation_texts)
-        
+
         # Normalize scores to 1-10 range
         max_score = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1
         normalized_scores = [
-            max(1.0, min(10.0, (s / max_score) * 9 + 1))
-            for s in bm25_scores
+            max(1.0, min(10.0, (s / max_score) * 9 + 1)) for s in bm25_scores
         ]
 
         return [
@@ -341,34 +388,3 @@ class BM25Pruning(PruningStrategy):
                 relations, normalized_scores
             )
         ]
-
-    async def score_entities(
-        self,
-        query: str,
-        current_path: str,
-        entities: List[Tuple[str, str, str]],
-    ) -> List[float]:
-        """Score entities using BM25."""
-
-        if not entities:
-            return []
-
-        # Create searchable text for each entity
-        entity_texts = [
-            f"{name} {desc}" for _, name, desc in entities
-        ]
-
-        # Combine query with current path context
-        search_text = f"{query} {current_path}"
-        
-        # Compute BM25 scores
-        bm25_scores = self._compute_bm25_scores(search_text, entity_texts)
-        
-        # Normalize scores to 1-10 range
-        max_score = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1
-        normalized_scores = [
-            max(1.0, min(10.0, (s / max_score) * 9 + 1))
-            for s in bm25_scores
-        ]
-
-        return normalized_scores

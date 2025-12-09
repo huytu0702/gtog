@@ -361,7 +361,10 @@ def get_tog_search_engine(
             entity_scoring_prompt=config.tog_search.entity_scoring_prompt,
         )
     elif config.tog_search.prune_strategy == "semantic":
-        pruning_strategy = SemanticPruning(embedding_model=embedding_model)
+        pruning_strategy = SemanticPruning(
+            embedding_model=embedding_model,
+            entity_embedding_store=entity_text_embeddings,
+        )
     elif config.tog_search.prune_strategy == "bm25":
         pruning_strategy = BM25Pruning()
     else:
