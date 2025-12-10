@@ -94,40 +94,68 @@ Structure your response as:
         return answer, reasoning_paths
 
     def _format_paths(self, nodes: List[ExplorationNode]) -> str:
-        """Format exploration paths as knowledge triplets (ToG paper format)."""
-        triplets = []
-        seen_triplets = set()
+        """Format exploration paths with rich context including entity and relationship descriptions."""
+        if not nodes:
+            return "No exploration paths available."
+        
+        # Collect unique entities and relationships with full descriptions
+        seen_entities = {}  # entity_name -> description
+        relationships = []  # List of (source, relation_desc, target, source_desc, target_desc)
         
         for node in nodes:
-            # Extract triplets from the path
-            node_triplets = self._extract_triplets(node)
-            for triplet in node_triplets:
-                triplet_str = f'("{triplet[0]}", {triplet[1]}, "{triplet[2]}")'
-                if triplet_str not in seen_triplets:
-                    triplets.append(triplet_str)
-                    seen_triplets.add(triplet_str)
+            # Collect entity info from the entire path
+            current = node
+            while current is not None:
+                if current.entity_name not in seen_entities:
+                    seen_entities[current.entity_name] = current.entity_description or "No description available"
+                
+                # Collect relationship if has parent
+                if current.parent is not None:
+                    rel_info = (
+                        current.parent.entity_name,
+                        current.relation_from_parent or "related_to",
+                        current.entity_name,
+                        current.parent.entity_description or "",
+                        current.entity_description or ""
+                    )
+                    if rel_info[:3] not in [(r[0], r[1], r[2]) for r in relationships]:
+                        relationships.append(rel_info)
+                
+                current = current.parent
         
-        if not triplets:
-            # Fallback: just list entities with descriptions
-            paths = []
-            for i, node in enumerate(nodes, 1):
-                desc = node.entity_description[:150] if node.entity_description else "No description"
-                paths.append(f"- Entity {i}: {node.entity_name} - {desc}...")
-            return "\n".join(paths)
+        # Build rich context output
+        output_parts = []
         
-        return "\n".join([f"- {t}" for t in triplets])
+        # Section 1: Entity Descriptions
+        output_parts.append("=== ENTITIES ===")
+        for entity_name, description in seen_entities.items():
+            # Include full description, not truncated
+            output_parts.append(f"\n[{entity_name}]")
+            output_parts.append(f"Description: {description}")
+        
+        # Section 2: Relationships with context
+        output_parts.append("\n\n=== RELATIONSHIPS ===")
+        for source, relation, target, source_desc, target_desc in relationships:
+            output_parts.append(f"\n• {source} --[{relation}]--> {target}")
+            # Add brief context about the relationship
+            if source_desc or target_desc:
+                output_parts.append(f"  Context: {source_desc[:100]}..." if len(source_desc) > 100 else f"  Context: {source_desc}" if source_desc else "")
+        
+        return "\n".join(output_parts)
     
     def _extract_triplets(self, node: ExplorationNode) -> List[tuple]:
-        """Extract knowledge triplets from a path."""
+        """Extract knowledge triplets from a path with descriptions."""
         triplets = []
         current = node
         
         while current.parent is not None:
-            # Create triplet: (parent_entity, relation, current_entity)
+            # Create enriched triplet: (parent_entity, relation, current_entity, parent_desc, current_desc)
             triplet = (
                 current.parent.entity_name,
                 current.relation_from_parent or "related_to",
-                current.entity_name
+                current.entity_name,
+                current.parent.entity_description or "",
+                current.entity_description or ""
             )
             triplets.append(triplet)
             current = current.parent

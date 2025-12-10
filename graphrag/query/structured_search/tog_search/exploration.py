@@ -38,7 +38,8 @@ class GraphExplorer:
             embedding_model: Optional embedding model for semantic entity linking
             entity_embedding_store: Optional vector store with pre-computed entity embeddings
         """
-        self.entities = {e.id: e for e in entities}
+        # Index by TITLE (not ID) because relationships use title as source/target
+        self.entities = {e.title: e for e in entities}
         self.entity_list = entities  # Keep original list for embedding
         self.relationships = relationships
         self.embedding_model = embedding_model
@@ -49,7 +50,7 @@ class GraphExplorer:
         self._entity_texts: Optional[List[str]] = None
 
         logger.debug(f"GraphExplorer loaded {len(entities)} entities")
-        logger.debug(f"Entity IDs (first 10): {list(self.entities.keys())[:10]}")
+        logger.debug(f"Entity titles (first 10): {list(self.entities.keys())[:10]}")
         logger.debug(f"Embedding model available: {embedding_model is not None}")
 
         self._build_adjacency()
@@ -190,8 +191,8 @@ class GraphExplorer:
             # Get top-k indices
             top_indices = np.argsort(scores)[::-1][:top_k]
 
-            # Map back to entity IDs
-            result = [self.entity_list[i].id for i in top_indices]
+            # Map back to entity titles (not IDs, because we index by title)
+            result = [self.entity_list[i].title for i in top_indices]
 
             logger.debug(
                 f"Semantic entity linking: top {top_k} entities with scores "
