@@ -1268,7 +1268,9 @@ async def tog_search(
     callbacks.append(local_callbacks)
 
     # Load entity description embedding store
-    vector_store_args = config.vector_store.model_dump()
+    vector_store_args = {}
+    for index, store in config.vector_store.items():
+        vector_store_args[index] = store.model_dump()
     entity_text_embeddings = get_embedding_store(
         config_args=vector_store_args,
         embedding_name=entity_description_embedding,
@@ -1317,7 +1319,9 @@ def tog_search_streaming(
     relationships_ = read_indexer_relationships(relationships)
 
     # Load entity description embedding store
-    vector_store_args = config.vector_store.model_dump()
+    vector_store_args = {}
+    for index, store in config.vector_store.items():
+        vector_store_args[index] = store.model_dump()
     entity_text_embeddings = get_embedding_store(
         config_args=vector_store_args,
         embedding_name=entity_description_embedding,
