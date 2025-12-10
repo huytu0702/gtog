@@ -3,6 +3,8 @@
 
 """Query Factory methods to support CLI."""
 
+from typing import Optional
+
 from graphrag.callbacks.query_callbacks import QueryCallbacks
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.config.embeddings import entity_description_embedding

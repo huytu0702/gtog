@@ -68,3 +68,6 @@ test-project/output/
 test-project/cache/
 *.parquet
 *.lance
+
+
+/my-graphrag-project
