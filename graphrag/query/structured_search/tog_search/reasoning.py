@@ -169,9 +169,10 @@ Structure your response as:
         if not triplets:
             return node.entity_name
         
-        # Format as chain of triplets
+        # Format as chain of triplets (triplets now have 5 elements, use first 3)
         parts = []
-        for source, relation, target in triplets:
+        for triplet in triplets:
+            source, relation, target = triplet[0], triplet[1], triplet[2]
             parts.append(f"{source} --[{relation}]--> {target}")
         
         return " | ".join(parts)

@@ -52,10 +52,38 @@ class LLMPruning(PruningStrategy):
     ):
         self.model = model
         self.temperature = temperature
-        self.relation_scoring_prompt = (
-            relation_scoring_prompt or TOG_RELATION_SCORING_PROMPT
+        
+        # Load prompts - if file path is given, read the file content
+        self.relation_scoring_prompt = self._load_prompt(
+            relation_scoring_prompt, TOG_RELATION_SCORING_PROMPT
         )
-        self.entity_scoring_prompt = entity_scoring_prompt or TOG_ENTITY_SCORING_PROMPT
+        self.entity_scoring_prompt = self._load_prompt(
+            entity_scoring_prompt, TOG_ENTITY_SCORING_PROMPT
+        )
+
+    def _load_prompt(self, prompt_or_path: str | None, default_prompt: str) -> str:
+        """Load prompt from file if path is given, otherwise use directly."""
+        import os
+        
+        if prompt_or_path is None:
+            return default_prompt
+        
+        # Check if it's a file path (ends with .txt or .md)
+        if prompt_or_path.endswith(('.txt', '.md')):
+            if os.path.exists(prompt_or_path):
+                try:
+                    with open(prompt_or_path, 'r', encoding='utf-8') as f:
+                        logger.debug(f"Loaded prompt from file: {prompt_or_path}")
+                        return f.read()
+                except Exception as e:
+                    logger.warning(f"Failed to read prompt file {prompt_or_path}: {e}")
+                    return default_prompt
+            else:
+                logger.warning(f"Prompt file not found: {prompt_or_path}, using default")
+                return default_prompt
+        
+        # Otherwise, use the string directly as prompt
+        return prompt_or_path
 
     async def score_relations(
         self,
@@ -70,7 +98,7 @@ class LLMPruning(PruningStrategy):
 
         # Build relations text
         relations_text = "\n".join([
-            f"{i + 1}. [{direction}] {rel_desc} (weight: {weight:.2f})"
+            f"{i + 1}. [{direction}] {rel_desc[:100]}... (weight: {weight:.2f})"
             for i, (rel_desc, _, direction, weight) in enumerate(relations)
         ])
 

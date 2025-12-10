@@ -146,16 +146,19 @@ class ToGSearch:
                         )
                         next_level_nodes.append(new_node)
 
-                        # Debug: show exploration step
-                        if hasattr(self, "_debug") and self._debug:
-                            yield f"[DEPTH {next_depth}] {node.entity_name} --[{rel_desc}]--> {target_name} (score: {score:.2f})\n"
-
             # Add next level nodes to state
             state.nodes_by_depth[next_depth] = next_level_nodes
 
             # Prune to beam width
             state.current_depth = next_depth
             state.prune_current_frontier()
+
+            # Debug: show exploration steps AFTER pruning (only kept paths)
+            if hasattr(self, "_debug") and self._debug:
+                kept_nodes = state.get_current_frontier()
+                for node in kept_nodes:
+                    if node.parent:
+                        yield f"[DEPTH {next_depth}] {node.parent.entity_name} --[{node.relation_from_parent}]--> {node.entity_name} (score: {node.score:.2f})\n"
 
             # Check for early termination
             (
