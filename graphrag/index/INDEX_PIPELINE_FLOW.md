@@ -362,26 +362,27 @@ flowchart TB
 # entities DataFrame (finalized)
 {
     "id": "ent_uuid_001",
+    "human_readable_id": 0,
     "title": "MICROSOFT",
     "type": "organization",
-    "description": "Summarized description...",
-    "human_readable_id": 0,
-    "text_unit_ids": ["tu_001", "tu_002"],
-    "frequency": 5,
-    "degree": 12  # Số connections trong graph
+    "description": "Công ty công nghệ lớn có trụ sở tại Redmond, Washington...",
+    "text_unit_ids": ["tu_001", "tu_002", "tu_005"],
+    "frequency": 5,  # Xuất hiện trong 5 text units
+    "degree": 12,    # 12 connections trong graph
+    "x": 0.0,        # Vị trí X (0 nếu không bật UMAP)
+    "y": 0.0         # Vị trí Y (0 nếu không bật UMAP)
 }
 
 # relationships DataFrame (finalized)
 {
     "id": "rel_uuid_001",
+    "human_readable_id": 0,
     "source": "MICROSOFT",
     "target": "REDMOND",
-    "description": "có trụ sở tại",
-    "weight": 3.0,
-    "human_readable_id": 0,
-    "source_degree": 12,
-    "target_degree": 5,
-    "combined_degree": 17
+    "description": "có trụ sở tại thành phố này từ năm 1986",
+    "weight": 3.0,          # Tổng strength từ các instances
+    "combined_degree": 17,  # source_degree + target_degree
+    "text_unit_ids": ["tu_001", "tu_003"]
 }
 ```
 
@@ -403,13 +404,20 @@ flowchart LR
 **Ví dụ claim:**
 
 ```python
+# covariates DataFrame
 {
-    "id": "claim_001",
-    "subject": "MICROSOFT",
-    "type": "FINANCIAL_CLAIM",
-    "status": "TRUE",
-    "description": "Microsoft có doanh thu hàng năm trên 100 tỷ USD",
-    "text_unit_id": "tu_005"
+    "id": "cov_uuid_001",
+    "human_readable_id": 0,
+    "covariate_type": "claim",       # Luôn là "claim" với default config
+    "type": "FINANCIAL_CLAIM",        # Loại claim
+    "description": "Công ty báo cáo doanh thu hàng năm vượt 100 tỷ USD",
+    "subject_id": "MICROSOFT",        # Entity thực hiện hành vi
+    "object_id": "SHAREHOLDERS",      # Entity nhận hành vi (nếu có)
+    "status": "TRUE",                 # TRUE, FALSE, hoặc SUSPECTED
+    "start_date": "2023-01-01",       # Ngày bắt đầu (ISO8601)
+    "end_date": "2023-12-31",         # Ngày kết thúc (ISO8601)
+    "source_text": "Microsoft announced revenue exceeding $100B...",
+    "text_unit_id": "tu_005"          # Text unit chứa claim
 }
 ```
 
@@ -464,15 +472,17 @@ cluster_graph:
 # communities DataFrame
 {
     "id": "comm_uuid_001",
-    "community": 0,
-    "level": 0,
-    "title": "Community 0",
-    "parent": -1,
-    "children": [1, 2, 3],
+    "human_readable_id": 0,            # Bằng community ID
+    "community": 0,                     # Leiden cluster ID (unique qua tất cả levels)
+    "parent": -1,                       # Parent community ID (-1 = không có parent)
+    "children": [1, 2, 3],              # Child community IDs
+    "level": 0,                         # Depth trong hierarchy (0 = chi tiết nhất)
+    "title": "Community 0",             # Friendly name
     "entity_ids": ["ent_001", "ent_002", "ent_003"],
-    "relationship_ids": ["rel_001", "rel_002"],
+    "relationship_ids": ["rel_001", "rel_002"],  # Chỉ những relationships nội bộ
     "text_unit_ids": ["tu_001", "tu_002"],
-    "size": 3
+    "period": "2024-01-15",             # Ngày ingest (ISO8601)
+    "size": 3                           # Số entities trong community
 }
 ```
 
@@ -553,19 +563,30 @@ flowchart TB
 ```python
 # community_reports DataFrame
 {
-    "id": "report_001",
-    "community": 0,
-    "level": 0,
+    "id": "report_uuid_001",
+    "human_readable_id": 0,
+    "community": 0,                    # Community ID
+    "parent": -1,                      # Parent community ID (-1 = root)
+    "children": [1, 2, 3],             # Child community IDs
+    "level": 0,                        # Depth trong hierarchy
     "title": "Microsoft Technology Ecosystem",
-    "summary": "Cộng đồng này tập trung vào Microsoft và các mối quan hệ...",
+    "summary": "Cộng đồng này tập trung vào Microsoft và hệ sinh thái công nghệ...",
     "full_content": "# Microsoft Technology Ecosystem\n\n## Overview\n...",
-    "rating": 8.5,
+    "rank": 8.5,                        # LLM-derived relevance ranking
     "rating_explanation": "High impact due to major tech company involvement",
     "findings": [
-        "Microsoft là công ty công nghệ lớn có trụ sở tại Redmond",
-        "Bill Gates và Paul Allen là những người sáng lập",
-        ...
-    ]
+        {
+            "summary": "Microsoft là công ty công nghệ lớn có trụ sở tại Redmond",
+            "explanation": "Microsoft Corporation là một trong những công ty công nghệ..."
+        },
+        {
+            "summary": "Bill Gates và Paul Allen là đồng sáng lập",
+            "explanation": "Hai người đã thành lập công ty vào năm 1975..."
+        }
+    ],
+    "full_content_json": "{...}",      # Full JSON từ LLM cho prompt tuning
+    "period": "2024-01-15",            # Ngày ingest (ISO8601)
+    "size": 5                          # Số entities trong community
 }
 ```
 
@@ -680,19 +701,136 @@ graph LR
 
 ---
 
-## 📤 Output Files
+## 📤 Output Files & Schema
 
-Sau khi hoàn thành indexing, các files sau được tạo:
+Pipeline tạo ra các bảng output dưới dạng **Parquet files**. Tất cả các bảng đều có 2 trường ID chung:
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `id` | str | UUID được tạo tự động, đảm bảo tính unique toàn cục |
+| `human_readable_id` | int | ID ngắn được increment theo run, dễ đọc cho citations |
+
+---
+
+### 📁 **documents.parquet** - Danh sách Documents
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `title` | str | Tên file hoặc title được cấu hình |
+| `text` | str | Nội dung đầy đủ của document |
+| `text_unit_ids` | str[] | Danh sách text units (chunks) đã parse từ document |
+| `metadata` | dict | Metadata tùy chọn nếu cấu hình khi import CSV |
+
+---
+
+### 📁 **text_units.parquet** - Danh sách Text Chunks
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `text` | str | Nội dung đầy đủ của chunk |
+| `n_tokens` | int | Số tokens trong chunk (thường = `chunk_size`, trừ chunk cuối) |
+| `document_ids` | str[] | Danh sách document IDs mà chunk được parse từ đó |
+| `entity_ids` | str[] | Danh sách entities được tìm thấy trong text unit |
+| `relationship_ids` | str[] | Danh sách relationships được tìm thấy trong text unit |
+| `covariate_ids` | str[] | (Optional) Danh sách covariates trong text unit |
+
+---
+
+### 📁 **entities.parquet** - Danh sách Entities
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `title` | str | Tên của entity |
+| `type` | str | Loại entity: "organization", "person", "geo", "event" |
+| `description` | str | Mô tả của entity, được LLM tổng hợp từ nhiều text units |
+| `text_unit_ids` | str[] | Danh sách text units chứa entity này |
+| `frequency` | int | Số lần entity xuất hiện trong các text units |
+| `degree` | int | Node degree (số connections trong graph) |
+| `x` | float | Vị trí X cho visualization (0 nếu không bật UMAP) |
+| `y` | float | Vị trí Y cho visualization (0 nếu không bật UMAP) |
+
+---
+
+### 📁 **relationships.parquet** - Danh sách Relationships (Edge List)
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `source` | str | Tên source entity |
+| `target` | str | Tên target entity |
+| `description` | str | Mô tả relationship, được LLM tổng hợp |
+| `weight` | float | Trọng số edge, tổng hợp từ LLM-derived "strength" |
+| `combined_degree` | int | Tổng degree của source và target nodes |
+| `text_unit_ids` | str[] | Danh sách text units chứa relationship này |
+
+---
+
+### 📁 **communities.parquet** - Danh sách Communities (Leiden)
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `community` | int | Leiden community ID (unique qua tất cả levels) |
+| `parent` | int | Parent community ID |
+| `children` | int[] | Danh sách child community IDs |
+| `level` | int | Độ sâu trong hierarchy (0 = chi tiết nhất) |
+| `title` | str | Tên thân thiện của community |
+| `entity_ids` | str[] | Danh sách entity members |
+| `relationship_ids` | str[] | Danh sách relationships hoàn toàn nằm trong community |
+| `text_unit_ids` | str[] | Danh sách text units represented trong community |
+| `period` | str | Ngày ingest (ISO8601), dùng cho incremental updates |
+| `size` | int | Kích thước community (số entities) |
+
+---
+
+### 📁 **community_reports.parquet** - Báo cáo Community
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `community` | int | Community ID mà report này áp dụng |
+| `parent` | int | Parent community ID |
+| `children` | int[] | Danh sách child community IDs |
+| `level` | int | Level của community |
+| `title` | str | LLM-generated title cho report |
+| `summary` | str | LLM-generated summary |
+| `full_content` | str | LLM-generated full report |
+| `rank` | float | LLM-derived relevance ranking dựa trên entity salience |
+| `rating_explanation` | str | LLM-derived giải thích về rank |
+| `findings` | dict | LLM-derived list của top 5-10 insights (summary + explanation) |
+| `full_content_json` | json | Full JSON output từ LLM, cho phép prompt tuning |
+| `period` | str | Ngày ingest (ISO8601) |
+| `size` | int | Kích thước community |
+
+---
+
+### 📁 **covariates.parquet** - Claims/Covariates (Optional)
+
+*Chỉ được tạo khi `extract_claims.enabled = true`*
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `covariate_type` | str | Luôn là "claim" với default config |
+| `type` | str | Loại claim |
+| `description` | str | LLM-generated description của behavior |
+| `subject_id` | str | Tên source entity (thực hiện claimed behavior) |
+| `object_id` | str | Tên target entity (nhận claimed behavior) |
+| `status` | str | LLM-derived assessment: TRUE, FALSE, hoặc SUSPECTED |
+| `start_date` | str | LLM-derived ngày bắt đầu hành vi (ISO8601) |
+| `end_date` | str | LLM-derived ngày kết thúc hành vi (ISO8601) |
+| `source_text` | str | Đoạn text ngắn chứa claimed behavior |
+| `text_unit_id` | str | ID của text unit mà claim được extract từ đó |
+
+---
+
+### 📁 **Các file metadata**
 
 ```
 output/
-├── documents.parquet          # Tài liệu gốc với metadata
-├── text_units.parquet         # Text chunks với references
-├── entities.parquet           # Entities được trích xuất
-├── relationships.parquet      # Relationships giữa entities
-├── communities.parquet        # Community assignments
-├── community_reports.parquet  # LLM-generated summaries
-├── covariates.parquet         # Claims/Covariates (nếu enabled)
+├── documents.parquet
+├── text_units.parquet
+├── entities.parquet
+├── relationships.parquet
+├── communities.parquet
+├── community_reports.parquet
+├── covariates.parquet         # (Optional, nếu enabled)
 ├── context.json               # Pipeline state
 └── stats.json                 # Execution statistics
 ```
