@@ -37,7 +37,7 @@ export function NBLayout({ children }: NBLayoutProps) {
             {/* Footer */}
             <footer className="border-t-3 border-black bg-white py-8 mt-12">
                 <div className="container mx-auto px-4 text-center font-bold">
-                    <p>&copy; 2025 GraphRAG UI. Built with Neo-Brutalism.</p>
+                    <p>&copy; 2025 GraphRAG TOG.</p>
                 </div>
             </footer>
         </div>

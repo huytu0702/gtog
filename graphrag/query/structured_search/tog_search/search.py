@@ -154,7 +154,8 @@ class ToGSearch:
             state.prune_current_frontier()
 
             # Debug: show exploration steps AFTER pruning (only kept paths)
-            if hasattr(self, "_debug") and self._debug:
+            # Disabled to only show final answer
+            if False:  # hasattr(self, "_debug") and self._debug:
                 kept_nodes = state.get_current_frontier()
                 for node in kept_nodes:
                     if node.parent:
@@ -169,9 +170,11 @@ class ToGSearch:
             )
 
             if should_terminate and answer:
-                yield f"=== ToG EARLY TERMINATION ===\n"
-                yield f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n"
-                yield f"=== ToG REASONING ANSWER ===\n\n"
+                # Disabled debug output for early termination
+                if False:
+                    yield f"=== ToG EARLY TERMINATION ===\n"
+                    yield f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n"
+                    yield f"=== ToG REASONING ANSWER ===\n\n"
                 yield answer
                 return
 
@@ -191,30 +194,34 @@ class ToGSearch:
             )
 
             # Show exploration paths before answer
-            yield f"=== ToG EXPLORATION ANALYSIS ===\n"
-            yield f"Query: {query}\n"
-            yield f"Max Depth: {self.depth}, Beam Width: {self.width}\n"
-            yield f"Total exploration paths found: {len(all_paths)}\n"
-            yield f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n"
+            # Disabled to only show final answer
+            if False:
+                yield f"=== ToG EXPLORATION ANALYSIS ===\n"
+                yield f"Query: {query}\n"
+                yield f"Max Depth: {self.depth}, Beam Width: {self.width}\n"
+                yield f"Total exploration paths found: {len(all_paths)}\n"
+                yield f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n"
 
-            yield f"=== EXPLORATION PATHS (with scores) ===\n"
-            for i, path in enumerate(reasoning_paths, 1):
-                yield f"Path {i}: {path}\n"
+                yield f"=== EXPLORATION PATHS (with scores) ===\n"
+                for i, path in enumerate(reasoning_paths, 1):
+                    yield f"Path {i}: {path}\n"
 
-            # Show path details with scores
-            yield f"\n=== PATH DETAILS ===\n"
-            for depth in range(self.depth + 1):
-                depth_nodes = [node for node in all_paths if node.depth == depth]
-                if depth_nodes:
-                    yield f"Depth {depth}:\n"
-                    for node in depth_nodes:
-                        parent_info = (
-                            f" (from: {node.parent.entity_name})" if node.parent else ""
-                        )
-                        yield f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n"
-                    yield "\n"
+                # Show path details with scores
+                yield f"\n=== PATH DETAILS ===\n"
+                for depth in range(self.depth + 1):
+                    depth_nodes = [node for node in all_paths if node.depth == depth]
+                    if depth_nodes:
+                        yield f"Depth {depth}:\n"
+                        for node in depth_nodes:
+                            parent_info = (
+                                f" (from: {node.parent.entity_name})"
+                                if node.parent
+                                else ""
+                            )
+                            yield f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n"
+                        yield "\n"
 
-            yield f"=== ToG REASONING ANSWER ===\n\n"
+                yield f"=== ToG REASONING ANSWER ===\n\n"
             yield answer
         except Exception as e:
             # Fallback response if reasoning fails

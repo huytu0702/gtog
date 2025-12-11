@@ -813,3 +813,143 @@ Output là một rich knowledge graph với:
 - **Embeddings** cho semantic search
 
 Hệ thống hỗ trợ cả full indexing và incremental updates, với extensive caching và monitoring capabilities.
+
+---
+
+## 📤 Chi Tiết Output Schema
+
+Pipeline tạo ra các bảng output dưới dạng **Parquet files**. Tất cả các bảng đều có 2 trường ID chung:
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `id` | str | UUID được tạo tự động, đảm bảo tính unique toàn cục |
+| `human_readable_id` | int | ID ngắn được increment theo run, dễ đọc cho citations |
+
+---
+
+### 📁 **documents.parquet** - Danh sách Documents
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `title` | str | Tên file hoặc title được cấu hình |
+| `text` | str | Nội dung đầy đủ của document |
+| `text_unit_ids` | str[] | Danh sách text units (chunks) đã parse từ document |
+| `metadata` | dict | Metadata tùy chọn nếu cấu hình khi import CSV |
+
+---
+
+### 📁 **text_units.parquet** - Danh sách Text Chunks
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `text` | str | Nội dung đầy đủ của chunk |
+| `n_tokens` | int | Số tokens trong chunk (thường = `chunk_size`, trừ chunk cuối) |
+| `document_ids` | str[] | Danh sách document IDs mà chunk được parse từ đó |
+| `entity_ids` | str[] | Danh sách entities được tìm thấy trong text unit |
+| `relationship_ids` | str[] | Danh sách relationships được tìm thấy trong text unit |
+| `covariate_ids` | str[] | (Optional) Danh sách covariates trong text unit |
+
+---
+
+### 📁 **entities.parquet** - Danh sách Entities
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `title` | str | Tên của entity |
+| `type` | str | Loại entity: "organization", "person", "geo", "event" |
+| `description` | str | Mô tả của entity, được LLM tổng hợp từ nhiều text units |
+| `text_unit_ids` | str[] | Danh sách text units chứa entity này |
+| `frequency` | int | Số lần entity xuất hiện trong các text units |
+| `degree` | int | Node degree (số connections trong graph) |
+| `x` | float | Vị trí X cho visualization (0 nếu không bật UMAP) |
+| `y` | float | Vị trí Y cho visualization (0 nếu không bật UMAP) |
+
+---
+
+### 📁 **relationships.parquet** - Danh sách Relationships (Edge List)
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `source` | str | Tên source entity |
+| `target` | str | Tên target entity |
+| `description` | str | Mô tả relationship, được LLM tổng hợp |
+| `weight` | float | Trọng số edge, tổng hợp từ LLM-derived "strength" |
+| `combined_degree` | int | Tổng degree của source và target nodes |
+| `text_unit_ids` | str[] | Danh sách text units chứa relationship này |
+
+---
+
+### 📁 **communities.parquet** - Danh sách Communities (Leiden)
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `community` | int | Leiden community ID (unique qua tất cả levels) |
+| `parent` | int | Parent community ID |
+| `children` | int[] | Danh sách child community IDs |
+| `level` | int | Độ sâu trong hierarchy (0 = chi tiết nhất) |
+| `title` | str | Tên thân thiện của community |
+| `entity_ids` | str[] | Danh sách entity members |
+| `relationship_ids` | str[] | Danh sách relationships hoàn toàn nằm trong community |
+| `text_unit_ids` | str[] | Danh sách text units represented trong community |
+| `period` | str | Ngày ingest (ISO8601), dùng cho incremental updates |
+| `size` | int | Kích thước community (số entities) |
+
+---
+
+### 📁 **community_reports.parquet** - Báo cáo Community
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `community` | int | Community ID mà report này áp dụng |
+| `parent` | int | Parent community ID |
+| `children` | int[] | Danh sách child community IDs |
+| `level` | int | Level của community |
+| `title` | str | LLM-generated title cho report |
+| `summary` | str | LLM-generated summary |
+| `full_content` | str | LLM-generated full report |
+| `rank` | float | LLM-derived relevance ranking dựa trên entity salience |
+| `rating_explanation` | str | LLM-derived giải thích về rank |
+| `findings` | dict | LLM-derived list của top 5-10 insights (summary + explanation) |
+| `full_content_json` | json | Full JSON output từ LLM, cho phép prompt tuning |
+| `period` | str | Ngày ingest (ISO8601) |
+| `size` | int | Kích thước community |
+
+---
+
+### 📁 **covariates.parquet** - Claims/Covariates (Optional)
+
+*Chỉ được tạo khi `extract_claims.enabled = true`*
+
+| Trường | Type | Mô tả |
+|--------|------|-------|
+| `covariate_type` | str | Luôn là "claim" với default config |
+| `type` | str | Loại claim |
+| `description` | str | LLM-generated description của behavior |
+| `subject_id` | str | Tên source entity (thực hiện claimed behavior) |
+| `object_id` | str | Tên target entity (nhận claimed behavior) |
+| `status` | str | LLM-derived assessment: TRUE, FALSE, hoặc SUSPECTED |
+| `start_date` | str | LLM-derived ngày bắt đầu hành vi (ISO8601) |
+| `end_date` | str | LLM-derived ngày kết thúc hành vi (ISO8601) |
+| `source_text` | str | Đoạn text ngắn chứa claimed behavior |
+| `text_unit_id` | str | ID của text unit mà claim được extract từ đó |
+
+---
+
+### 📁 **Cấu trúc Output Directory**
+
+```
+output/
+├── documents.parquet           # Tài liệu gốc với metadata
+├── text_units.parquet          # Text chunks với references
+├── entities.parquet            # Entities được trích xuất
+├── relationships.parquet       # Relationships giữa entities
+├── communities.parquet         # Community assignments
+├── community_reports.parquet   # LLM-generated summaries
+├── covariates.parquet          # (Optional) Claims/Covariates
+├── context.json                # Pipeline state
+├── stats.json                  # Execution statistics
+└── embeddings/                 # Vector embeddings (nếu enabled)
+    ├── entity.description.parquet
+    ├── text_unit.text.parquet
+    └── community_report.summary.parquet
+```

@@ -114,10 +114,12 @@ def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
 
     # Method-specific files
     if method in ["local", "drift", "tog"]:
-        paths.update({
-            "text_units": output_dir / "text_units.parquet",
-            "relationships": output_dir / "relationships.parquet",
-        })
+        paths.update(
+            {
+                "text_units": output_dir / "text_units.parquet",
+                "relationships": output_dir / "relationships.parquet",
+            }
+        )
 
     if method == "local":
         # Local search may use covariates if available
