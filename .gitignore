@@ -71,3 +71,5 @@ test-project/cache/
 
 
 /my-graphrag-project
+/backend/storage/collections/test_2
+/backend/storage/collections/test
