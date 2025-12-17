@@ -46,6 +46,36 @@ graph TB
     style GenEmbeddings fill:#e0f2f1
 ```
 
+## Flow Chart - Fast Indexing Pipeline
+
+```mermaid
+graph TB
+    Start([Bắt đầu Indexing]) --> LoadDocs[1. Load Input Documents]
+    
+    LoadDocs --> ChunkText[2. Create Base Text Units]
+    ChunkText --> ExtractGraphNLP[3. Extract Graph NLP]
+    
+    ExtractGraphNLP --> PruneGraph[4. Prune Graph]
+    PruneGraph --> FinalizeGraph[5. Finalize Graph]
+    FinalizeGraph --> CreateComm[6. Create Communities]
+    
+    CreateComm --> FinalTextUnits[7. Create Final Text Units]
+    FinalTextUnits --> GenEmbeddings[8. Generate Text Embeddings]
+    
+    GenEmbeddings --> End([Hoàn thành])
+    
+    style Start fill:#e1f5e1
+    style End fill:#e1f5e1
+    style LoadDocs fill:#fff4e6
+    style ChunkText fill:#fff4e6
+    style ExtractGraphNLP fill:#e3f2fd
+    style PruneGraph fill:#ffecb3
+    style FinalizeGraph fill:#e3f2fd
+    style CreateComm fill:#fce4ec
+    style FinalTextUnits fill:#fce4ec
+    style GenEmbeddings fill:#e0f2f1
+```
+
 ## Chi tiết từng Workflow
 
 ### 1. Load Input Documents
@@ -269,23 +299,44 @@ Công ty chuyên về phát triển phần mềm AI.
 **Quy trình**:
 ```mermaid
 graph TB
-    A[Entities + Relationships] --> B[Clean Entity Names]
-    B --> C[Compute Node Degree]
-    C --> D[Compute Edge Combined Degree]
-    D --> E[Normalize Weights]
-    E --> F[Remove Duplicates]
-    F --> G[Output: Finalized Graph]
+    A[Entities + Relationships] --> B{Extraction Type}
+    B -->|NLP-based| C[PMI Normalization]
+    B -->|LLM-based| D[Sum Weights]
+    C --> E[Finalize Entities]
+    D --> E
+    E --> F[Finalize Relationships]
+    F --> G[Compute Node Degree]
+    G --> H[Compute Edge Combined Degree]
+    H --> I[Remove Duplicates]
+    I --> J[Output: Finalized Graph]
     
     style A fill:#e8f5e9
-    style G fill:#c8e6c9
+    style J fill:#c8e6c9
 ```
 
-**Xử lý**:
+**Weight Processing khác nhau theo extraction method**:
+
+#### NLP-based Extraction (Fast Pipeline)
+- **PMI Normalization**: `normalize_edge_weights = True` (default)
+- **Công thức PMI**: `pmi(x,y) = p(x,y) * log2(p(x,y) / (p(x) * p(y))`
+- **Bias correction**: Loại bỏ bias đối với low-frequency events
+- **Statistical significance**: Tính toán significance thay vì raw counts
+
+#### LLM-based Extraction (Standard Pipeline)
+- **No normalization**: Không có statistical normalization
+- **LLM weights**: Sử dụng `relationship_strength` scores từ LLM
+- **Sum aggregation**: `weight = sum(all_occurrence_strengths)`
+- **Subjective scoring**: Weights dựa trên judgment của LLM
+
+**Common Processing**:
 - Chuẩn hóa entity names (trim, lowercase for matching)
 - Tính `degree` cho mỗi entity (số lượng relationships)
 - Tính `combined_degree` cho mỗi relationship
+- **Final Deduplication**:
+  - **Relationships**: `drop_duplicates(subset=["source", "target"])` - giữ lại 1 record duy nhất cho mỗi directed edge
+  - **Entities**: `drop_duplicates(subset="title")` - giữ lại 1 record duy nhất cho mỗi entity name
 - Remove orphan entities (entities không có relationships)
-- Deduplicate based on entity titles
+- Generate unique IDs (UUID) và human_readable_ids
 
 ---
 
@@ -598,12 +649,18 @@ chunks:
   overlap: 100        # overlap between chunks
   group_by_columns: [id]
 
-# Entity Extraction
+# Entity Extraction (LLM-based)
 extract_graph:
   model_id: default_chat_model
   prompt: "prompts/extract_graph.txt"
   entity_types: [organization, person, geo, event]
   max_gleanings: 1    # số lần iteration để extract thêm
+
+# Entity Extraction (NLP-based - Fast Pipeline)
+extract_graph_nlp:
+  normalize_edge_weights: true  # PMI normalization cho weights
+  text_analyzer:
+    model_name: "en_core_web_md"
 
 # Community Detection
 cluster_graph:
@@ -642,10 +699,13 @@ embed_text:
 
 ### Optimization Tips
 1. **Use Fast Pipeline** - NLP-based extraction thay vì LLM (nhanh hơn 10-20x)
-2. **Adjust chunk size** - Balance giữa context và processing speed
-3. **Limit entity types** - Giảm complexity của extraction
-4. **Cache aggressively** - Reuse LLM responses
-5. **Tune concurrency** - Balance giữa speed và rate limits
+2. **Weight normalization trade-offs**:
+   - NLP-based: Statistical accuracy với PMI nhưng có thể miss complex relationships
+   - LLM-based: Semantic richness với subjective weights nhưng không statistical
+3. **Adjust chunk size** - Balance giữa context và processing speed
+4. **Limit entity types** - Giảm complexity của extraction
+5. **Cache aggressively** - Reuse LLM responses
+6. **Tune concurrency** - Balance giữa speed và rate limits
 
 ### Monitoring
 ```python
@@ -873,7 +933,7 @@ Pipeline tạo ra các bảng output dưới dạng **Parquet files**. Tất c�
 | `source` | str | Tên source entity |
 | `target` | str | Tên target entity |
 | `description` | str | Mô tả relationship, được LLM tổng hợp |
-| `weight` | float | Trọng số edge, tổng hợp từ LLM-derived "strength" |
+| `weight` | float | Trọng số edge: **NLP**=PMI-normalized, **LLM**=sum of strengths |
 | `combined_degree` | int | Tổng degree của source và target nodes |
 | `text_unit_ids` | str[] | Danh sách text units chứa relationship này |
 
@@ -953,3 +1013,88 @@ output/
     ├── text_unit.text.parquet
     └── community_report.summary.parquet
 ```
+
+---
+
+## Remove Duplicates - Chi tiết
+
+### Stage 1: Merge trong Extract Graph (Aggregation)
+Trong bước Extract Graph, duplicates đã được **aggregated**:
+
+**Entities**:
+```python
+# groupby(["title", "type"]) và aggregate
+entities.groupby(["title", "type"]).agg({
+    description=("description", list),        # Gộp tất cả descriptions
+    text_unit_ids=("source_id", list),         # Gộp tất cả source IDs
+    frequency=("source_id", "count")           # Đếm số lần xuất hiện
+})
+```
+
+**Relationships**:
+```python
+# groupby(["source", "target"]) và aggregate  
+relationships.groupby(["source", "target"]).agg({
+    description=("description", list),          # Gộp tất cả descriptions
+    text_unit_ids=("source_id", list),         # Gộp tất cả source IDs
+    weight=("weight", "sum")                    # SUM tất cả weights
+})
+```
+
+### Stage 2: Final Deduplication (Cleanup)
+Trong Finalize Graph, **final cleanup** được thực hiện:
+
+**Relationships**:
+```python
+final_relationships = relationships.drop_duplicates(subset=["source", "target"])
+# Chỉ giữ lại một dòng cho mỗi (source, target) pair
+# Đã có aggregated weights, descriptions, text_unit_ids từ stage 1
+```
+
+**Entities**:
+```python
+final_entities = entities.drop_duplicates(subset="title")
+# Chỉ giữ lại một dòng cho mỗi entity title
+# Đã có aggregated info từ stage 1
+```
+
+### Tại sao cần 2 stages?
+
+#### Standard Pipeline (LLM-based):
+1. **Stage 1 (Aggregation)**: Gộp thông tin từ multiple occurrences
+2. **Stage 2 (Deduplication)**: **Safety net cho concurrent processing edge cases**
+
+**Nguyên nhân cần deduplication trong Standard Pipeline:**
+```python
+# extract_graph.py:63-70 - Concurrent processing
+results = await derive_from_rows(
+    text_units, run_strategy, async_type=async_mode, num_threads=num_threads
+)
+# → Multiple text units processed in parallel
+# → Rare race conditions or edge cases có thể create duplicates
+
+# extract_graph.py:76-77 - Collect results from parallel workers
+for result in results:
+    entity_dfs.append(pd.DataFrame(result[0]))      # Each worker returns DataFrame
+    relationship_dfs.append(pd.DataFrame(result[1]))
+```
+
+#### Fast Pipeline (NLP-based):
+1. **Stage 1 (Aggregation)**: Gộp thông tin từ multiple occurrences
+2. **Intermediate Processing**: `prune_graph` với merge operations có thể introduce duplicates
+3. **Stage 2 (Deduplication)**: Final cleanup sau tất cả transforms
+
+**Root cause duplicates trong Fast Pipeline:**
+```python
+# prune_graph.py:77-80 - Merge operations
+subset_entities = pruned_nodes.merge(entities, on="title", how="inner")
+subset_relationships = pruned_edges.merge(relationships, on=["source", "target"], how="inner")
+# → Merge có thể create duplicates nếu multiple matches
+```
+
+#### Summary:
+- **Standard Pipeline**: Concurrent processing edge cases → Need safety net
+- **Fast Pipeline**: Prune graph merge operations → Can introduce duplicates  
+- **Both pipelines**: `drop_duplicates()` là **defensive programming** đảm bảo data integrity
+
+---
