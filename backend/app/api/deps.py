@@ -1,0 +1,40 @@
+"""FastAPI dependencies for dependency injection."""
+
+from typing import AsyncGenerator
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import AsyncSessionLocal
+from app.services.collection_service_db import CollectionServiceDB
+
+
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI dependency for database session.
+
+    Yields:
+        AsyncSession
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def get_collection_service(
+    session: AsyncSession = Depends(get_db_session)
+) -> CollectionServiceDB:
+    """
+    FastAPI dependency for collection service.
+
+    Args:
+        session: Database session from dependency
+
+    Returns:
+        CollectionServiceDB instance
+    """
+    return CollectionServiceDB(session)
