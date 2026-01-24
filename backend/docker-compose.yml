@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: graphrag-postgres
+    environment:
+      POSTGRES_USER: graphrag
+      POSTGRES_PASSWORD: graphrag
+      POSTGRES_DB: graphrag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U graphrag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: graphrag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag-backend
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=graphrag
+      - POSTGRES_PASSWORD=graphrag
+      - POSTGRES_DB=graphrag
+      - REDIS_URL=redis://redis:6379/0
+      - GRAPHRAG_API_KEY=${GRAPHRAG_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag-worker
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=graphrag
+      - POSTGRES_PASSWORD=graphrag
+      - POSTGRES_DB=graphrag
+      - REDIS_URL=redis://redis:6379/0
+      - GRAPHRAG_API_KEY=${GRAPHRAG_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    command: rq worker --url redis://redis:6379/0 graphrag-indexing
+
+volumes:
+  postgres_data:
+  redis_data:
