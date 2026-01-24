@@ -180,7 +180,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                             <p className="font-bold mb-1">Tip:</p>
                             {method === 'global' && 'Best for overview questions about the entire collection.'}
                             {method === 'local' && 'Best for specific questions about entities and their relationships.'}
-                            {method === 'tog' && 'Tree-of-Graph: Good for complex multi-hop reasoning.'}
+                            {method === 'tog' && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
                             {method === 'drift' && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
                         </div>
                     </div>

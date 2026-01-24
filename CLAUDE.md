@@ -10,6 +10,16 @@ This is a **GraphRAG with ToG Enhancement** repository - a Microsoft Research pr
 
 This is GraphRAG (Graph-based Retrieval-Augmented Generation) from Microsoft Research, enhanced with **ToG (Think-on-Graph)** - a deep reasoning search algorithm. The project transforms unstructured text into structured knowledge graphs and enables sophisticated querying over those graphs.
 
+## Code Principles (Tier 1: Always Apply)
+
+**SRP** - One class = one responsibility. Split when a class does too much.
+
+**DRY** - Extract duplicated code into functions/utils. Three identical blocks = refactor.
+
+**YAGNI** - Only implement what's specified. No "just in case" code.
+
+**KISS** - Simple beats clever. If it's hard to read, simplify it.
+
 ## Common Development Tasks
 
 ### Core Commands

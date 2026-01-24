@@ -1,0 +1,302 @@
+0) 0) text: Michelle's eyes slowly open. She's back on the mattress, thin blanket covering her again. A tray of food sits on the floor next to the bed. The two four and shovel are gone. Howard sits on a folding chair by the door, his forearm i now wrapped with a bandage where she hit him with the woo She peers at him through the dim light. Is he sleeping? props herself up. His voice cuts through the darkness, startling her --
+0) 1) dialog: You should eat the eggs. You’1ll be dreaming of fresh food before long. Michelle looks at the tray of food, then back to Howard - detachment in his voice, intelligence in his weary eyes. combination that makes him hard to read.
+0) 2) dialog: In a couple of weeks, everything's going to be from a can. Panic sets in again. Michelle grabs her cell. Holds it up
+0) 4) dialog: You've got no idea what happened, do you? Michelle lowers her cell but doesn’t respond.
+0) 5) dialog: There was an attack last night. Some kind of bomb exploded. The city’s destroyed. Michelle looks at Howard like he’s a lunatic.
+0) 7) dialog: I was rushing back here when I came across your wrecked car. I couldn’t just leave you there.
+0) 11) dialog: I think you're smart enough to know that if I was gonna do something, I would have done it already.
+0) 13) dialog: I’m a doctor. I had to take off your jeans to set your knee.
+0) 15) dialog: You can’t leave. The entire countryside is blanketed with... with some sort of poisonous chemical.
+0) 17) dialog: You go outside, you die. But this place has a filtration system. It should protect us from whatever is floating in the air out there.
+0) 21) dialog: I'm a veterinarian. It's the strongest painkiller I have.
+0) 23) dialog: A veterinarian is a doctor. He points to her leg as he tries for a little levity.
+0) 24) dialog: Hey. Consider yourself lucky. If you were a horse, I would’ve had to put you down. Michelle’s not laughing.
+0) 26) dialog: If I wanted to drug you, I would've crushed it up in your food or hid it in your drink. Or shot you up with it while you were already unconscious. And then I could’ve done what ever I wanted. Michelle looks sick to her stomach. Howard takes a deep breath, knows he went too far.
+0) 27) dialog: This is a lot to take in. For both of us. You need to eat and you need to sleep. (MORE )
+0) 28) text: There will be plenty of time to talk when you're feeling better. Michelle pulls the tray onto her mattress and starts pick at the eggs. She’s not convinced of Howard's story but realizes that either way, she's fucked.
+0) 29) dialog: Call me if you need anything. I'll be right outside. That doesn't make her feel any better. He exits the room, leaving the door open behind him. Michelle waits a beat.. She sets the food tray back on the floor. Her hand lingers, grabs the butter knife. She tries to pull herself up, but her weight shifts to he busted knee. The pain is excruciating. Michelle grits her teeth, falls back onto the mattress, e watering. She can’t take it. She grabs the Ketamine off t tray and drinks it. She tucks the butter knife under her pillow and passes ou
+2) 2) dialog: My name’s Howard. Michelle doesn’t say anything as she pulls herself up ont the crutches. Howard reaches for her arm to steady her. She instinctively pulls away from his touch. He gets the message, turns and leads the way out of the r
+3) 0) text: Michelle enters the cramped living area. It’s windowless the same low ceilings and cinder block walls. Her eyes dart around, studying every square inch -- In the middle there’s a small table with two folding chai To her right, there's a kitchenette alongside a cupboard. Next to the cupboard, an open door leads to another room. 11. To her left, a worn couch blocks a set of stairs that disappear up into darkness. And on the far side of the room, there's a fully stocked, floor-to-ceiling wine rack that takes up the entire wall for one corner where there's a closed steel door with a deadbolt above the handle. Howard leads Michelle through the main living area into - HOWARD’S ROOM A mattress on the floor. A small chest of drawers against wall. In the back, two shower curtains come together to square off the corner. Howard pulls one of the curtains aside to reveal a toilet sink, a small mirror, and a tub. Michelle crutches by him.
+4) 0) text: Howard lets the curtain go but stands right outside.
+4) 2) dialog: Let me know if you need any help.
+4) 4) dialog: You okay in there, Michelle? Michelle startles at hearing her name. She drops the syri and shuts the drawer. Hobbles over and opens the door. Howard all but tumbles into the room, having had his ear against the door. Michelle tamps down her surprise and makes her way around back into the --
+4) 7) dialog: I looked in your purse, saw your driver’s license. She works her way to the back corner. She tries the steel door next to the wine rack. The deadbolt is locked. Howard watches her but doesn't say anything. Michelle takes a seat on the couch, cranes her head to lo up the stairwell but she can't see where it ends. She tries to act calm and confident --
+4) 9) dialog: Near Kenosha. 40 miles outside of Milwaukee. Underneath my farmhouse. 13.
+4) 11) dialog: I converted this cellar into a fallout shelter right after 9/11. The electricity comes from solar panels mounted on the barn roof. Water’s piped in from a well underneath the house then it goes through a reverse osmosis filter. Completely self contained. Howard leans against the table.
+4) 12) dialog: Started to think I went a little overboard, but figured, even if it never serves its purpose, it makes a decent wine cellar.
+4) 14) dialog: The ones from Milwaukee did. But I was able to pick up a station from Chicago... until that cut out too. But it was enough info to know I needed to get here quick. Michelle loses a bit of confidence.
+4) 16) dialog: All I know is that they’re not broadcasting anymore.
+4) 18) dialog: I have a daughter in Washington, D.C. I don’t know if anything happened there. But, I mean, it’s Washington, D.C. He fights back his own emotions.
+4) 19) dialog: Never should have let her go.
+4) 21) dialog: I’m sorry. I know it’s hard, but I can’t let -- She suddenly swings her crutch --
+4) 24) dialog: You want to see what’s out there? (motioning toward stairs) Go ahead. Howard keeps his distance as Michelle cautiously crutches way to the steps, struggles to climb them.
+5) 0) text: Michelle arrives at the top of the stairs and finds a thi lead door with a small 4x6 inch window. Howard comes halfway up the stairs behind Michelle. 15.
+5) 1) dialog: Have a look. Michelle leans in and stares out the window -- MICHELLE’S POV - EVENING Late afternoon. Faint sunlight. A thin strip of the outsi world is visible along the top of the exterior stairwell Sunlight kicks off the front end of a dented pickup which barely sticks out from behind the corner of a rundown bar Outside the barn, there’s a fenced in pen occupied by -- TWO DEAD PIGS. But not just dead -- their skin is complet gone -- peeled, sliced or melted away. All that remains a two huge blobs of blood-stained muscle and fat.
+6) 1) dialog: Believe me now? Howard climbs the stairs as Michelle tries to get her panicked breathing under control.
+6) 2) dialog: Mildred and Frank. They seemed fine when we got here. I looked out a few hours later. That’s what I saw.
+6) 4) dialog: I don’t know. Howard flips a switch on a kluged together piece of electronic equipment by the door. A steady CLICKING SOUND emanates from the machine as the meter fluctuates slightl
+6) 5) dialog: This is a Geiger counter. A wire runs from the device to a wand. Howard threads the wand through a small hole in the door. The clicking speed and the meter moves but only a little. 16.
+6) 6) dialog: Definitely radioactive fallout in the air, but not enough to do that kind of damage, not that quickly.
+6) 8) dialog: (to himself) God grant me the serenity... Howard pulls the wand in. Looks up at Michelle.
+6) 9) dialog: There’s something else out there. Some sort of chemical, like mustard gas... or worse. Michelle subtly braces herself against the wall.
+6) 10) dialog: Whatever it is, we sure as hell can’t open this door. Without warning -- Michelle shoves Howard as hard as she He loses balance, tumbles down the steps, ass over elbows Michelle grabs the door handle, turns it. But it's locked
+6) 11) dialog: God damn it! Michelle frantically pulls at the door. Howard gets to his feet -- his body fills the bottom of t stairwell, blocking the light from the room. Michelle bangs on the small window.
+6) 13) dialog: What the hell is wrong with you?! There's real anger in his voice. 17. Michelle smashes her crutch against the glass, against th handle, but it’s pointless. She begins sobbing, slides do the wall until her butt hits the stairs.
+6) 15) dialog: (bordering on creepy) There’s no one to tell. Michelle looks up at Howard, horrified.
+6) 17) dialog: You're not a prisoner.
+6) 19) dialog: You're not thinking straight. Probably have a concussion. Then there’s the shock of all this info. Howard stands back up, towering over her.
+6) 20) dialog: You open that door and whatever’s out there comes in here. Is that what you want? To end up looking like my hogs? Michelle can’t tell if it’s a warning or a threat. They stare at each other for a long moment. She finally shakes her head... surrenders. Howard turns, lumbers back down the stairs. And as he goe the sun sets outside, leaving Michelle in near darkness. 18.
+8) 0) text: Howard sits at the table fiddling with a small radio but nothing's being broadcast. Michelle crutches into the room. Howard looks over.
+8) 1) dialog: (spinning the dial) See?
+11) 0) text: Michelle wakes with a start. She looks over to -- HOWARD standing silently in the doorway. He turns and wal away without a word.
+12) 0) text: Michelle inspects her damaged knee. Then she glances at Howard’s dresser drawers. She crutches toward them, keepi nervous eye on the door to the main room.
+12) 1) dialog: You alright in there? She stops.
+13) 0) text: Howard and Michelle sit at the table, eating in silence. looks at her, but she keeps her eyes on her plate.
+13) 1) dialog: (trying for small talk) What were you doing in Milwaukee? Eyes down, Michelle pushes her food around with her fork. 20.
+14) 0) text: A few days have passed. Michelle looks at herself in the mirror. She peels the gauze from her head. The wound is healed enough that she doesn’t replace the gauze. She runs water but sneaks from the bathroom -- using the noise to mask her movement. She hobbles into -- HOWARD’S ROOM She crosses the room without her crutches, limping but mo reasonably well. Michelle opens a drawer and takes the magazine with the “ TO MAKE A WEAPON OUT OF ANYTHING” cover.
+15) 0) text: Michelle maneuvers through the main room -- past Howard. leans heavily on the crutches making it appear that she’s completely dependent on them to get around.
+16) 0) text: Using the sharp edge of a soup can lid, Michelle whittles away at the end of one of her crutches, slowly shaping it into a point. She hears Howard moving outside and quickly rewraps the end with tape.
+17) 0) text: Michelle lies on her mattress as Howard unwraps the banda on her knee. Michelle winces as the last layer sticks to pus-covered wound. Howard tugs it off. 21.
+17) 3) dialog: Where are you hiding them?
+17) 5) dialog: The antibiotics. Michelle doesn’t answer.
+17) 6) dialog: Think you'll still be able to refuse medicine when this turns into gangrene... and I have to saw your leg off? Michelle looks from the wound to Howard. He’s serious. She reaches into a small slit on the side of her mattress digs out a dozen pills. She sets them on the bed. Howard separates them into two piles.
+17) 7) dialog: (pointing at one pile) You’re welcome to suffer through the pain all you want... (points at the other pile) But you will take the antibiotics. Michelle picks up one pill from each pile. Pops them both into her mouth and swallows.
+17) 9) dialog: I’m stuck down here too, you know. 22. He pulls the door shut on his way out. Michelle reaches over and grabs her crutch. She unravels duct tape and goes back to work, sharpening it into a poi The painkiller kicks in. She groggily tucks the lid back under the mattress then lies down and drifts to sleep.
+20) 0) text: Michelle peeks into Howard’s room. He snores on his mattr She quietly closes his door then stares up at the ventila system above the kitchenette where two air ducts branch o from the main register and pipe into the bedrooms. 23.
+22) 0) text: Michelle climbs onto a folding chair beneath the main ven She pulls off the cover and shoves the stuffing into the ventilation system. When she has it all in, she takes a crutch and pushes it far into the duct as possible. She climbs off the chair then reaches up and BANGS on the vent with her crutch until Howard's snoring stops. She hears him moving and quickly limps back into her room
+23) 0) text: Michelle catches a glimpse of Howard through the open doo She waits a beat then hobbles out of the bedroom.
+24) 0) text: Howard is on a chair underneath the main duct. His ear an his hand are pressed up against the vent. Howard turns to Michelle -- deadly serious look on his fa
+24) 1) dialog: The ventilation system is failing. Michelle’s face gives nothing away.
+24) 3) dialog: Don’t know. If it’s the solar panels we’re screwed because I can’t go outside to repair them. He turns valves on the ducts that lead into the bedrooms. 24.
+24) 4) dialog: I’m shutting down the bedroom flow. We'll have to limit ourselves to this room. Keep the system from having to work so hard. He gets down from the chair.
+24) 6) dialog: I‘ll keep a bucket in here. Short of that, you'll have to be quick. Howard seems to be staring at the tape on the bottom of Michelle’s crutches as he speaks.
+25) 2) dialog: Surviving is about the essentials. Michelle drops into a chair, exhausted. She stares at the wall of wine, looks around the rest of the sparse room.
+25) 4) dialog: Tell you what. Next time I’m planning for the apocalypse, I'1l make sure to buy candy bars. Right now we have more pressing problems. He gets down from the chair and joins Michelle at the tab They both struggle to catch their breath.
+25) 5) dialog: (somber ) We're not getting enough oxygen. (MORE )
+25) 7) dialog: I might have to go outside and see if I can fix it.
+25) 9) dialog: It is. But we’re facing carbon dioxide poisoning down here. Something has to be done. Howard picks up a fork and starts eating. Michelle just stares at her plate. Is she having second thoughts?
+25) 11) dialog: You’re not old enough for that.
+25) 13) dialog: You were drinking the night you crashed. I could smell it on you.
+25) 15) dialog: I’ve never opened a bottle down here. It’s just storage. Guess we'll have to make do with water. Michelle pulls off her shoe. She grabs the bottle and put the base of it in the bottom of the shoe then starts gent banging it against the nearby door frame.
+25) 16) dialog: What are you doing? 26.
+25) 18) dialog: I don’t drink. Michelle looks over at the wall of wine.
+25) 20) dialog: I used to. I don’t anymore. Michelle raises her glass.
+26) 1) dialog: You’ve had enough. Michelle picks up her glass and takes a gulp. She looks a the full wine rack.
+26) 3) dialog: It’s a long story. 27.
+26) 5) dialog: Maybe I‘11 tell you some day when you’re ready to listen. Michelle stares at the unappetizing food on the plate in front of her.
+26) 7) dialog: (suspiciously) Your knee’s getting a lot better. Michelle takes another drink of wine, plays it cool.
+26) 10) dialog: Wondering how I could be so naive. Howard walks underneath the main duct, tapping it with th shovel handle as he goes. TAP -- a hollow echo. TAP -- another hollow echo. TAP -- hollow sound. Howard glances at Michelle. She fights to keep a disinterested look on her face. 28. He walks a few more feet. Reaches up, TAPS again -- and t part of the duct answers with a muted THUMP. Howard climbs onto a chair. He pushes the shovel deep int the vent and starts fishing around. Michelle surreptitiously unwraps the tape from the bottom her crutch under the table as she keeps her eyes on Howar Howard pulls the shovel out, bringing a big chunk of polyester pillow stuffing with it. Air immediately starts flowing into the room again. Howard looks at Michelle. He’s furious.
+26) 11) dialog: I pulled you from a crushed car. Kept you safe from whatever’s in the air out there. I gave you antibiotics from my limited supply. He climbs off the chair, shakes the edge of the shovel at as he speaks. He doesn’t seem to notice her shaky hands working underneath the table.
+26) 12) dialog: You were a stranger. I owed you nothing. But I helped you anyhow. And instead of thanking me, you try to kill us both. Howard takes a step toward Michelle. She jumps up from th table and thrusts her spike-tipped crutch at Howard. He knocks it aside with the shovel. She pulls it back, ready to strike again.
+26) 14) dialog: That’s the beauty of it. I don’t have to. He throws the shovel down. 29.
+26) 15) dialog: I’m gonna let you hurt yourself. He reaches into his pocket and pulls out his key ring. Se it on the table.
+26) 16) dialog: It’s the small brass one. Michelle hesitates for a long moment, not sure if she believes him, not sure if this is some kind of a test.
+26) 17) dialog: You're free to go. Howard drags the couch away from the stairwell. Keeping the crutch pointed in front of her, Michelle step forward, grabs the keys off the table. She limps toward the exit, crutch at the ready.
+26) 18) dialog: There's just one thing... Howard’s voice wavers between menace and regret.
+26) 19) dialog: Once you leave, you can't come back. You'll be covered with whatever it is that melted the skin off my hogs. Go ahead and kill yourself if you like. But I’m not going to let you kill me too. Your choice. Michelle makes her way into the --
+26) 21) dialog: Leave the keys in the door. And be quick to close it. Michelle pauses... Decision time. She hesitates -- And then the daylight from the window suddenly goes DARK. Michelle spins around -- a man in a hazmat hood presses against the window -- looking right at her. He BANGS frantically.
+26) 23) dialog: Do not open that door! Michelle panics, spins the key, unlocking the door. Before Howard can get up to her, the man pulls open the d and enters, pushing into Michelle -- TOUCHING HER -- The man blocks Michelle from getting out. He spins back, shuts and locks the door. Then strips off his hazmat hood
+26) 28) dialog: We need to get that suit cleaned off. Right now. Nate hurries past Michelle into Howard’s room -- he clear knows his way around.
+26) 30) dialog: (a concerned look) That’s Nate.
+27) 0) text: Nate strips off the suit. Underneath he’s only wearing a of boxers and few tattoos. He throws the suit in the tub. Howard comes in and starts running the water over it. Nate looks back, sees Michelle in the bedroom doorway. He hurries into -- HOWARD’S ROOM -- in just his boxers. Michelle can’t help but notice Nat in great shape.
+27) 3) dialog: No! Water might be contaminated. Howard closes the faucet.
+27) 4) dialog: Try the sink. Nate spins the sink faucet. It sputters and a weak stream water flows out. Nate wets the towel as he turns to Michelle.
+27) 9) dialog: He turns the hazmat suit inside out to scrub the rest. And he sees -- written on the inside in permanent marker: PROPERTY OF JOHN BENNETT, PIKEVILLE FIRE DEPT. 33. Howard stares at the name, his face tightening up. He gla at Nate, who still has his back turned.
+28) 0) text: Nate, now in a pair of Howard’s jeans and a t-shirt, sits the table with Howard. They speak in tense whispers.
+28) 1) dialog: Got some nerve showing up here now.
+28) 3) dialog: A lot’s changed since then. And you know it. Michelle walks in, dressed in a different set of clothes. Nate eyes her as she heads for the couch.
+28) 6) dialog: Because of the hazmat suit. (stares at Nate) Lucky you happened to have that.
+28) 9) dialog: Not sure where to start. 34.
+28) 14) dialog: (under his breath) Then she should be ecstatic. Nate gets up from the table, walks over to Michelle. He offers his hand along with his most charming look.
+28) 16) dialog: You helped. Nate ignores him -- keeps his focus on Michelle.
+28) 22) dialog: (interrupting the moment) So how is it out there?
+28) 25) dialog: So what happened? Who’s behind it?
+28) 29) dialog: Hold on a second. I rescue you. Keep you safe. And you refuse to believe a word I say. But this guy shows up and tells us the obvious and you buy in?
+28) 32) dialog: Christ. Your little stunt must've damaged the system.
+28) 34) dialog: I'd have to go out for that.
+28) 36) dialog: No! Not a chance in hell. Michelle’s taken aback by their adamant response.
+28) 37) dialog: You’ve done enough damage already.
+28) 40) dialog: The water pump’s stressed. The ventilation system’s struggling. There are too many of us down here already. 37. INT. HOWARD’S ROOM Howard puts on the hazmat suit. He doesn’t pull down the yet. He walks out into the --
+28) 42) dialog: If I can’t get it fixed, then I’m not sure we can support three people down here.
+28) 44) dialog: It’s my cellar. I decide.
+29) 0) text: Dark and overcast. The modest farm house sits in the middle of nowhere. Fall fields in front, thick woods in back. The dead pigs rot in their pen. The cellar door opens. Howard steps out. He looks back as door slams shut.
+31) 0) text: Howard climbs to the top of a ladder. As he steps onto th roof, something catches his leg. He looks back -- it’s a bent nail, tugging at the hazmat suit, nearly causing it to rip. 39. Howard carefully takes a step back and releases himself f the nail. He then moves across the roof in the wan light. His BREAT FOGS the plastic mask. He stops at the solar panels. A large tree branch has fal across the panels. Two of the four are cracked. Howard sh the branch to the side. The branch rolls off the edge of the barn and lands with echoing WHACK! Howard freezes, looks around... Nothing but emptiness and silence. And then -- THWOCKA-THWOCKA-THWOCKA-THWOCKA. Howard spins around and
+31) 1) text: On the horizon, something in the air, way out in the dist -- maybe a helicopter? Howard wipes the fog from his face mask... His hand moves away but whatever it was has slipped behin hill before Howard can make heads or tails of it.
+32) 0) text: Howard heads for the cellar door. He stops, turns and mak for the front door of the farm house instead.
+33) 0) text: Howard opens the closet door in his bedroom. He pulls out small safe and sets it on his bed. He unlocks it -- The safe door opens revealing a revolver and a box of amm 40.
+34) 0) text: Howard comes down the stairs into the --
+35) 0) text: Howard enters the cellar, locking the door behind him. He hurries down the stairs, trash bag in hand.
+36) 0) text: Howard gives Nate and Michelle a thumbs up as he rushes p them toward his room.
+37) 0) text: Howard steps into the bathroom, takes the gun out of the trash bag and quickly wraps it in a towel. He throws the in the tub. Then he begins stripping out of the hazmat su Michelle pulls aside the shower curtain.
+37) 2) dialog: Nope... Nothing. Howard turns on the water -- a weak stream drips. Nate steps up behind Michelle.
+37) 4) dialog: Dessert. 4l.
+38) 0) text: Howard and Michelle sit at the table as Nate works at the kitchenette behind them. Michelle fills two glasses to the brim with wine. Howard watches, a look of disappointment on his face.
+38) 2) dialog: Where did you get that hazmat suit? Howard keeps his eyes on Nate who pauses before he answer
+38) 4) dialog: I didn’t know you were volunteering at the fire department.
+38) 6) dialog: Charlie still running the show down there? 42.
+38) 8) dialog: My old pal John Bennett volunteers too. You must know John. A moment of tension -- Nate’s eyes say be careful.
+38) 11) dialog: Don’t know what you’re talking about, do you? Nate holds his glass out to Howard.
+39) 0) text: Empty dinner plates and crumpled candy wrappers. Nate was down the last of the wine. Howard pushes his dish and silverware toward Nate.
+39) 1) dialog: I bought dinner. How about you do the washing up. Nate pushes the plate back toward Howard.
+39) 3) dialog: (quietly to Nate) Remember, this is my cellar and that’s my wine. You’re just a guest.
+41) 0) text: Howard SAWS and HAMMERS on a piece of wood. The bedroom door opens. Nate comes out holding his head, looking like complete shit. Howard whacks at a nail, notices Nate wincing with each strike.
+41) 2) dialog: Does it matter?
+41) 4) dialog: She’s in the bathroom. Throwing up. You must be proud of yourself. Nate settles into a chair as Howard goes back to his hammering -- a big smile on his face each time Nate wince Michelle stumbles in, holding her head with both hands. S collapses to the couch. Her face is the same color as the cinder block walls. 46.
+41) 6) dialog: So you finally believe me. Howard pounds in another nail.
+41) 8) dialog: Almost done.
+41) 10) dialog: The frame on one of the solar panels was broken. This should hold it for a while at least.
+41) 12) dialog: I’m not. You are.
+41) 14) dialog: Because it’s time you start earning your keep.
+42) 0) text: Nate climbs the stares in the hazmat suit, holding the wo corner. Howard waits until he hears the door close then h walks up the --
+43) 0) text: Howard sits down next to Michelle on the couch.
+43) 1) dialog: Nate’s a liar.
+43) 3) dialog: The hazmat suit. It had someone else’s name in it.
+43) 5) dialog: He also said Charlie Winston was still fire chief. But Charlie retired years ago. I was at the party.
+43) 7) dialog: If he doesn’t work at the fire department, how'd he get the suit? And what happened to the guy who’s name is on it?
+43) 9) dialog: Look, Nate’s been in and out of trouble for as long as I’ve known him. Spent some time in prison -- mostly small stuff. But he’s got a violent streak in him. You should be careful. Just then -- pounding from the top of the stairwell. Howard doesn’t move.
+43) 11) dialog: Did you hear what I just told you? He can’t be trusted.
+44) 0) text: Howard and Nate finish their meal. Michelle stands at the sink, watching water drip from the open faucet into her e glass.
+44) 2) dialog: We're using too much water. Nate takes his dish over to Michelle. Tosses it in the si
+44) 7) dialog: Fuck it. He crosses to the wine rack, selects a bottle. He turns b and hands it to Michelle.
+44) 8) dialog: Go on, open it.
+44) 9) text: Michelle goes through the process. Howard pulls out TWO wine glasses, sets them on the table Michelle pulls the cork out and puts the bottle down. How pours two small portions into the glasses.
+44) 10) dialog: 1986 Montrachet. Best bottle in the cellar. You don’t want to know what it’s worth. But the idea of it sitting down here, untouched, as the world ends -- or worse yet, having you two heathens drink it on your own, without half a clue what’s on your lips -- well, that thought is more than I can bear. Howard sets one glass in front of Michelle, picks up the other himself. He swirls the wine, puts his nose to the g and inhales deeply. He smiles.
+44) 11) dialog: Cheers. Michelle doesn’t touch her glass. Howard clinks it anyway then takes a mouthful of the wine.
+44) 12) dialog: That’s the stuff! Howard picks the bottle up, fills his glass to the rim. A chugs the entire glass as Nate and Michelle watch in sile
+44) 14) dialog: (to Michelle) Try it. She doesn’t move.
+44) 15) dialog: What’s wrong with you? That’s a few hundred dollars worth of wine in your glass. It’s oaky. With a hint of raspberries. Michelle watches as Howard pours himself another full gla 50.
+44) 17) dialog: (glares at Michelle) What’s the problem, princess? You couldn’t get enough last night.
+44) 19) dialog: I wasn't talking to you. (back to Michelle) Were you visiting your boyfriend in Milwaukee? Michelle doesn’t answer.
+44) 20) dialog: Pretty girl like you. You've probably had plenty of boyfriends. Those poor saps. They didn’t have a clue what they were getting into.
+44) 22) dialog: You know what this is? This thing I’ve done for both of you? It’s called charity. And when someone provides you with charity, the polite thing to do is thank them.
+44) 24) dialog: I could've hired any old vagrant to do a half-assed job. (a beat) Hindsight being what it is, I wish I had. Nate picks up the wine bottle but keeps his eyes on Howar 51.
+44) 27) dialog: You fucking ingrate! Nate wipes the wine from his eyes as Howard SLAMS into hi They collide into the wall. Nate takes the brunt of the h in his back -- the oxygen rushes out of his lungs.
+45) 0) text: Howard looks at himself in the mirror, picks shards of gl from his back.
+46) 0) text: Michelle sweeps up the mess. She looks shaken. Whatever t hell is going on, it’s getting worse and she’s starting t lose her composure. INT. HOWARD’S ROOM Howard is now bandaged up. He listens to Michelle SWEEPIN GLASS. Then climbs into his bed, each cut and bruise screaming at him.
+48) 0) text: A GLASS held under the faucet, but no water comes out. Michelle stands at the sink, a concerned look on her face she stares at her empty glass. Howard walks out of his room. His REVOLVER is holstered o his hip. Michelle eyes the gun.
+48) 4) dialog: This cellar is mine. I’m in charge down here. You either get in line or you get the hell out. Nate releases a blustery chuckle. Howard reaches down, touches the butt of the gun.
+48) 5) dialog: You want to try me?
+48) 7) dialog: (under his breath) Too damn many of us down here. Michelle eyes both men, an uneasy look on her face.
+49) 0) text: Howard removes a throw rug from the floor. Underneath, there’s a trap door. He pulls it open, revealing a narrow crawl space. Howard nods to Nate, hands him a flashlight
+49) 1) dialog: You first. Nate grimaces, but climbs down into the crawl space. Howa turns to Michelle.
+49) 2) dialog: I want you up by the door. If you see any water running through the yard, you come let me know. 54. Michelle nods as Howard drops down into the crawl space. climbs over the couch and into the --
+52) 0) text: Howard and Nate climb out of the crawl space. Nate has a small pump in his hands. Michelle stands by the men -- a troubled look on her face
+52) 1) dialog: You alright?
+52) 3) dialog: It’s a pump. And it’s busted.
+52) 5) dialog: Let’s hope you're right.
+53) 0) text: Nate works on the pump. Michelle puts together another me Howard walks in from his room. He doesn’t say a word, jus pulls a bottle of wine off the wall and hands it to Miche She opens it. Nate fidgets with the pump, doesn’t look up Howard pulls out a single wine glass, sets it on the tabl Michelle pulls out the cork. It drops to the floor. As Howard reaches down for it, Michelle slips liquid Keta into his glass. Howard comes up with the cork, sets it on the table. 56. Michelle pours him a full glass of wine and forces a smil Howard nods, takes a sip.
+53) 1) dialog: A little off. Might be corked. He spins the wine, sniffs it. Michelle watches nervously.
+53) 2) dialog: But I guess we can’t let it go to waste. Especially, now that our reserves have been... depleted. Howard takes a big drink.
+54) 0) text: Howard is slumped on the couch, unconscious. Nate and Michelle stand over him.
+56) 0) text: Howard on the couch. His eyes flicker open. He rubs his f Michelle’s MOANS echo from the other room. Howard’s brain slowly returns to consciousness as Michell works her way toward an orgasm. Howard reaches down to his waist. His gun is missing. The look on Howard’s face is chilling as he begins to pie together what’s happened. With one final SQUEAL of ecstasy, Michelle’s noise dies d And then Howard hears someone coming his way. He closes h eyes, feigns like he’s still passed out. Michelle enters and heads for the bathroom -- wearing onl her PANTIES. Howard’s eyes open to slits. He covertly watches her pass INT. HOWARD’S ROOM - LATER Howard sits on his mattress, propped up on his pillow aga the back wall. He drinks from an open wine bottle. Nate comes into the bedroom, the revolver tucked into his waistband in clear view.
+56) 1) dialog: Give me back my gun. Nate passes by him and walks into the bathroom.
+56) 3) dialog: Guess you never plan on sleeping again. Nate stops, walks over to Howard, kicking an empty wine bottle out of the way. 59.
+56) 5) dialog: Fuck you. Howard takes another drink. Nate pulls the gun, points it at Howard’s head. Nate’s demeanor is darker and colder than we’ve seen it.
+56) 7) dialog: (to Michelle) This is who you decided to throw your lot in with? After all I’ve done for you. Michelle marches over. Stands at Nate’s side.
+56) 9) dialog: (pointing at Nate) This asshole tell you that?
+56) 11) dialog: You were unconscious, you don’t remember shit. I saved you.
+58) 0) text: The trap door to the crawl space is open. Howard pokes hi head out, looks at Nate, who is near the sink. 61.
+58) 1) dialog: Should be working. Nate turns the faucet. Water POURS in a thick stream. Howard pulls himself up through the trap door and closes drags the throw rug back over it.
+58) 3) dialog: You’re one hell of a bastard, coming in here, taking over.
+58) 5) dialog: You’re going to kick me out?
+59) 0) text: Nate, Michelle and Howard sit around the table finishing their meal. Howard’s halfway through another bottle of wine. Nate pus his empty plate in front of Howard.
+59) 4) dialog: Least you could do is close the door. Nate swings Howard's bedroom door closed behind him. Howard leans in close to Michelle. He speaks in a hushed whisper.
+59) 5) dialog: You were right.
+59) 7) dialog: This is all a put on. There was no attack. Nate and I planned this from the start. He talked me into it. Said we could get a girl down here and nobody would ever know. Michelle is caught completely off guard. 63.
+59) 9) dialog: Isn't it obvious? I’m jealous. You weren’t supposed to be only for him. Michelle’s stomach turns.
+59) 11) dialog: About there being an attack or about there not being an attack? (a wry smile) You fell for it. Now you’re his little toy and I’m locked down here to suffer until he tires of you... And god only knows what’s gonna happen then. He can’t just let you walk out, can he?
+59) 13) dialog: Because you know it’s true. And you'll never be safe as long as he has that gun.
+59) 15) dialog: Tell you what, just get me the keys. I’1l find a phone and call the police... What do you have to lose? Either you’re rid of me for good, or else I'll bring back help. Michelle looks doubtful.
+59) 16) dialog: I can get you out of here, back to your family, to your life. But only if you help me. The toilet FLUSHES. Howard peers at Michelle. She doesn’t say a word. 64. INT. HOWARD’S ROOM Howard sleeps on the mattress. Michelle comes in and nudges him awake. Howard’s eyes open. Michelle’s kneeling next to him. The ring JANGLES softly in her hand. Howard shakes off the cobwebs and grabs the keys from her
+60) 0) text: The door to the small bedroom is closed. Michelle sits on couch, anxiously picking at her fingernails. Howard comes out dressed in a hazmat suit. They whisper -
+60) 2) dialog: Nate still has a gun. If he’s awake when I come back, we’ll tell him I had to check on the solar panels.
+60) 5) dialog: The electricity’s shorting out. I need to check the panels. Nate sees the key ring in Howard’s hand. He turns to Michelle, eyes ablaze with rage.
+61) 4) dialog: You’re too good for me. But you’1ll lie down with that cretin.
+61) 6) dialog: You’ve given me nothing but trouble since you got here. I should’ve left you in that ditch... Michelle steps around him into -- HOWARD’S BEDROOM Howard matches her steps, blocks her path to the door.
+61) 8) dialog: ...-would’ve made my life so much easier. Howard steps toward her. Michelle reaches down, grabs a wine bottle and swings it. Howard jumps back, avoids the impact.
+61) 9) dialog: You bitch. He grabs Michelle around the neck, a crazed look in his e 67. And then -- WHAM! The revolver smashes Howard in the back of the head Howard collapses forward into Michelle, knocking both of onto the mattress, leaving Michelle underneath his limp b Nate stands over them both, looking down at Michelle.
+61) 12) dialog: What are you doing? Michelle ignores him. Howard hurries over and grabs a bot out of Michelle’s hand.
+61) 15) dialog: That’s my wine.
+61) 18) dialog: I didn’t attack her. I would never do that. I... Howard reaches a hand out to Michelle -- she backs away f him.
+61) 19) dialog: Look, I got emotional. I’m sorry. But that’s not me.
+61) 21) dialog: Wait, no. Michelle. Don't go! She turns away from Howard, walks into the bedroom and cl the door. Howard backs away from Nate. Nate grabs him by the scruff the neck with one hand, holds the gun to his temple with other.
+61) 23) dialog: Nate, please don’t.
+61) 26) dialog: Please, please no.
+61) 29) dialog: (sobbing hysterically) Don’t, Nate. Please. What do I have to do? I’1l do anything! Nate pulls out the keys.
+62) 1) dialog: You can’t do this! It’s murder... Tears form in her eyes.
+62) 2) dialog: We can work this out. I'll stay out of your way. You won’t even know I’m here. Michelle reaches for the door handle... hesitates.
+62) 3) dialog: Please, Nate! Please...! Michelle pulls open the door. Rushes to the --
+62) 7) dialog: Thank you.
+62) 11) dialog: Okay. However you --
+64) 0) text: Howard sits at the table, fiddling with the radio. Michelle walks in rubbing sleep from her eyes, she scans room, then walks into Howard’s room. A moment later she comes back in -- wide awake.
+64) 3) dialog: Said he heard something outside. Decided to go have a look.
+64) 5) dialog: A couple of hours. 72. She stares warily at Howard.
+64) 7) dialog: Depends on what he finds, I suppose. Michelle moves to the cupboard.
+64) 8) dialog: I knew this was gonna happen.
+64) 10) dialog: The attack. Way things have been going in the world -- growing population, dwindling resources. Too many rats in the cage. And a bunch of politicians who only care about getting a sound bite in the next news cycle -- it wasn’t hard to see we were coming to a crossroads. But that’s the problem with people -- they’re so damn entitled, so insistent on believing in whatever it is that they want to be true, facts be damned. Try telling them something they don’t want to hear. Might as well talk to the wall. Michelle nods, but doesn’t respond.
+64) 11) dialog: But sometimes people need to hear the truth.
+64) 13) dialog: At the bottom of everything, people are selfish and brutal. We do what’s best for ourselves. We want to pretend like it’s logic or morality or religion. But it’s not. (MORE )
+64) 14) text: It’s darker than that. And if you’re in denial... Howard locks eyes on Michelle --
+64) 15) dialog: ..-if you’re in denial, Michelle, then you’re in danger. I know it’s hard to face facts, to admit it’s all a frenzy of selfish and desperate chaos. But if you don’t face those facts, you’re putting yourself in a far worse, far riskier position. Michelle breaks eye contact, pulls out some food her growing sense of unease.
+66) 0) text: Howard is on the couch now, reading. He looks up as Miche enters.
+66) 2) dialog: What do you mean?
+66) 4) dialog: I told you, it’1l never happen again. You made sure of that. Howard motions to the empty wine rack.
+66) 5) dialog: Guess I should thank you. 74.
+66) 7) dialog: Yes.
+66) 9) dialog: Can’t do what?
+66) 11) dialog: You got it wrong. Nate was trying to... He’ll be back soon. You’1ll see. Silent tears begin to roll down Michelle's face.
+66) 13) dialog: I'm sorry. I lied to you earlier. I needed the keys. I needed to get out. Nate was going to kill me.
+66) 15) dialog: Michelle, I’m not going to do anything to you. I’d never hurt you. You’re like my own daughter.
+66) 17) dialog: Stop crying. I’m trying to help you. That’s all I’ve ever done... Michelle heaves. Howard aches for her, but knows better t to approach.
+66) 18) dialog: It’s going to be alright. And then -- a RUMBLE echoes from outside. GRAVEL CRUNCHES under something heavy, something big. And it’s coming closer. Howard flips off the lights, leaving only a weak beam of sunlight from the tiny window at the top of the stairwell
+66) 19) dialog: (whispering) Don’t make a noise. The vehicle stops above them. The engine cuts out -- An unnerving silence.
+66) 21) dialog: (whispering) What if it’s not? Howard moves toward Michelle who stands in near darkness looking up the stairwell... waiting.
+66) 23) dialog: (whispering) If it’s Nate, he’1ll knock. An eternity passes. The RUMBLE of the engine restarting breaks the silence. 76. Michelle suddenly charges for the stairwell --
+68) 0) text: She's upside down, belted into her seat, the door crushed her side, blood gushing from her head, eyes slit open in consciousness. A sudden SHRIEK from the door but it refuses to be opened Another, louder SHRIEK. And again. And again. The door is Slowly pried open. And finally -- the door gives, swings open, revealing -- HOWARD, standing above Michelle, looking down at her. The expression on his face is... hard to read.
+68) 1) dialog: Don't worry. Everything's going to be alright. As Howard reaches down for Michelle, she slips into unconsciousness...
+69) 2) dialog: Morning. Michelle walks by him without saying another word. 78.
+70) 0) text: Howard sits at the table. He doesn’t notice as Michelle s a butter knife into her pocket. Michelle opens the cupboard, reaches to the very back and pulls out five bottles of wine. Howard sees them lined up on the counter.
+70) 1) dialog: Where’d those come from?
+70) 3) dialog: And what’s so special about today?
+70) 5) dialog: Still, kind of early for that, wouldn’t you say? Howard looks down at the bottle in his hand, clearly temp
+70) 7) dialog: I’m good.
+70) 10) dialog: Okay. One drink. And only because it’s your birthday. Howard moves his hand away. Michelle pours him a full gla
+71) 0) text: The second bottle has been opened. Michelle and Howard si the table.
+71) 2) dialog: Open another. Michelle crosses, bringing her glass with her. She grabs another bottle off the counter and opens it. While Howard isn’t looking, she pours her full glass down drain. Michelle stumbles, nearly falls on her way back to the ta
+71) 3) dialog: Careful. Maybe you’ve had too much.
+71) 5) dialog: Normally, you don’t mix Chardonnay and Shiraz. But hell... He tastes a bit.
+71) 6) dialog: Makes a half decent rose. Michelle offers a smile, clinks glasses with Howard.
+72) 0) text: Michelle is on the couch, eyes barely open. There’s a fou bottle on the table in front of Howard. 80.
+72) 2) dialog: Well if you didn’t guzzle it down so quickly...
+72) 4) dialog: We have some freeze dried lasagna. Somewhere...
+72) 6) dialog: Alright, missy. I think it’s time for a nap. Howard stands, a bit wobbly himself. He walks over to Michelle and pulls her to her feet. She MOANS softly. Howard takes Michelle to her room, keeping her on a more less straight line. INT. MICHELLE’S ROOM Howard sets Michelle down on her bed. She rolls over and curls into a ball.
+72) 7) dialog: There you go. Nothing a bit of sleep won’t sort out. He gently pulls a blanket over her as she sinks into the Howard stands up and watches her for a moment -- a soft, wistful look on his face -- Then he reaches into her purse which lies next to the bed digs around, pulls out her wallet. Michelle watches him anxiously through half-closed eyes. 81. Howard pulls out her driver’s license, stares at it a bea then tosses on the mattress next to her.
+72) 8) dialog: (ice cold) Hope you hid some more wine. Looks like we'll be doing this again in six months. For your real birthday. Michelle’s eyes pop wide open. Howard turns and walks out.
+73) 0) text: Howard closes the door to Michelle’s room and locks it wi his key. INT. MICHELLE’S ROOM Michelle lies on the mattress, completely still, eyes wid open -- sober and aware. She slips out of bed -- in complete control of her senses Michelle pulls the butter knife from her back pocket and approaches the lock. The two flathead screws face Michelle. The butter knife i just thin enough to fit into the grooves. She goes to work loosening the screws.
+74) 0) text: Howard sits at the table and pours himself another glass wine. He takes a big gulp and shakes his head disappointe INT. MICHELLE’S ROOM - LATER The screws have been removed from the deadbolt. Michelle her ear to the door, listening to --
+75) 0) text: Howard -- face down on the table -- SNORING. A fifth bott of wine is half empty in front of him. 82. The lock on Michelle’s door pops out of its hole. And the door swings open. Michelle hurries into the room and begins sifting through Howard’s pockets. She finds the keys and crosses to the metal door, unlocks Michelle pulls open the door and finds -- the HAZMAT SUIT along with the gun and a set of car keys. Michelle pockets the car keys, tucks the gun in her waist and grabs the suit.
+77) 0) text: Michelle walks by a passed out Howard, heads up the stairwell.
+79) 0) text: Michelle returns to the bottom of the stairs and scans th room, looking for the key. Howard stirs, readjusts his head, but clearly he’s beginn to wake up. Michelle is growing frantic. She reaches down and slides carpet over, revealing the trap door. She pulls open the and climbs down into the -- 83.
+80) 0) text: Howard stirs, lifts his head at the sound of Michelle kic the boards in the crawl space. He shakes his head, still asleep.
+82) 0) text: Howard shakes himself out of his stupor. He sees the trap door wide open. Suddenly he’s fully awake. He moves to the trap door, ducks his head inside, spins around and finds -- The KICKED OUT VENT.
+84) 0) text: Howard scrambles across the room, finds the closet door w open - gun and hazmat suit missing.
+84) 1) dialog: Fuck!
+86) 0) text: The LOCK CLICKS. The DOOR FLIES OPEN. Howard climbs out of the stairwell. He’s wrapped head to in a blanket. He scans the yard -- His eyes lock in on the two dead pigs -- steady raindrops chew at their rotting flesh. Howard hesitates for a long moment... 85.
+87) 1) dialog: Michelle! Michelle jumps at the sound of her name. ADRENALINE rushe through her veins.
+87) 2) dialog: We gotta get back inside. It’s not safe! His voice is getting closer. Michelle scans her options -- THE WOODS -- fifty yards away. THE BARN -- twenty-five yards away. THE FARM HOUSE -- five yards away.
+87) 3) dialog: Michelle! His voice just around the corner now. Michelle rushes to the farm house’s back door, her feet churning up the muddy ground beneath her. She turns the handle. The door swings open. Howard comes around the corner, catches a glimpse of the hazmat suit disappearing inside the farm house. Howard glances down at Nate’s corpse for a brief moment t he makes for the house.
+88) 0) text: Michelle spins the lock on the back door then peeks out t small window next to it -- Howard approaches, wrapped head to toe in the wet blanket Michelle reaches down to her waistband for the gun. Reali it’s on the inside of the hazmat suit. She grabs the suit’s zipper when -- 86.
+89) 0) text: Howard throws himself into the back door again and again. The door holds.
+91) 0) text: Howard stops, takes a step back and kicks hard just below door handle.
+92) 2) dialog: Wait! Howard pulls the wet blanket from his face. He reaches do and picks up the gun, shoves it in his pocket. Howard pushes the door closed behind him then follows Michelle’s muddy footprints out of the room. 87.
+93) 1) dialog: (yells from the hallway) You’re not safe!
+94) 0) text: Down the long corridor, Howard closes in -- watching Mich move frantically in the kitchen with her back to him.
+94) 1) dialog: I didn’t have a choice. You didn’t know Nate like I did. He was dangerous... I did it for us.
+95) 0) text: Howard now visible in the hallway behind her. He moves slowly, talks calmly.
+95) 1) dialog: He was going to kill me. I had to protect myself. Michelle still rooting through drawers, looking for something, anything she could use as a weapon.
+95) 3) dialog: You don’t have to love me. You don’t even have to like me, but please. Don’t leave me. I don’t want to be alone. I’1l never hurt you. You can trust me.
+95) 5) dialog: It was self-defense.
+96) 0) text: Howard’s close enough to touch her. He reaches out.
+96) 1) dialog: I won’t let you leave. Michelle spins -- a butcher’s knife gripped in her hand.
+97) 0) text: Michelle races up the back stairs. A cumbersome task in t oversized hazmat suit. She glances over her shoulder. Howard starts up the stairs behind her, revolver at his s Michelle trips over the top step, stumbles, steadies hers on a large cabinet at the top of the landing. It wobbles against the wall. 89. Howard’s halfway up the stairs behind her. She tugs hard on the cabinet. It rocks more. She pulls on again. It rocks further. One more huge pull -- Tipping point -- The cabinet crashes down the stairwell, forcing Howard to retreat back down the stairs.
+99) 0) text: Howard marches up the main stairway, gun still in hand.
