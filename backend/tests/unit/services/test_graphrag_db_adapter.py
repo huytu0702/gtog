@@ -37,8 +37,8 @@ async def test_adapter_inserts_entities(db_session: AsyncSession):
     adapter = GraphRAGDbAdapter(db_session)
 
     entities: Sequence[dict] = [
-        {"id": "entity-1", "title": "Entity 1", "type": "Person"},
-        {"id": "entity-2", "title": "Entity 2", "type": "Org"},
+        {"id": uuid4(), "title": "Entity 1", "type": "Person"},
+        {"id": uuid4(), "title": "Entity 2", "type": "Org"},
     ]
 
     await adapter.insert_entities(collection.id, index_run.id, entities)

@@ -49,7 +49,7 @@ class GraphRAGDbAdapter:
     ) -> None:
         """Insert entity payloads via repository."""
         rows = [
-            self._with_context(collection_id, index_run_id, entity, drop_keys={"id"})
+            {"collection_id": collection_id, "index_run_id": index_run_id, **entity}
             for entity in entities
         ]
         if rows:
