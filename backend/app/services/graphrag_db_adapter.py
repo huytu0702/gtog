@@ -48,14 +48,19 @@ class GraphRAGDbAdapter:
         items: Sequence[Mapping[str, Any]],
     ) -> list[dict[str, Any]]:
         """Attach collection/index run columns to payloads."""
-        return [
-            {
-                "collection_id": collection_id,
-                "index_run_id": index_run_id,
-                **{key: value for key, value in item.items() if key != "id"},
-            }
-            for item in items
-        ]
+        rows: list[dict[str, Any]] = []
+        for item in items:
+            payload = {key: value for key, value in item.items() if key != "id"}
+            if "human_readable_id" not in payload:
+                raw_id = item.get("id")
+                if isinstance(raw_id, int):
+                    payload["human_readable_id"] = raw_id
+                elif isinstance(raw_id, str) and raw_id.isdigit():
+                    payload["human_readable_id"] = int(raw_id)
+            payload["collection_id"] = collection_id
+            payload["index_run_id"] = index_run_id
+            rows.append(payload)
+        return rows
 
     async def insert_entities(
         self,

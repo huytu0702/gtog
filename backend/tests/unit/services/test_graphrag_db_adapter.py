@@ -58,6 +58,7 @@ async def test_adapter_inserts_entities(db_session: AsyncSession):
 
     assert len(result) == 2
     assert titles == ["Entity 1", "Entity 2"]
+    assert all(entity.human_readable_id is None for entity in result)
 
 
 @pytest.mark.asyncio
@@ -89,6 +90,7 @@ async def test_adapter_inserts_relationships(db_session: AsyncSession):
 
     assert len(result) == 2
     assert edges == [("Entity 1", "Entity 2"), ("Entity 2", "Entity 3")]
+    assert all(row.human_readable_id is None for row in result)
 
 
 @pytest.mark.asyncio
@@ -110,6 +112,7 @@ async def test_adapter_inserts_communities(db_session: AsyncSession):
 
     assert len(result) == 2
     assert levels == [0, 1]
+    assert all(row.human_readable_id is None for row in result)
 
 
 @pytest.mark.asyncio
@@ -131,6 +134,7 @@ async def test_adapter_inserts_community_reports(db_session: AsyncSession):
 
     assert len(result) == 2
     assert summaries == ["Other", "Summary"]
+    assert all(row.human_readable_id is None for row in result)
 
 
 @pytest.mark.asyncio
@@ -152,6 +156,7 @@ async def test_adapter_inserts_text_units(db_session: AsyncSession):
 
     assert len(result) == 2
     assert contents == ["Paragraph 1", "Paragraph 2"]
+    assert all(row.human_readable_id is None for row in result)
 
 
 @pytest.mark.asyncio
@@ -183,6 +188,7 @@ async def test_adapter_inserts_covariates(db_session: AsyncSession):
 
     assert len(result) == 2
     assert descriptions == ["First", "Second"]
+    assert all(row.human_readable_id is None for row in result)
 
 
 @pytest.mark.asyncio
