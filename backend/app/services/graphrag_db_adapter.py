@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from typing import Mapping
+from typing import Mapping, Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,22 @@ class GraphRAGDbAdapter:
         """Persist GraphRAG outputs to database (placeholder)."""
         return
 
+    def _build_rows(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        items: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Attach collection/index run columns to payloads."""
+        return [
+            {
+                "collection_id": collection_id,
+                "index_run_id": index_run_id,
+                **{key: value for key, value in item.items() if key != "id"},
+            }
+            for item in items
+        ]
+
     async def insert_entities(
         self,
         collection_id: UUID,
@@ -48,13 +64,72 @@ class GraphRAGDbAdapter:
         entities: Sequence[Mapping[str, object]],
     ) -> None:
         """Insert entity payloads via repository."""
-        rows = [
-            {
-                "collection_id": collection_id,
-                "index_run_id": index_run_id,
-                **{key: value for key, value in entity.items() if key != "id"},
-            }
-            for entity in entities
-        ]
+        rows = self._build_rows(collection_id, index_run_id, entities)
         if rows:
             await self._entities.bulk_insert(rows)
+
+    async def insert_relationships(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        relationships: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Insert relationship payloads."""
+        rows = self._build_rows(collection_id, index_run_id, relationships)
+        if rows:
+            await self._relationships.bulk_insert(rows)
+
+    async def insert_communities(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        communities: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Insert community payloads."""
+        rows = self._build_rows(collection_id, index_run_id, communities)
+        if rows:
+            await self._communities.bulk_insert(rows)
+
+    async def insert_community_reports(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        reports: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Insert community report payloads."""
+        rows = self._build_rows(collection_id, index_run_id, reports)
+        if rows:
+            await self._community_reports.bulk_insert(rows)
+
+    async def insert_text_units(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        text_units: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Insert text unit payloads."""
+        rows = self._build_rows(collection_id, index_run_id, text_units)
+        if rows:
+            await self._text_units.bulk_insert(rows)
+
+    async def insert_covariates(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        covariates: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Insert covariate payloads."""
+        rows = self._build_rows(collection_id, index_run_id, covariates)
+        if rows:
+            await self._covariates.bulk_insert(rows)
+
+    async def insert_embeddings(
+        self,
+        collection_id: UUID,
+        index_run_id: UUID,
+        embeddings: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Insert embedding payloads."""
+        rows = self._build_rows(collection_id, index_run_id, embeddings)
+        if rows:
+            await self._embeddings.bulk_insert(rows)
