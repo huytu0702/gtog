@@ -51,12 +51,6 @@ class GraphRAGDbAdapter:
         rows: list[dict[str, Any]] = []
         for item in items:
             payload = {key: value for key, value in item.items() if key != "id"}
-            if "human_readable_id" not in payload:
-                raw_id = item.get("id")
-                if isinstance(raw_id, int):
-                    payload["human_readable_id"] = raw_id
-                elif isinstance(raw_id, str) and raw_id.isdigit():
-                    payload["human_readable_id"] = int(raw_id)
             payload["collection_id"] = collection_id
             payload["index_run_id"] = index_run_id
             rows.append(payload)
