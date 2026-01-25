@@ -5,4 +5,12 @@ from .collection import CollectionRepository
 from .document import DocumentRepository
 from .index_run import IndexRunRepository
 
-__all__ = ["BaseRepository", "CollectionRepository", "DocumentRepository", "IndexRunRepository"]
+from .query import QueryRepository
+
+__all__ = [
+    "BaseRepository",
+    "CollectionRepository",
+    "DocumentRepository",
+    "IndexRunRepository",
+    "QueryRepository",
+]

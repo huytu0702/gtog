@@ -10,7 +10,8 @@
       "Bash(uvicorn:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(pytest:*)"
     ],
     "deny": [],
     "ask": []

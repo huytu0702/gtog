@@ -9,6 +9,7 @@ from app.db.session import AsyncSessionLocal
 from app.services.collection_service_db import CollectionServiceDB
 from app.services.document_service_db import DocumentServiceDB
 from app.services.indexing_service_db import IndexingServiceDB
+from app.services.query_service_db import QueryServiceDB
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -70,3 +71,18 @@ async def get_indexing_service(
         IndexingServiceDB instance
     """
     return IndexingServiceDB(session)
+
+
+async def get_query_service(
+    session: AsyncSession = Depends(get_db_session)
+) -> QueryServiceDB:
+    """
+    FastAPI dependency for query service.
+
+    Args:
+        session: Database session from dependency
+
+    Returns:
+        QueryServiceDB instance
+    """
+    return QueryServiceDB(session)

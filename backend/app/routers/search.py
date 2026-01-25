@@ -1,8 +1,11 @@
 """Search endpoints for all GraphRAG search methods."""
 
 import logging
-from fastapi import APIRouter, HTTPException, status
+from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from ..api.deps import get_query_service
 from ..models import (
     SearchResponse,
     GlobalSearchRequest,
@@ -10,7 +13,7 @@ from ..models import (
     ToGSearchRequest,
     DriftSearchRequest,
 )
-from ..services import query_service
+from ..services.query_service_db import QueryServiceDB
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +21,15 @@ router = APIRouter(prefix="/api/collections/{collection_id}/search", tags=["sear
 
 
 @router.post("/global", response_model=SearchResponse)
-async def global_search(collection_id: str, request: GlobalSearchRequest):
+async def global_search(
+    collection_id: str,
+    request: GlobalSearchRequest,
+    service: QueryServiceDB = Depends(get_query_service),
+):
     """Perform a global search on a collection."""
     try:
-        result = await query_service.global_search(
-            collection_id=collection_id,
+        result = await service.global_search(
+            collection_id=UUID(collection_id),
             query=request.query,
             community_level=request.community_level,
             dynamic_community_selection=request.dynamic_community_selection,
@@ -32,8 +39,6 @@ async def global_search(collection_id: str, request: GlobalSearchRequest):
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing global search")
         raise HTTPException(
@@ -42,11 +47,15 @@ async def global_search(collection_id: str, request: GlobalSearchRequest):
 
 
 @router.post("/local", response_model=SearchResponse)
-async def local_search(collection_id: str, request: LocalSearchRequest):
+async def local_search(
+    collection_id: str,
+    request: LocalSearchRequest,
+    service: QueryServiceDB = Depends(get_query_service),
+):
     """Perform a local search on a collection."""
     try:
-        result = await query_service.local_search(
-            collection_id=collection_id,
+        result = await service.local_search(
+            collection_id=UUID(collection_id),
             query=request.query,
             community_level=request.community_level,
             response_type=request.response_type,
@@ -55,8 +64,6 @@ async def local_search(collection_id: str, request: LocalSearchRequest):
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing local search")
         raise HTTPException(
@@ -65,19 +72,21 @@ async def local_search(collection_id: str, request: LocalSearchRequest):
 
 
 @router.post("/tog", response_model=SearchResponse)
-async def tog_search(collection_id: str, request: ToGSearchRequest):
+async def tog_search(
+    collection_id: str,
+    request: ToGSearchRequest,
+    service: QueryServiceDB = Depends(get_query_service),
+):
     """Perform a ToG (Tree-of-Graph) search on a collection."""
     try:
-        result = await query_service.tog_search(
-            collection_id=collection_id,
+        result = await service.tog_search(
+            collection_id=UUID(collection_id),
             query=request.query,
         )
         logger.info(f"ToG search completed for collection {collection_id}")
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing ToG search")
         raise HTTPException(
@@ -119,11 +128,15 @@ async def get_tog_entities(collection_id: str):
 
 
 @router.post("/drift", response_model=SearchResponse)
-async def drift_search(collection_id: str, request: DriftSearchRequest):
+async def drift_search(
+    collection_id: str,
+    request: DriftSearchRequest,
+    service: QueryServiceDB = Depends(get_query_service),
+):
     """Perform a DRIFT search on a collection."""
     try:
-        result = await query_service.drift_search(
-            collection_id=collection_id,
+        result = await service.drift_search(
+            collection_id=UUID(collection_id),
             query=request.query,
             community_level=request.community_level,
             response_type=request.response_type,
@@ -132,8 +145,6 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error performing DRIFT search")
         raise HTTPException(

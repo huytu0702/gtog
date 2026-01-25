@@ -2,11 +2,15 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
-from .config import settings
+from .db.session import get_session
 from .models import HealthResponse
 from .routers import (
     collections_router,
@@ -29,13 +33,15 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting GraphRAG FastAPI backend...")
-    
-    # Ensure storage directory exists
-    settings.collections_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Storage directory: {settings.collections_dir}")
-    
+
+    alembic_config = Config(Path(__file__).resolve().parents[1] / "alembic.ini")
+    command.upgrade(alembic_config, "head")
+
+    async with get_session() as session:
+        await session.execute(text("SELECT 1"))
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down GraphRAG FastAPI backend...")
 
