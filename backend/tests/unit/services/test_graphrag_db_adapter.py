@@ -47,8 +47,8 @@ async def test_adapter_inserts_entities(db_session: AsyncSession):
     adapter = GraphRAGDbAdapter(db_session)
 
     entities: Sequence[dict] = [
-        {"id": "entity-1", "title": "Entity 1", "type": "Person"},
-        {"id": "entity-2", "title": "Entity 2", "type": "Org"},
+        {"id": "1", "title": "Entity 1", "type": "Person"},
+        {"id": "2", "title": "Entity 2", "type": "Org"},
     ]
 
     await adapter.insert_entities(collection.id, index_run.id, entities)
@@ -58,7 +58,7 @@ async def test_adapter_inserts_entities(db_session: AsyncSession):
 
     assert len(result) == 2
     assert titles == ["Entity 1", "Entity 2"]
-    assert all(entity.human_readable_id is None for entity in result)
+    assert sorted(entity.human_readable_id for entity in result) == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -70,13 +70,13 @@ async def test_adapter_inserts_relationships(db_session: AsyncSession):
 
     relationships: Sequence[dict] = [
         {
-            "id": "rel-1",
+            "id": "1",
             "source": "Entity 1",
             "target": "Entity 2",
             "description": "Relates 1 to 2",
         },
         {
-            "id": "rel-2",
+            "id": "2",
             "source": "Entity 2",
             "target": "Entity 3",
             "weight": 0.42,
@@ -90,7 +90,7 @@ async def test_adapter_inserts_relationships(db_session: AsyncSession):
 
     assert len(result) == 2
     assert edges == [("Entity 1", "Entity 2"), ("Entity 2", "Entity 3")]
-    assert all(row.human_readable_id is None for row in result)
+    assert sorted(row.human_readable_id for row in result) == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -101,8 +101,8 @@ async def test_adapter_inserts_communities(db_session: AsyncSession):
     adapter = GraphRAGDbAdapter(db_session)
 
     communities: Sequence[dict] = [
-        {"id": "comm-1", "community": 1, "level": 0, "title": "Top"},
-        {"id": "comm-2", "community": 2, "level": 1, "title": "Child"},
+        {"id": "1", "community": 1, "level": 0, "title": "Top"},
+        {"id": "2", "community": 2, "level": 1, "title": "Child"},
     ]
 
     await adapter.insert_communities(collection.id, index_run.id, communities)
@@ -112,7 +112,7 @@ async def test_adapter_inserts_communities(db_session: AsyncSession):
 
     assert len(result) == 2
     assert levels == [0, 1]
-    assert all(row.human_readable_id is None for row in result)
+    assert sorted(row.human_readable_id for row in result) == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -123,8 +123,8 @@ async def test_adapter_inserts_community_reports(db_session: AsyncSession):
     adapter = GraphRAGDbAdapter(db_session)
 
     reports: Sequence[dict] = [
-        {"id": "report-1", "community": 1, "level": 0, "summary": "Summary"},
-        {"id": "report-2", "community": 2, "level": 0, "summary": "Other"},
+        {"id": "1", "community": 1, "level": 0, "summary": "Summary"},
+        {"id": "2", "community": 2, "level": 0, "summary": "Other"},
     ]
 
     await adapter.insert_community_reports(collection.id, index_run.id, reports)
@@ -134,7 +134,7 @@ async def test_adapter_inserts_community_reports(db_session: AsyncSession):
 
     assert len(result) == 2
     assert summaries == ["Other", "Summary"]
-    assert all(row.human_readable_id is None for row in result)
+    assert sorted(row.human_readable_id for row in result) == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -145,8 +145,8 @@ async def test_adapter_inserts_text_units(db_session: AsyncSession):
     adapter = GraphRAGDbAdapter(db_session)
 
     text_units: Sequence[dict] = [
-        {"id": "text-1", "text": "Paragraph 1", "n_tokens": 10},
-        {"id": "text-2", "text": "Paragraph 2", "n_tokens": 12},
+        {"id": "1", "text": "Paragraph 1", "n_tokens": 10},
+        {"id": "2", "text": "Paragraph 2", "n_tokens": 12},
     ]
 
     await adapter.insert_text_units(collection.id, index_run.id, text_units)
@@ -156,7 +156,7 @@ async def test_adapter_inserts_text_units(db_session: AsyncSession):
 
     assert len(result) == 2
     assert contents == ["Paragraph 1", "Paragraph 2"]
-    assert all(row.human_readable_id is None for row in result)
+    assert sorted(row.human_readable_id for row in result) == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -168,13 +168,13 @@ async def test_adapter_inserts_covariates(db_session: AsyncSession):
 
     covariates: Sequence[dict] = [
         {
-            "id": "cov-1",
+            "id": "1",
             "covariate_type": "claim",
             "description": "First",
             "status": "active",
         },
         {
-            "id": "cov-2",
+            "id": "2",
             "covariate_type": "claim",
             "description": "Second",
             "status": "inactive",
@@ -188,7 +188,7 @@ async def test_adapter_inserts_covariates(db_session: AsyncSession):
 
     assert len(result) == 2
     assert descriptions == ["First", "Second"]
-    assert all(row.human_readable_id is None for row in result)
+    assert sorted(row.human_readable_id for row in result) == [1, 2]
 
 
 @pytest.mark.asyncio
