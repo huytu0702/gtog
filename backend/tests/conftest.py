@@ -7,6 +7,7 @@ from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
@@ -40,18 +41,32 @@ def postgres_container():
 def redis_container():
     """Start Redis container."""
     with RedisContainer("redis:7-alpine") as redis:
+        host = redis.get_container_host_ip()
+        port = redis.get_exposed_port(6379)
+        redis_url = f"redis://{host}:{port}"
+
+        if not os.environ.get("REDIS_URL"):
+            os.environ["REDIS_URL"] = redis_url
+
+        from app.config import settings
+        from app.worker.queue import get_queue, get_redis_connection
+
+        settings.redis_url = redis_url
+        get_redis_connection.cache_clear()
+        get_queue.cache_clear()
+
         yield redis
 
 
 @pytest_asyncio.fixture
 async def db_engine(postgres_container):
     """Create database engine for tests."""
-    url = postgres_container.get_connection_url().replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )
+    url = make_url(postgres_container.get_connection_url())
+    url = url.set(drivername="postgresql+asyncpg")
     engine = create_async_engine(url, echo=False)
 
     async with engine.begin() as conn:
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
@@ -76,7 +91,9 @@ async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def client(
+    db_session: AsyncSession, redis_container
+) -> AsyncGenerator[AsyncClient, None]:
     """Create test client with overridden dependencies."""
 
     async def override_get_db_session():
