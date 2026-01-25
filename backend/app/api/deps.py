@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.services.collection_service_db import CollectionServiceDB
 from app.services.document_service_db import DocumentServiceDB
+from app.services.indexing_service_db import IndexingServiceDB
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -54,3 +55,18 @@ async def get_document_service(
         DocumentServiceDB instance
     """
     return DocumentServiceDB(session)
+
+
+async def get_indexing_service(
+    session: AsyncSession = Depends(get_db_session)
+) -> IndexingServiceDB:
+    """
+    FastAPI dependency for indexing service.
+
+    Args:
+        session: Database session from dependency
+
+    Returns:
+        IndexingServiceDB instance
+    """
+    return IndexingServiceDB(session)

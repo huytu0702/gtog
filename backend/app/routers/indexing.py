@@ -1,10 +1,13 @@
 """Indexing endpoints."""
 
 import logging
-from fastapi import APIRouter, HTTPException, status
+from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from ..api.deps import get_indexing_service
 from ..models import IndexStatusResponse
-from ..services import indexing_service, storage_service
+from ..services.indexing_service_db import IndexingServiceDB
 
 logger = logging.getLogger(__name__)
 
@@ -12,48 +15,38 @@ router = APIRouter(prefix="/api/collections/{collection_id}/index", tags=["index
 
 
 @router.post("", response_model=IndexStatusResponse, status_code=status.HTTP_202_ACCEPTED)
-async def start_indexing(collection_id: str):
+async def start_indexing(
+    collection_id: str,
+    service: IndexingServiceDB = Depends(get_indexing_service),
+):
     """Start indexing a collection."""
     try:
-        # Verify collection exists
-        collection = storage_service.get_collection(collection_id)
-        if not collection:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Collection '{collection_id}' not found",
-            )
-        
-        # Check if collection has documents
-        if collection.document_count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Collection must have at least one document to index",
-            )
-        
-        # Start indexing
-        result = await indexing_service.start_indexing(collection_id)
+        result = await service.start_indexing(UUID(collection_id))
         logger.info(f"Started indexing for collection: {collection_id}")
         return result
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error starting indexing")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("", response_model=IndexStatusResponse)
-async def get_index_status(collection_id: str):
+async def get_index_status(
+    collection_id: str,
+    service: IndexingServiceDB = Depends(get_indexing_service),
+):
     """Get the indexing status for a collection."""
     try:
-        status_response = indexing_service.get_index_status(collection_id)
+        status_response = await service.get_index_status(UUID(collection_id))
         if not status_response:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No indexing status found for collection '{collection_id}'",
             )
         return status_response
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.exception("Error getting index status")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

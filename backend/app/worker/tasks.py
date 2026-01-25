@@ -18,7 +18,8 @@ def run_indexing_task(collection_id: str, index_run_id: str) -> dict:
         collection_id: Collection UUID as string
         index_run_id: Index run UUID as string
 
-    Returns:
+    Returns
+    -------
         Result dict with status
     """
     return asyncio.run(_run_indexing_async(
@@ -35,13 +36,14 @@ async def _run_indexing_async(collection_id: UUID, index_run_id: UUID) -> dict:
         collection_id: Collection UUID
         index_run_id: Index run UUID
 
-    Returns:
+    Returns
+    -------
         Result dict with status
     """
-    from app.db.session import get_session
     from app.db.models import IndexRun, IndexRunStatus
+    from app.db.session import get_session
 
-    logger.info(f"Starting indexing for collection {collection_id}, run {index_run_id}")
+    logger.info("Starting indexing for collection %s, run %s", collection_id, index_run_id)
 
     async with get_session() as session:
         # Get index run
@@ -52,7 +54,7 @@ async def _run_indexing_async(collection_id: UUID, index_run_id: UUID) -> dict:
         index_run = result.scalar_one_or_none()
 
         if not index_run:
-            logger.error(f"Index run {index_run_id} not found")
+            logger.error("Index run %s not found", index_run_id)
             return {"status": "error", "message": "Index run not found"}
 
         try:
@@ -63,17 +65,23 @@ async def _run_indexing_async(collection_id: UUID, index_run_id: UUID) -> dict:
 
             # TODO: Run actual GraphRAG indexing pipeline
             # This will be implemented in Phase 7
+            outputs = []  # Placeholder for GraphRAG outputs
+
+            # Ingest outputs to database
+            from app.services.graphrag_db_adapter import GraphRAGDbAdapter
+            adapter = GraphRAGDbAdapter(session)
+            await adapter.ingest_outputs(collection_id, index_run_id, outputs)
 
             # For now, mark as completed
             index_run.status = IndexRunStatus.COMPLETED
             index_run.finished_at = datetime.now()
             await session.commit()
 
-            logger.info(f"Indexing completed for collection {collection_id}")
+            logger.info("Indexing completed for collection %s", collection_id)
             return {"status": "completed", "index_run_id": str(index_run_id)}
 
         except Exception as e:
-            logger.exception(f"Indexing failed for collection {collection_id}")
+            logger.exception("Indexing failed for collection %s", collection_id)
             index_run.status = IndexRunStatus.FAILED
             index_run.finished_at = datetime.now()
             index_run.error = str(e)

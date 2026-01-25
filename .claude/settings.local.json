@@ -9,7 +9,8 @@
       "Bash(findstr:*)",
       "Bash(uvicorn:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []

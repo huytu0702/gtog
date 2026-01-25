@@ -29,7 +29,8 @@ def enqueue_indexing_job(collection_id: UUID, index_run_id: UUID) -> str:
         collection_id: Collection to index
         index_run_id: Index run record ID
 
-    Returns:
+    Returns
+    -------
         Job ID
     """
     from app.worker.tasks import run_indexing_task
