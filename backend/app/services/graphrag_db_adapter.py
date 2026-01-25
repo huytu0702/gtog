@@ -49,7 +49,11 @@ class GraphRAGDbAdapter:
     ) -> None:
         """Insert entity payloads via repository."""
         rows = [
-            {"collection_id": collection_id, "index_run_id": index_run_id, **entity}
+            {
+                "collection_id": collection_id,
+                "index_run_id": index_run_id,
+                **{key: value for key, value in entity.items() if key != "id"},
+            }
             for entity in entities
         ]
         if rows:
