@@ -3,6 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import IndexRunStatus
@@ -23,6 +24,16 @@ class IndexingServiceDB:
         collection = await self.collections.get_by_id(collection_id)
         if not collection:
             raise ValueError(f"Collection '{collection_id}' not found")
+
+        latest_run = await self.runs.get_latest_for_collection(collection_id)
+        if latest_run and latest_run.status in {
+            IndexRunStatus.QUEUED,
+            IndexRunStatus.RUNNING,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Indexing already in progress",
+            )
 
         run = await self.runs.create_run(collection_id)
         job_id = enqueue_indexing_job(collection_id, run.id)

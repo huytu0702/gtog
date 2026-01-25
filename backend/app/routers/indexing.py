@@ -26,6 +26,8 @@ async def start_indexing(
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.exception("Error starting indexing")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
