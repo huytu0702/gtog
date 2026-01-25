@@ -1,6 +1,7 @@
 """Pytest fixtures for integration testing."""
 
 import asyncio
+import os
 from typing import AsyncGenerator
 
 import pytest
@@ -9,6 +10,11 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
+
+if not os.environ.get("DATABASE_URL"):
+    os.environ["DATABASE_URL"] = (
+        "postgresql+asyncpg://graphrag:graphrag@localhost:5432/graphrag"
+    )
 
 from app.db.models import Base
 from app.main import app
