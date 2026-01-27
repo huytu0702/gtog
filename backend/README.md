@@ -203,8 +203,7 @@ If indexing fails:
 
 If search returns errors:
 1. Verify the collection has been successfully indexed
-2. Check that all required parquet files exist in `storage/collections/{id}/output/`
-3. Ensure the query is not empty
+2. Ensure the query is not empty
 
 ### Performance
 

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,8 +21,6 @@ class Settings(BaseSettings):
     graphrag_api_key: str = ""
     openai_api_key: str = ""
 
-    # Storage Configuration (legacy, kept for migration)
-    storage_root_dir: str = "./storage"
 
     # Model Configuration
     default_chat_model: str = "gpt-4o-mini"
@@ -42,22 +42,23 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     @property
-    def collections_dir(self) -> Path:
-        """Get the collections directory path (legacy)."""
-        return Path(self.storage_root_dir) / "collections"
-
-    @property
     def settings_yaml_path(self) -> Path:
         """Get the shared settings.yaml path."""
         return Path(__file__).parent.parent / "settings.yaml"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if self.database_url is None:
+        if not self.database_url:
             self.database_url = (
                 f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
             )
+        if not self.redis_url:
+            self.redis_url = "redis://localhost:6379/0"
+        else:
+            parsed = urlsplit(self.redis_url)
+            if parsed.scheme and parsed.netloc and parsed.path in ("", "/"):
+                self.redis_url = f"{parsed.scheme}://{parsed.netloc}/0"
 
 
 # Global settings instance
