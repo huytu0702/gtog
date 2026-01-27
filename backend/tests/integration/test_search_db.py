@@ -1,6 +1,6 @@
 """Integration tests for Postgres-backed search."""
 
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 import pytest
 from sqlalchemy import select
@@ -17,7 +17,7 @@ async def test_search_returns_results_from_db(client, db_session):
         json={"name": "search-test", "description": "Test search from DB"},
     )
     assert create_resp.status_code == 201
-    collection_id = create_resp.json()["id"]
+    collection_id = UUID(create_resp.json()["id"])
 
     # Create a completed index run with test entities
     index_run_id = uuid4()
@@ -27,6 +27,7 @@ async def test_search_returns_results_from_db(client, db_session):
         status=IndexRunStatus.COMPLETED,
     )
     db_session.add(index_run)
+    await db_session.flush()
 
     # Add test entities
     test_entities = [
@@ -37,7 +38,6 @@ async def test_search_returns_results_from_db(client, db_session):
             title="Test Entity 1",
             type="Organization",
             description="A test organization",
-            graphrag_id="e1",
         ),
         Entity(
             id=uuid4(),
@@ -46,7 +46,6 @@ async def test_search_returns_results_from_db(client, db_session):
             title="Test Entity 2",
             type="Person",
             description="A test person",
-            graphrag_id="e2",
         ),
     ]
     for entity in test_entities:
