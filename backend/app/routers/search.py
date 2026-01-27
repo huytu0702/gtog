@@ -20,6 +20,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/collections/{collection_id}/search", tags=["search"])
 
 
+@router.get("", response_model=SearchResponse)
+async def search(
+    collection_id: str,
+    query: str,
+    method: str = "local",
+    service: QueryServiceDB = Depends(get_query_service),
+):
+    """Perform a search using the specified method."""
+    try:
+        collection_uuid = UUID(collection_id)
+
+        if method == "global":
+            return await service.global_search(collection_uuid, query)
+        elif method == "local":
+            return await service.local_search(collection_uuid, query)
+        elif method == "tog":
+            return await service.tog_search(collection_uuid, query)
+        elif method == "drift":
+            return await service.drift_search(collection_uuid, query)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown search method: {method}",
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Error performing search")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
 @router.post("/global", response_model=SearchResponse)
 async def global_search(
     collection_id: str,
