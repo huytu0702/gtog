@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from .db.session import get_session
 from .models import HealthResponse
+from .config import settings
 from .routers import (
     collections_router,
     documents_router,
