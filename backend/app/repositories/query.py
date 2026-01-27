@@ -23,7 +23,8 @@ class QueryRepository:
             .order_by(IndexRun.finished_at.desc())
             .limit(1)
         )
-        return result.scalar_one_or_none()
+        run_id = result.scalar_one_or_none()
+        return UUID(str(run_id)) if run_id else None
 
     async def get_latest_run_data(self, collection_id: UUID) -> dict[str, Any] | None:
         """Get latest completed run data for a collection."""
@@ -54,7 +55,6 @@ class QueryRepository:
                 "title": e.title,
                 "type": e.type,
                 "description": e.description,
-                "graphrag_id": e.graphrag_id,
             }
             for e in entities
         ]
