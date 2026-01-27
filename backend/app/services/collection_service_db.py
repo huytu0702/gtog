@@ -146,8 +146,8 @@ class CollectionServiceDB:
         Raises:
             ValueError: If collection not found
         """
-        collection = await self.repo.get(collection_id)
+        collection = await self.repo.get_by_id(collection_id)
         if not collection:
             raise ValueError(f"Collection with id '{collection_id}' not found")
 
-        await self.repo.delete(collection_id)
+        await self.repo.delete(collection)

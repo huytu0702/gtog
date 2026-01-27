@@ -43,7 +43,8 @@ async def upload_document(
         if not file.filename.lower().endswith(('.txt', '.md')):
             raise ValueError("Only .txt and .md files are supported")
 
-        result = await service.upload_document(UUID(collection_id), file)
+        resolved_id = await service._resolve_collection_id(collection_id)
+        result = await service.upload_document(resolved_id, file)
         logger.info(f"Uploaded document {file.filename} to collection {collection_id}")
         return result
     except ValueError as e:
@@ -62,7 +63,8 @@ async def list_documents(
 ):
     """List all documents in a collection."""
     try:
-        documents = await service.list_documents(UUID(collection_id))
+        resolved_id = await service._resolve_collection_id(collection_id)
+        documents = await service.list_documents(resolved_id)
         return DocumentList(documents=documents, total=len(documents))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -79,7 +81,8 @@ async def delete_document(
 ):
     """Delete a document from a collection."""
     try:
-        await service.delete_document(UUID(collection_id), document_name)
+        resolved_id = await service._resolve_collection_id(collection_id)
+        await service.delete_document(resolved_id, document_name)
         logger.info(f"Deleted document {document_name} from collection {collection_id}")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

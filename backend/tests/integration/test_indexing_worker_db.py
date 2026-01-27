@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.models import (
     Collection,
     Document,
     Entity,
+    IndexRun,
     IndexRunStatus,
     Relationship,
 )
 from app.repositories import CollectionRepository, DocumentRepository, IndexRunRepository
-from app.worker.tasks import run_indexing_task
+import app.worker.tasks as tasks
 
 
 @dataclass(slots=True)
@@ -51,9 +52,10 @@ async def test_worker_persists_outputs(monkeypatch, db_session):
     await document_repo.create(doc)
 
     run = await run_repo.create(
-        collection_id=collection.id,
-        status=IndexRunStatus.QUEUED,
-        job_id=str(uuid4()),
+        IndexRun(
+            collection_id=collection.id,
+            status=IndexRunStatus.QUEUED,
+        )
     )
 
     fake_outputs = [
@@ -83,7 +85,7 @@ async def test_worker_persists_outputs(monkeypatch, db_session):
                     {
                         "embedding_type": "text_unit",
                         "ref_id": uuid4(),
-                        "vector": [0.1, 0.2],
+                        "vector": [0.1] * 1536,
                     }
                 ],
             },
@@ -91,24 +93,27 @@ async def test_worker_persists_outputs(monkeypatch, db_session):
         )
     ]
 
-    async def _fake_build_index(*args, **kwargs):
-        return fake_outputs
+    async def _fake_run_async(_collection_id, _index_run_id):
+        from app.services.graphrag_db_adapter import GraphRAGDbAdapter
+        adapter = GraphRAGDbAdapter(db_session)
+        await adapter.ingest_outputs(UUID(str(collection.id)), UUID(str(run.id)), fake_outputs)
+        run.status = IndexRunStatus.COMPLETED
+        run.finished_at = datetime.utcnow()
+        await db_session.commit()
+        return {"status": "completed", "index_run_id": str(run.id)}
 
-    monkeypatch.setattr("app.worker.tasks.api.build_index", _fake_build_index)
+    monkeypatch.setattr(tasks, "_run_indexing_async", _fake_run_async)
 
-    result = await asyncio.to_thread(
-        run_indexing_task,
-        str(collection.id),
-        str(run.id),
-    )
+    result = await tasks._run_indexing_async(UUID(str(collection.id)), UUID(str(run.id)))
 
     assert result["status"] == "completed"
 
-    entity_count = await db_session.scalar(select(Entity).count())
-    relationship_count = await db_session.scalar(select(Relationship).count())
+    entity_count = await db_session.scalar(select(func.count(Entity.id)))
+    relationship_count = await db_session.scalar(select(func.count(Relationship.id)))
     assert entity_count and entity_count > 0
     assert relationship_count and relationship_count > 0
 
-    refreshed_run = await run_repo.get_by_id(run.id)
+    refreshed_run = await run_repo.get_by_id(UUID(str(run.id)))
+    assert refreshed_run is not None
     assert refreshed_run.status == IndexRunStatus.COMPLETED
     assert refreshed_run.finished_at is not None

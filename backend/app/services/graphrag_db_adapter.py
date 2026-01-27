@@ -38,8 +38,34 @@ class GraphRAGDbAdapter:
         index_run_id: UUID,
         outputs: Iterable[object],
     ) -> None:
-        """Persist GraphRAG outputs to database (placeholder)."""
-        return
+        """Persist GraphRAG outputs to database."""
+        for output in outputs:
+            state = getattr(output, "state", None)
+            if not isinstance(state, dict):
+                continue
+
+            entities = state.get("entities") or []
+            relationships = state.get("relationships") or []
+            communities = state.get("communities") or []
+            community_reports = state.get("community_reports") or []
+            text_units = state.get("text_units") or []
+            covariates = state.get("covariates") or []
+            embeddings = state.get("embeddings") or []
+
+            if entities:
+                await self.insert_entities(collection_id, index_run_id, entities)
+            if relationships:
+                await self.insert_relationships(collection_id, index_run_id, relationships)
+            if communities:
+                await self.insert_communities(collection_id, index_run_id, communities)
+            if community_reports:
+                await self.insert_community_reports(collection_id, index_run_id, community_reports)
+            if text_units:
+                await self.insert_text_units(collection_id, index_run_id, text_units)
+            if covariates:
+                await self.insert_covariates(collection_id, index_run_id, covariates)
+            if embeddings:
+                await self.insert_embeddings(collection_id, index_run_id, embeddings)
 
     def _build_rows(
         self,

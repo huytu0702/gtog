@@ -26,6 +26,15 @@ class DocumentServiceDB:
             raise ValueError(f"Collection '{collection_id}' not found")
         return collection
 
+    async def _resolve_collection_id(self, collection_id: str) -> UUID:
+        try:
+            return UUID(collection_id)
+        except ValueError:
+            collection = await self.collections.get_by_name(collection_id)
+            if not collection:
+                raise ValueError(f"Collection '{collection_id}' not found")
+            return collection.id
+
     async def upload_document(self, collection_id: UUID, file: UploadFile) -> DocumentResponse:
         await self._get_collection_or_error(collection_id)
 
