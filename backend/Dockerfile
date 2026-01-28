@@ -8,12 +8,17 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+# Copy and install graphrag package
+COPY graphrag/ /tmp/graphrag/
+COPY pyproject.toml /tmp/
+RUN pip install --no-cache-dir /tmp/ && rm -rf /tmp/
+
+# Install Python dependencies for backend
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY backend/ .
 
 # Expose port
 EXPOSE 8000

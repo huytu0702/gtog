@@ -1,0 +1,941 @@
+openapi: 3.1.0
+info:
+  title: GraphRAG API
+  description: |
+    FastAPI backend for GraphRAG document indexing and search with ToG (Think-on-Graph) deep reasoning capabilities.
+
+    The API provides endpoints for:
+    - Managing document collections (create, list, get, delete)
+    - Uploading and managing documents within collections
+    - Triggering and monitoring GraphRAG indexing pipeline
+    - Executing various search methods (Global, Local, ToG, DRIFT)
+
+    ## Search Methods
+
+    - **Global Search**: Map-reduce over community reports for broad overviews
+    - **Local Search**: Entity-centric retrieval with direct evidence
+    - **ToG Search**: Deep graph exploration with beam search and chain-of-thought reasoning
+    - **DRIFT Search**: Multi-hop reasoning for dynamic scenarios
+
+    ## Authentication
+
+    Currently the API does not require authentication. Authentication can be added via middleware.
+  version: 1.0.0
+  contact:
+    name: GraphRAG API Support
+    url: https://github.com/microsoft/graphrag
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development server
+  - url: https://api.graphrag.example.com
+    description: Production server (example)
+
+tags:
+  - name: collections
+    description: Collection management operations
+  - name: documents
+    description: Document upload and management operations
+  - name: indexing
+    description: GraphRAG indexing pipeline operations
+  - name: search
+    description: Knowledge graph search operations
+  - name: health
+    description: Health check endpoints
+  - name: root
+    description: Root endpoint
+
+paths:
+  /:
+    get:
+      tags: [root]
+      summary: Root endpoint
+      description: Returns API metadata and documentation links
+      operationId: root
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "GraphRAG FastAPI Backend"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  docs:
+                    type: string
+                    example: "/docs"
+
+  /health:
+    get:
+      tags: [health]
+      summary: Health check endpoint
+      description: Returns the health status of the API server
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/collections:
+    get:
+      tags: [collections]
+      summary: List all collections
+      description: Returns a list of all document collections with metadata
+      operationId: listCollections
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionList'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags: [collections]
+      summary: Create a new collection
+      description: Creates a new document collection with the specified name and optional description
+      operationId: createCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionCreate'
+      responses:
+        '201':
+          description: Collection created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '409':
+          description: Collection with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}:
+    get:
+      tags: [collections]
+      summary: Get collection details
+      description: |
+        Retrieves details about a specific collection by UUID or name.
+        Supports both UUID format and collection name as identifier.
+      operationId: getCollection
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [collections]
+      summary: Delete a collection
+      description: |
+        Deletes a collection and all its contents including documents and indexed data.
+        Supports both UUID format and collection name as identifier.
+      operationId: deleteCollection
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      responses:
+        '204':
+          description: Collection deleted successfully
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/documents:
+    get:
+      tags: [documents]
+      summary: List documents in collection
+      description: Returns a list of all documents in the specified collection
+      operationId: listDocuments
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentList'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags: [documents]
+      summary: Upload a document
+      description: |
+        Uploads a text or markdown file to the collection.
+        Maximum file size: 25MB.
+        Supported file types: .txt, .md
+      operationId: uploadDocument
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload
+              required:
+                - file
+      responses:
+        '201':
+          description: Document uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Invalid file type or file too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: File exceeds maximum size of 25 MB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/documents/{document_name}:
+    delete:
+      tags: [documents]
+      summary: Delete a document
+      description: Deletes a document from the collection
+      operationId: deleteDocument
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+        - name: document_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the document to delete
+      responses:
+        '204':
+          description: Document deleted successfully
+        '404':
+          description: Collection or document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/index:
+    get:
+      tags: [indexing]
+      summary: Get indexing status
+      description: Returns the current indexing status for a collection
+      operationId: getIndexStatus
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatusResponse'
+        '404':
+          description: Collection or indexing status not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags: [indexing]
+      summary: Start indexing
+      description: |
+        Starts the GraphRAG indexing pipeline for a collection.
+        This is an asynchronous operation that runs in the background.
+        Returns immediately with status ACCEPTED (202).
+      operationId: startIndexing
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      responses:
+        '202':
+          description: Indexing started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatusResponse'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/search:
+    get:
+      tags: [search]
+      summary: Generic search endpoint
+      description: |
+        Performs a search using the specified method via query parameter.
+        Supports: global, local, tog, drift
+      operationId: search
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1000
+          description: The search query text
+        - name: method
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [global, local, tog, drift]
+            default: local
+          description: The search method to use
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query or unknown search method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags: [search]
+      summary: Global search
+      description: |
+        Performs a global search (map-reduce over community reports).
+        Best for broad questions about the entire collection.
+      operationId: globalSearch
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlobalSearchRequest'
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/search/global:
+    post:
+      tags: [search]
+      summary: Global search
+      description: |
+        Performs a global search (map-reduce over community reports).
+        Best for broad questions about the entire collection.
+      operationId: globalSearchPost
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlobalSearchRequest'
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/search/local:
+    post:
+      tags: [search]
+      summary: Local search
+      description: |
+        Performs a local search (entity-centric retrieval with direct evidence).
+        Best for specific questions about entities and relationships.
+      operationId: localSearch
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalSearchRequest'
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/search/tog:
+    post:
+      tags: [search]
+      summary: ToG search
+      description: |
+        Performs a ToG (Think-on-Graph) search with deep reasoning.
+        Uses iterative graph exploration with beam search and chain-of-thought reasoning.
+        Best for complex multi-hop reasoning with transparent reasoning chains.
+      operationId: togSearch
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToGSearchRequest'
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/collections/{collection_id}/search/drift:
+    post:
+      tags: [search]
+      summary: DRIFT search
+      description: |
+        Performs a DRIFT search (multi-hop reasoning).
+        Dynamic reasoning for hypothetical scenarios.
+      operationId: driftSearch
+      parameters:
+        - $ref: '#/components/parameters/collectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftSearchRequest'
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "healthy"
+        version:
+          type: string
+          example: "1.0.0"
+
+    CollectionCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Collection name (letters, numbers, underscores, hyphens only)
+          example: "research-papers"
+        description:
+          type: string
+          maxLength: 500
+          description: Optional collection description
+          example: "Collection of research papers on machine learning"
+
+    CollectionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Collection UUID
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          description: Collection name
+          example: "research-papers"
+        description:
+          type: string
+          nullable: true
+          description: Collection description
+          example: "Collection of research papers on machine learning"
+        created_at:
+          type: string
+          format: date-time
+          description: Collection creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        document_count:
+          type: integer
+          description: Number of documents in the collection
+          example: 15
+        indexed:
+          type: boolean
+          description: Whether the collection has been indexed
+          example: true
+
+    CollectionList:
+      type: object
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionResponse'
+        total:
+          type: integer
+          description: Total number of collections
+          example: 5
+
+    DocumentResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Document filename
+          example: "paper1.txt"
+        size:
+          type: integer
+          description: File size in bytes
+          example: 102400
+        uploaded_at:
+          type: string
+          format: date-time
+          description: Upload timestamp
+          example: "2024-01-15T11:30:00Z"
+
+    DocumentList:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentResponse'
+        total:
+          type: integer
+          description: Total number of documents
+          example: 15
+
+    IndexStatusResponse:
+      type: object
+      properties:
+        collection_id:
+          type: string
+          format: uuid
+          description: Collection UUID
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, COMPLETED, FAILED]
+          description: Indexing status
+          example: "RUNNING"
+        progress:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Progress percentage (0-100)
+          example: 45.5
+        message:
+          type: string
+          nullable: true
+          description: Optional status message
+          example: "Extracting entities from documents..."
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Indexing start timestamp
+          example: "2024-01-15T12:00:00Z"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Indexing completion timestamp
+          example: "2024-01-15T12:30:00Z"
+        error:
+          type: string
+          nullable: true
+          description: Error message if indexing failed
+          example: null
+
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: The search query text
+          example: "What are the main findings of this research?"
+        streaming:
+          type: boolean
+          description: Whether to stream the response (not implemented)
+          default: false
+
+    LocalSearchRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequest'
+        - type: object
+          properties:
+            community_level:
+              type: integer
+              minimum: 0
+              maximum: 10
+              default: 2
+              description: Community level for entity retrieval
+            response_type:
+              type: string
+              enum:
+                - Single Paragraph
+                - Single Sentence
+                - Multiple Paragraphs
+                - List of 3-7 Points
+                - List of 5-10 Points
+              default: Multiple Paragraphs
+              description: Response format type
+
+    GlobalSearchRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequest'
+        - type: object
+          properties:
+            community_level:
+              type: integer
+              minimum: 0
+              maximum: 10
+              nullable: true
+              description: Community level for community report retrieval
+            dynamic_community_selection:
+              type: boolean
+              default: false
+              description: Whether to dynamically select communities
+            response_type:
+              type: string
+              enum:
+                - Single Paragraph
+                - Single Sentence
+                - Multiple Paragraphs
+                - List of 3-7 Points
+                - List of 5-10 Points
+              default: Multiple Paragraphs
+              description: Response format type
+
+    DriftSearchRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequest'
+        - type: object
+          properties:
+            community_level:
+              type: integer
+              minimum: 0
+              maximum: 10
+              default: 2
+              description: Community level for entity retrieval
+            response_type:
+              type: string
+              enum:
+                - Single Paragraph
+                - Single Sentence
+                - Multiple Paragraphs
+                - List of 3-7 Points
+                - List of 5-10 Points
+              default: Multiple Paragraphs
+              description: Response format type
+
+    ToGSearchRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequest'
+        - type: object
+          properties:
+            max_depth:
+              type: integer
+              nullable: true
+              description: Maximum graph traversal depth for exploration
+            beam_width:
+              type: integer
+              nullable: true
+              description: Beam width for graph exploration
+            show_exploration_paths:
+              type: boolean
+              default: false
+              description: Whether to include exploration paths in response
+
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The original query
+          example: "What are the main findings of this research?"
+        response:
+          type: string
+          description: The search response text
+          example: "The main findings include three key results: first, the model achieved 95% accuracy on the test set; second, training converged in 100 epochs; third, the approach is scalable to larger datasets."
+        context_data:
+          type: object
+          nullable: true
+          description: Additional context data (entities, relationships, communities, etc.)
+          example:
+            entities:
+              - name: "model"
+                type: "System"
+            relationships:
+              - source: "model"
+                target: "accuracy"
+                description: "achieved 95% accuracy"
+        method:
+          type: string
+          enum: [global, local, tog, drift, basic]
+          description: The search method used
+          example: "local"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "Collection not found"
+        message:
+          type: string
+          description: Detailed error message
+          example: "Collection 'test-collection' not found"
+        detail:
+          type: object
+          description: Additional error details (optional)
+          example:
+            field: "name"
+            constraint: "unique"
+
+  parameters:
+    collectionId:
+      name: collection_id
+      in: path
+      required: true
+      description: |
+        Collection identifier. Supports both UUID format and collection name.
+        Example UUID: 123e4567-e89b-12d3-a456-426614174000
+        Example name: research-papers
+      schema:
+        type: string
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key authentication (optional, can be enabled)
+
+security: []

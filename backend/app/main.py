@@ -2,10 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -35,9 +32,10 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting GraphRAG FastAPI backend...")
 
-    alembic_config = Config(Path(__file__).resolve().parents[1] / "alembic.ini")
-    command.upgrade(alembic_config, "head")
+    # Migrations should be run separately using:
+    # docker-compose exec backend alembic upgrade head
 
+    # Test database connection
     async with get_session() as session:
         await session.execute(text("SELECT 1"))
 
