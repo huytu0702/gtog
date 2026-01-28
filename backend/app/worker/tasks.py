@@ -95,7 +95,9 @@ async def _run_graphrag_pipeline(
         return await globals()["_fake_build_index"]()
 
     import graphrag.api as api
+    import pandas as pd
     from app.db.models import Document
+    from app.utils.helpers import load_graphrag_config
     from sqlalchemy import select
 
     result = await session.execute(
@@ -103,16 +105,20 @@ async def _run_graphrag_pipeline(
     )
     documents = result.scalars().all()
 
-    # Write temp files for GraphRAG input
-    from tempfile import TemporaryDirectory
-    from pathlib import Path
+    config = load_graphrag_config(str(collection_id))
 
-    with TemporaryDirectory() as tmpdir:
-        input_dir = Path(tmpdir) / "input"
-        input_dir.mkdir(parents=True, exist_ok=True)
-        for doc in documents:
-            filename = doc.filename or f"{doc.id}.txt"
-            path = input_dir / filename
-            path.write_bytes(doc.bytes_content or b"")
+    rows = []
+    for doc in documents:
+        rows.append(
+            {
+                "id": str(doc.id),
+                "title": doc.filename or str(doc.id),
+                "text": (doc.bytes_content or b"").decode("utf-8", errors="replace"),
+            }
+        )
+    input_documents = pd.DataFrame(rows) if rows else None
 
-        return await api.build_index(str(input_dir))
+    return await api.build_index(
+        config=config,
+        input_documents=input_documents,
+    )
