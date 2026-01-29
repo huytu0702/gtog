@@ -70,9 +70,7 @@ async def run_evaluation(
     graphrag_config = load_config(root)
 
     # Create LLM judge using the default chat model
-    model_settings = graphrag_config.get_language_model_config(
-        graphrag_config.default_chat_model_id
-    )
+    model_settings = graphrag_config.get_language_model_config("default_chat_model")
     judge_model = ModelManager().get_or_create_chat_model(
         name="eval_judge",
         model_type=model_settings.type,

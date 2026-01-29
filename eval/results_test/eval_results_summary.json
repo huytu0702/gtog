@@ -1,0 +1,76 @@
+{
+  "metadata": {
+    "timestamp": "2026-01-29T23:32:16.877835",
+    "total_questions": 3,
+    "methods": [
+      "basic",
+      "tog",
+      "local"
+    ],
+    "movies": [
+      "tt0097576"
+    ]
+  },
+  "by_method": {
+    "basic": {
+      "correctness": 0.3333333333333333,
+      "faithfulness": 0.3333333333333333,
+      "relevance": 0.0,
+      "completeness": 0.3333333333333333
+    },
+    "tog": {
+      "correctness": 0.3333333333333333,
+      "faithfulness": 0.0,
+      "relevance": 0.3333333333333333,
+      "completeness": 0.6666666666666666
+    },
+    "local": {
+      "correctness": 0.3333333333333333,
+      "faithfulness": 0.0,
+      "relevance": 1.0,
+      "completeness": 0.3333333333333333
+    }
+  },
+  "by_movie": {
+    "tt0097576": {
+      "basic": {
+        "correctness": 0.3333333333333333,
+        "faithfulness": 0.3333333333333333,
+        "relevance": 0.0,
+        "completeness": 0.3333333333333333
+      },
+      "tog": {
+        "correctness": 0.3333333333333333,
+        "faithfulness": 0.0,
+        "relevance": 0.3333333333333333,
+        "completeness": 0.6666666666666666
+      },
+      "local": {
+        "correctness": 0.3333333333333333,
+        "faithfulness": 0.0,
+        "relevance": 1.0,
+        "completeness": 0.3333333333333333
+      }
+    }
+  },
+  "efficiency": {
+    "basic": {
+      "avg_latency": 5.384858131408691,
+      "avg_llm_calls": 0.0,
+      "avg_prompt_tokens": 0.0,
+      "avg_output_tokens": 0.0
+    },
+    "tog": {
+      "avg_latency": 17.750834147135418,
+      "avg_llm_calls": 0.0,
+      "avg_prompt_tokens": 0.0,
+      "avg_output_tokens": 0.0
+    },
+    "local": {
+      "avg_latency": 5.07826042175293,
+      "avg_llm_calls": 0.0,
+      "avg_prompt_tokens": 0.0,
+      "avg_output_tokens": 0.0
+    }
+  }
+}

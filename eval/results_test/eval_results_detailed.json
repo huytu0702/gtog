@@ -1,0 +1,214 @@
+{
+  "metadata": {
+    "timestamp": "2026-01-29T23:32:16.877835",
+    "total_questions": 3,
+    "methods": [
+      "basic",
+      "tog",
+      "local"
+    ],
+    "movies": [
+      "tt0097576"
+    ]
+  },
+  "results": [
+    {
+      "imdb_key": "tt0097576",
+      "question": "Who does the golden crucifix the grave robbers had belong to?",
+      "ground_truth": "To Coronado",
+      "methods": {
+        "tog": {
+          "response": "The golden crucifix that the grave robbers had belongs to Coronado, as it is identified as the Cross of Coronado, which was given to Coronado by Cortes in 1521.",
+          "scores": {
+            "correctness": 1,
+            "faithfulness": 0,
+            "relevance": 0,
+            "completeness": 1
+          },
+          "efficiency": {
+            "latency": 23.37118911743164,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "Who does the golden crucifix the grave robbers had belong to?",
+      "ground_truth": "To Coronado",
+      "methods": {
+        "local": {
+          "response": "The golden crucifix, known as the Cross of Coronado, is an important artifact that was given to Coronado by Cortes in 1521. This artifact is central to the plot as Indy seeks to protect it from the treasure hunters, including Fedora and his gang, who are actively pursuing it for its historical and spiritual significance [Data: Entities (12); Reports (1); Sources (1)]. \n\nFedora, the leader of the treasure hunting group, admires the Cross, indicating its value and significance to him and his team. The narrative emphasizes the importance of the Cross not only as a valuable item but also as a piece of history that belongs in a museum, according to Indy [Data: Relationships (14, 15); Sources (1)]. \n\nOverall, the Cross of Coronado serves as a pivotal element in the conflict between Indy and the treasure hunters, highlighting themes of adventure, rivalry, and the ethical implications of treasure hunting.",
+          "scores": {
+            "correctness": 1,
+            "faithfulness": 0,
+            "relevance": 1,
+            "completeness": 0
+          },
+          "efficiency": {
+            "latency": 4.748511075973511,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "Who does the golden crucifix the grave robbers had belong to?",
+      "ground_truth": "To Coronado",
+      "methods": {
+        "basic": {
+          "response": "The golden crucifix that the grave robbers had is identified as the Cross of Coronado. According to the screenplay, this artifact was given to Coronado by Cortes in the year 1521. Indiana Jones, who witnesses the scene, expresses that the Cross is an important artifact and asserts that it belongs in a museum [Data: Sources (1, 2)]. \n\nThe scene highlights the significance of the Cross, not only as a valuable item but also as a piece of history that should be preserved rather than looted. This context emphasizes Indiana's character as someone who values historical artifacts and their rightful place in cultural heritage.",
+          "scores": {
+            "correctness": 1,
+            "faithfulness": 0,
+            "relevance": 0,
+            "completeness": 0
+          },
+          "efficiency": {
+            "latency": 4.0548014640808105,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "What is Indy doing with his Boy Scout troop in the beginning of the movie?",
+      "ground_truth": "He is horseback riding",
+      "methods": {
+        "tog": {
+          "response": "Indy is with his Boy Scout troop, led by Scoutmaster Mr. Havelock, as they are exploring the desert and come across treasure hunters.",
+          "scores": {
+            "correctness": 0,
+            "faithfulness": 0,
+            "relevance": 0,
+            "completeness": 1
+          },
+          "efficiency": {
+            "latency": 10.837100744247437,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "What is Indy doing with his Boy Scout troop in the beginning of the movie?",
+      "ground_truth": "He is horseback riding",
+      "methods": {
+        "local": {
+          "response": "In the beginning of the movie, Indy is part of a Troop of Boy Scouts, exploring the desert and specifically the Cliff Pueblo. The troop, led by their Scoutmaster, Mr. Havelock, is engaged in an adventure that involves navigating through the ancient ruins and secret chambers known as Kivas. This setting provides a backdrop for their exploration, where they encounter various challenges and discoveries.\n\nDuring this exploration, Indy demonstrates his curiosity and bravery, which are characteristic traits of his adventurous spirit. He observes a group of treasure hunters, led by a character named Fedora, who are digging for valuable artifacts, including the significant Cross of Coronado. Indy's protective instincts kick in as he recognizes the importance of the Cross, believing it belongs in a museum rather than being looted [Data: Sources (1, 2); Reports (0, 1); Entities (1, 12, 18)]. \n\nThis initial setup not only establishes Indy's character as a young adventurer but also sets the stage for the ensuing conflict with the treasure hunters, highlighting themes of adventure, exploration, and the ethical implications of treasure hunting.",
+          "scores": {
+            "correctness": 0,
+            "faithfulness": 0,
+            "relevance": 1,
+            "completeness": 1
+          },
+          "efficiency": {
+            "latency": 5.374494314193726,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "What is Indy doing with his Boy Scout troop in the beginning of the movie?",
+      "ground_truth": "He is horseback riding",
+      "methods": {
+        "basic": {
+          "response": "In the beginning of the movie \"Indiana Jones and the Last Crusade,\" young Indiana Jones is on an adventure with his Boy Scout troop in the desert of the American Southwest. The scene opens with a group of riders, initially appearing to be Army Cavalry Soldiers, but it is soon revealed that they are actually a troop of Boy Scouts, led by their Scoutmaster, Mr. Havelock. The boys, all around thirteen years of age, are exploring an ancient cliff pueblo.\n\nAs they dismount, one of the Scouts, named Herman, shows signs of being horsesick, while another Scout befriends him. The Scoutmaster warns the boys not to wander off, as the passageways in the pueblo can be extensive. Two Scouts venture into a dark passageway, where they encounter spiders and a drop in temperature. Despite Herman's hesitations, he is drawn along by the adventurous spirit of his companion.\n\nThe boys soon discover a group of men digging in one of the pueblo's secret chambers, known as \"Kivas.\" Among these men is a character referred to as Fedora, who is later revealed to be a significant figure in Indy's life. Young Indy observes the men as they uncover a bejeweled cross, which he recognizes as the Cross of Coronado, an important artifact that he believes belongs in a museum. This moment sets the stage for Indy's resolve to intervene and protect the artifact from being looted [Data: Sources (0, 1, +more)]. \n\nOverall, this opening sequence establishes the adventurous tone of the film and introduces young Indy as a character with a strong sense of justice and a passion for archaeology.",
+          "scores": {
+            "correctness": 0,
+            "faithfulness": 0,
+            "relevance": 0,
+            "completeness": 1
+          },
+          "efficiency": {
+            "latency": 7.850701808929443,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "Who makes Indy return the crucifix after escaping from the grave robbers?",
+      "ground_truth": "Local Sheriff",
+      "methods": {
+        "tog": {
+          "response": "1. **Direct Answer**: Indy returns the crucifix after being pursued by Fedora and his gang, which includes characters like Roscoe and Halfbreed.\n\n2. **Evidence**: The exploration paths indicate that Indy is being chased by Roscoe, who is part of a group led by Fedora. The triplet shows that Roscoe is actively pursuing Indy after he takes the Cross of Coronado, indicating a direct conflict. Additionally, Halfbreed is also pursuing Indy during this chase.\n\n3. **Reasoning**: The relationships highlight that Roscoe and Halfbreed are part of a treasure hunting group led by Fedora, who is interested in valuable artifacts. Indy recognizes the Cross of Coronado as an important artifact that belongs in a museum, which suggests that his return of the crucifix is motivated by a desire to protect it from falling into the hands of treasure hunters like Fedora and his gang. The triplet indicating that Roscoe is part of the group chasing Indy reinforces the idea that the pressure from these antagonistic characters leads Indy to return the crucifix. \n\nOverall, the combination of these relationships illustrates the conflict between Indy and the treasure hunters, culminating in his decision to return the crucifix.",
+          "scores": {
+            "correctness": 0,
+            "faithfulness": 0,
+            "relevance": 1,
+            "completeness": 0
+          },
+          "efficiency": {
+            "latency": 19.044212579727173,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "Who makes Indy return the crucifix after escaping from the grave robbers?",
+      "ground_truth": "Local Sheriff",
+      "methods": {
+        "local": {
+          "response": "Indy is compelled to return the Cross of Coronado after his encounter with the grave robbers, primarily due to his sense of responsibility and the influence of his mentor, Mister Havelock. During the narrative, Indy recognizes the Cross as an important artifact that belongs in a museum, indicating his protective stance towards it [Data: Sources (1)]. \n\nIn the context of the story, Indy is initially in a precarious situation, having taken the Cross from the grave robbers led by Fedora. However, his moral compass and the urgency to inform Mister Havelock about the looting drive him to act. He instructs his companion, Herman, to find Mister Havelock and alert him about the grave robbers, showcasing his commitment to preserving historical artifacts and ensuring they are not misused [Data: Sources (1)].\n\nThus, it is both Indy's ethical beliefs and the guidance of Mister Havelock that ultimately lead him to return the Cross after his escape from the grave robbers.",
+          "scores": {
+            "correctness": 0,
+            "faithfulness": 0,
+            "relevance": 1,
+            "completeness": 0
+          },
+          "efficiency": {
+            "latency": 5.111775875091553,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "imdb_key": "tt0097576",
+      "question": "Who makes Indy return the crucifix after escaping from the grave robbers?",
+      "ground_truth": "Local Sheriff",
+      "methods": {
+        "basic": {
+          "response": "In the screenplay excerpt, it is not explicitly stated who makes Indy return the crucifix after his escape from the grave robbers. However, it is clear that Indy is aware of the importance of the Cross of Coronado, as he expresses that it is an important artifact that belongs in a museum [Data: Sources (1)]. \n\nIndy\u2019s actions suggest a strong moral compass regarding the artifact, indicating that he feels a responsibility to return it to its rightful place. He is seen taking the Cross and attempting to escape from the grave robbers, but the screenplay does not provide details on any specific character compelling him to return it after his escape. \n\nThus, while the screenplay highlights Indy's internal conflict and sense of duty towards the artifact, it does not provide a clear answer regarding who specifically influences him to return the crucifix.",
+          "scores": {
+            "correctness": 0,
+            "faithfulness": 1,
+            "relevance": 0,
+            "completeness": 0
+          },
+          "efficiency": {
+            "latency": 4.24907112121582,
+            "llm_calls": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    }
+  ]
+}
