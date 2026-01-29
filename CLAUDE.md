@@ -20,6 +20,9 @@ This is GraphRAG (Graph-based Retrieval-Augmented Generation) from Microsoft Res
 
 **KISS** - Simple beats clever. If it's hard to read, simplify it.
 
+Use default model to implementation task.
+Use haiku model to exploration task.
+
 ## Common Development Tasks
 
 ### Core Commands
