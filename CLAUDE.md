@@ -23,6 +23,8 @@ This is GraphRAG (Graph-based Retrieval-Augmented Generation) from Microsoft Res
 Use default model to implementation task.
 Use haiku model to exploration task.
 
+Don't include Co-author in commit message.
+
 ## Common Development Tasks
 
 ### Core Commands

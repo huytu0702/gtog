@@ -8,12 +8,12 @@ from graphrag.config.models.cache_config import CacheConfig
 from graphrag.config.models.chunking_config import ChunkingConfig
 from graphrag.config.models.cluster_graph_config import ClusterGraphConfig
 from graphrag.config.models.community_reports_config import CommunityReportsConfig
-from graphrag.config.models.drift_search_config import DriftSearchConfig
+from graphrag.config.models.drift_search_config import DRIFTSearchConfig
 from graphrag.config.models.embed_graph_config import EmbedGraphConfig
 from graphrag.config.models.eval_config import EvalConfig
-from graphrag.config.models.extract_claims_config import ExtractClaimsConfig
+from graphrag.config.models.extract_claims_config import ClaimExtractionConfig
 from graphrag.config.models.extract_graph_config import ExtractGraphConfig
-from graphrag.config.models.extract_graph_nlp_config import ExtractGraphNlpConfig
+from graphrag.config.models.extract_graph_nlp_config import ExtractGraphNLPConfig
 from graphrag.config.models.global_search_config import GlobalSearchConfig
 from graphrag.config.models.input_config import InputConfig
 from graphrag.config.models.language_model_config import LanguageModelConfig
