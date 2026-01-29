@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.vector_stores.base import BaseVectorStore
@@ -11,6 +12,27 @@ from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class PruningMetrics:
+    """Metrics collected during pruning operations."""
+
+    llm_calls: int = 0
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+    embedding_calls: int = 0
+    embedding_tokens: int = 0
+
+    def __add__(self, other: "PruningMetrics") -> "PruningMetrics":
+        """Combine two PruningMetrics instances."""
+        return PruningMetrics(
+            llm_calls=self.llm_calls + other.llm_calls,
+            prompt_tokens=self.prompt_tokens + other.prompt_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            embedding_calls=self.embedding_calls + other.embedding_calls,
+            embedding_tokens=self.embedding_tokens + other.embedding_tokens,
+        )
+
+
 class PruningStrategy:
     """Base class for pruning strategies."""
 
@@ -19,10 +41,10 @@ class PruningStrategy:
         query: str,
         entity_name: str,
         relations: List[Tuple[str, str, str, float]],
-    ) -> List[Tuple[str, str, str, float, float]]:
+    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
         """
         Score relations for relevance to query.
-        Returns: List of (relation, target_id, direction, weight, relevance_score)
+        Returns: Tuple of (List of (relation, target_id, direction, weight, relevance_score), PruningMetrics)
         """
         raise NotImplementedError
 
@@ -31,11 +53,11 @@ class PruningStrategy:
         query: str,
         current_path: str,
         entities: List[Tuple[str, str, str]],
-    ) -> List[float]:
+    ) -> Tuple[List[float], PruningMetrics]:
         """
         Score entities for relevance.
         entities: List of (entity_id, entity_name, entity_description)
-        Returns: List of scores (same order as input)
+        Returns: Tuple of (List of scores (same order as input), PruningMetrics)
         """
         raise NotImplementedError
 
@@ -90,11 +112,12 @@ class LLMPruning(PruningStrategy):
         query: str,
         entity_name: str,
         relations: List[Tuple[str, str, str, float]],
-    ) -> List[Tuple[str, str, str, float, float]]:
+    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using LLM."""
+        metrics = PruningMetrics()
 
         if not relations:
-            return []
+            return [], metrics
 
         # Build relations text
         relations_text = "\n".join([
@@ -114,27 +137,35 @@ class LLMPruning(PruningStrategy):
         ):
             response += chunk
 
+        # Update metrics
+        metrics.llm_calls = 1
+        # Estimate tokens (rough approximation: 4 chars per token)
+        metrics.prompt_tokens = len(prompt) // 4
+        metrics.output_tokens = len(response) // 4
+
         # Parse scores
         scores = self._parse_scores(response, len(relations))
 
         # Combine with relation data
-        return [
+        scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
                 relations, scores
             )
         ]
+        return scored_relations, metrics
 
     async def score_entities(
         self,
         query: str,
         current_path: str,
         entities: List[Tuple[str, str, str]],
-    ) -> List[float]:
+    ) -> Tuple[List[float], PruningMetrics]:
         """Score entities using LLM."""
+        metrics = PruningMetrics()
 
         if not entities:
-            return []
+            return [], metrics
 
         entities_text = "\n".join([
             f"{i + 1}. {name}: {desc[:100]}..."
@@ -153,7 +184,13 @@ class LLMPruning(PruningStrategy):
         ):
             response += chunk
 
-        return self._parse_scores(response, len(entities))
+        # Update metrics
+        metrics.llm_calls = 1
+        # Estimate tokens (rough approximation: 4 chars per token)
+        metrics.prompt_tokens = len(prompt) // 4
+        metrics.output_tokens = len(response) // 4
+
+        return self._parse_scores(response, len(entities)), metrics
 
     def _parse_scores(self, response: str, expected_count: int) -> List[float]:
         """Parse score list from LLM response."""
@@ -208,11 +245,12 @@ class SemanticPruning(PruningStrategy):
         query: str,
         entity_name: str,
         relations: List[Tuple[str, str, str, float]],
-    ) -> List[Tuple[str, str, str, float, float]]:
+    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using embedding similarity."""
+        metrics = PruningMetrics()
 
         if not relations:
-            return []
+            return [], metrics
 
         # Embed query
         query_emb = np.array(await self.embedding_model.aembed(text=query))
@@ -222,6 +260,10 @@ class SemanticPruning(PruningStrategy):
         relation_embeddings = await self.embedding_model.aembed_batch(
             text_list=relation_texts
         )
+
+        # Update metrics for embedding calls
+        metrics.embedding_calls = 2  # One for query, one batch for relations
+        metrics.embedding_tokens = len(query) // 4 + sum(len(t) // 4 for t in relation_texts)
 
         # Compute cosine similarities
         scores = []
@@ -234,29 +276,35 @@ class SemanticPruning(PruningStrategy):
             score = (similarity + 1) * 5  # cosine range [-1, 1] -> [0, 10]
             scores.append(score)
 
-        return [
+        scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
                 relations, scores
             )
         ]
+        return scored_relations, metrics
 
     async def score_entities(
         self,
         query: str,
         current_path: str,
         entities: List[Tuple[str, str, str]],
-    ) -> List[float]:
+    ) -> Tuple[List[float], PruningMetrics]:
         """Score entities using embedding similarity."""
+        metrics = PruningMetrics()
 
         if not entities:
-            return []
+            return [], metrics
 
         # Load entity embeddings (pre-computed or computed)
         await self._load_entity_embeddings(entities)
 
         # Embed query
         query_emb = np.array(await self.embedding_model.aembed(text=query))
+
+        # Update metrics for embedding call
+        metrics.embedding_calls = 1
+        metrics.embedding_tokens = len(query) // 4
 
         # Compute similarities using pre-computed embeddings
         scores = []
@@ -267,7 +315,7 @@ class SemanticPruning(PruningStrategy):
             score = (similarity + 1) * 5  # Scale to 1-10 range
             scores.append(score)
 
-        return scores
+        return scores, metrics
 
     async def _load_entity_embeddings(
         self, entities: List[Tuple[str, str, str]]
@@ -389,11 +437,12 @@ class BM25Pruning(PruningStrategy):
         query: str,
         entity_name: str,
         relations: List[Tuple[str, str, str, float]],
-    ) -> List[Tuple[str, str, str, float, float]]:
+    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using BM25."""
+        metrics = PruningMetrics()
 
         if not relations:
-            return []
+            return [], metrics
 
         # Create searchable text for each relation
         relation_texts = [
@@ -410,9 +459,36 @@ class BM25Pruning(PruningStrategy):
             max(1.0, min(10.0, (s / max_score) * 9 + 1)) for s in bm25_scores
         ]
 
-        return [
+        scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
                 relations, normalized_scores
             )
         ]
+        return scored_relations, metrics
+
+    async def score_entities(
+        self,
+        query: str,
+        current_path: str,
+        entities: List[Tuple[str, str, str]],
+    ) -> Tuple[List[float], PruningMetrics]:
+        """Score entities using BM25."""
+        metrics = PruningMetrics()
+
+        if not entities:
+            return [], metrics
+
+        # Create searchable text for each entity
+        entity_texts = [f"{name}: {desc}" for _, name, desc in entities]
+
+        # Compute BM25 scores
+        bm25_scores = self._compute_bm25_scores(query, entity_texts)
+
+        # Normalize scores to 1-10 range
+        max_score = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1
+        normalized_scores = [
+            max(1.0, min(10.0, (s / max_score) * 9 + 1)) for s in bm25_scores
+        ]
+
+        return normalized_scores, metrics

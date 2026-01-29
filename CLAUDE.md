@@ -131,34 +131,6 @@ The system supports five different search strategies:
 4. **Basic Search**: Simple vector similarity search
 5. **ToG Search**: Iterative graph exploration with beam search and deep reasoning
 
-## Configuration
-
-Primary configuration is in `settings.yaml`:
-
-```yaml
-models:
-  default_chat_model:
-    type: chat
-    model_provider: openai
-    api_key: ${GRAPHRAG_API_KEY}
-    model: gpt-4-turbo-preview
-    concurrent_requests: 25
-  default_embedding_model:
-    type: embedding
-    model_provider: openai
-    model: text-embedding-3-small
-
-input:
-  storage:
-    type: file
-    base_dir: "input"
-  file_type: text
-
-chunks:
-  size: 1200
-  overlap: 100
-```
-
 ## Key Components
 
 ### Indexing Pipeline
@@ -168,14 +140,6 @@ chunks:
 4. **Community Detection**: Groups entities using Leiden algorithm
 5. **Embedding Generation**: Creates vector representations for semantic search
 6. **Report Generation**: Summarizes each community
-
-### ToG Search Algorithm
-Located in `graphrag/query/llm/tog/tog_search.py`:
-
-- Uses beam search to explore multiple paths
-- LLM-guided relation scoring at each step
-- Configurable exploration depth and beam width
-- Evidence-based answer generation with reasoning chains
 
 ## Entry Points
 
@@ -202,7 +166,6 @@ The project uses pytest for testing with separate test suites:
 
 ## Testing Requirements
 
-- Some tests require Azurite (Azure Storage Emulator) - start with `./scripts/start-azurite.sh` or `azurite`
 - Tests use `.env` file for configuration (see `pytest.ini`)
 - Integration and smoke tests may require API keys in environment variables
 

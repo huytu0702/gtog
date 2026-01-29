@@ -1,7 +1,16 @@
-from typing import List
+from dataclasses import dataclass
+from typing import List, Tuple
 from graphrag.language_model.protocol.base import ChatModel
 from .state import ExplorationNode
 from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
+
+
+@dataclass
+class ReasoningMetrics:
+    """Metrics from reasoning operations."""
+    llm_calls: int = 0
+    prompt_tokens: int = 0
+    output_tokens: int = 0
 
 
 class ToGReasoning:
@@ -21,11 +30,12 @@ class ToGReasoning:
         self,
         query: str,
         exploration_paths: List[ExplorationNode],
-    ) -> tuple[str, List[str]]:
+    ) -> Tuple[str, List[str], ReasoningMetrics]:
         """
         Generate final answer from exploration paths.
-        Returns: (answer, reasoning_paths)
+        Returns: (answer, reasoning_paths, metrics)
         """
+        metrics = ReasoningMetrics()
 
         # Format exploration paths
         paths_text = self._format_paths(exploration_paths)
@@ -75,6 +85,8 @@ Structure your response as:
 3. Key relationships that support your answer
 """
 
+        metrics.prompt_tokens = len(prompt.split()) * 4 // 3
+
         answer = ""
         try:
             async for chunk in self.model.achat_stream(
@@ -88,10 +100,13 @@ Structure your response as:
             # Fallback response if LLM call fails
             answer = f"Error generating answer: {str(e)}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
 
+        metrics.llm_calls = 1
+        metrics.output_tokens = len(answer.split()) * 4 // 3
+
         # Extract reasoning paths for transparency
         reasoning_paths = [self._path_to_string(node) for node in exploration_paths]
 
-        return answer, reasoning_paths
+        return answer, reasoning_paths, metrics
 
     def _format_paths(self, nodes: List[ExplorationNode]) -> str:
         """Format exploration paths with rich context including entity and relationship descriptions."""
@@ -181,11 +196,12 @@ Structure your response as:
         self,
         query: str,
         current_nodes: List[ExplorationNode],
-    ) -> tuple[bool, str | None]:
+    ) -> Tuple[bool, str | None, ReasoningMetrics]:
         """
         Check if exploration can terminate early with an answer.
-        Returns: (should_terminate, answer_or_none)
+        Returns: (should_terminate, answer_or_none, metrics)
         """
+        metrics = ReasoningMetrics()
 
         paths_text = self._format_paths(current_nodes[:3])  # Check top 3 paths
 
@@ -201,6 +217,8 @@ Respond with:
 
 Response:"""
 
+        metrics.prompt_tokens = len(prompt.split()) * 4 // 3
+
         response = ""
         async for chunk in self.model.achat_stream(
             prompt=prompt,
@@ -209,8 +227,11 @@ Response:"""
         ):
             response += chunk
 
+        metrics.llm_calls = 1
+        metrics.output_tokens = len(response.split()) * 4 // 3
+
         if response.strip().upper().startswith("YES:"):
             answer = response[4:].strip()
-            return True, answer
+            return True, answer, metrics
 
-        return False, None
+        return False, None, metrics
