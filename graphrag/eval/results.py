@@ -63,9 +63,9 @@ class EvaluationResults:
         results_list = []
         for r in self.results:
             result_entry = {
-                "imdb_key": r.imdb_key,
                 "question": r.question,
                 "ground_truth": r.ground_truth,
+                "context": r.context,
                 "methods": {
                     r.method: {
                         "response": r.response,
@@ -131,9 +131,8 @@ def aggregate_results(results: list[QueryResult]) -> EvaluationResults:
             efficiency={},
         )
 
-    # Collect unique methods and movies
+    # Collect unique methods
     methods = set(r.method for r in results)
-    movies = set(r.imdb_key for r in results)
 
     # Aggregate by method (only if scores exist)
     by_method: dict[str, dict[str, float]] = {}
@@ -153,41 +152,6 @@ def aggregate_results(results: list[QueryResult]) -> EvaluationResults:
                 "completeness": sum(r.scores.completeness.score for r in method_results)  # type: ignore[union-attr]
                 / len(method_results),
             }
-
-    # Aggregate by movie (only if scores exist)
-    by_movie: dict[str, dict[str, dict[str, float]]] = {}
-    for movie in movies:
-        by_movie[movie] = {}
-        for method in methods:
-            movie_method_results = [
-                r
-                for r in results
-                if r.imdb_key == movie and r.method == method and r.scores is not None
-            ]
-            if movie_method_results:
-                # type: ignore[union-attr] - filtered for non-None scores above
-                by_movie[movie][method] = {
-                    "correctness": sum(
-                        r.scores.correctness.score
-                        for r in movie_method_results  # type: ignore[union-attr]
-                    )
-                    / len(movie_method_results),
-                    "faithfulness": sum(
-                        r.scores.faithfulness.score
-                        for r in movie_method_results  # type: ignore[union-attr]
-                    )
-                    / len(movie_method_results),
-                    "relevance": sum(
-                        r.scores.relevance.score
-                        for r in movie_method_results  # type: ignore[union-attr]
-                    )
-                    / len(movie_method_results),
-                    "completeness": sum(
-                        r.scores.completeness.score
-                        for r in movie_method_results  # type: ignore[union-attr]
-                    )
-                    / len(movie_method_results),
-                }
 
     # Aggregate efficiency by method (only if efficiency exists)
     efficiency: dict[str, dict[str, float]] = {}
@@ -217,15 +181,14 @@ def aggregate_results(results: list[QueryResult]) -> EvaluationResults:
     # Build metadata
     metadata = {
         "timestamp": datetime.now().isoformat(),
-        "total_questions": len(set((r.imdb_key, r.question) for r in results)),
+        "total_questions": len(set(r.question for r in results)),
         "methods": list(methods),
-        "movies": list(movies),
     }
 
     return EvaluationResults(
         metadata=metadata,
         results=results,
         by_method=by_method,
-        by_movie=by_movie,
+        by_movie={},
         efficiency=efficiency,
     )

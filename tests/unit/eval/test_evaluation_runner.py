@@ -1,6 +1,7 @@
 """
 Tests for EvaluationRunner class.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from graphrag.eval.runner import EvaluationRunner, QueryResult
@@ -8,6 +9,7 @@ from graphrag.eval.runner import EvaluationRunner, QueryResult
 
 class AsyncIteratorMock:
     """Mock async iterator for LLM streaming responses."""
+
     def __init__(self, items):
         self.items = iter(items)
 
@@ -29,6 +31,7 @@ async def test_runner_processes_single_qa():
 
     # Mock judge to return scores
     from graphrag.eval.metrics import MetricScores, JudgeResult
+
     mock_scores = MetricScores(
         correctness=JudgeResult(1, "OK"),
         faithfulness=JudgeResult(1, "OK"),
@@ -44,6 +47,7 @@ async def test_runner_processes_single_qa():
 
     # Mock the search functions
     from graphrag.query.structured_search.base import SearchResult
+
     mock_result = SearchResult(
         response="Test answer",
         context_data={},
@@ -54,7 +58,6 @@ async def test_runner_processes_single_qa():
         output_tokens=200,
     )
 
-    # Mock both _load_index and _run_search
     mock_index_data = {
         "config": mock_config,
         "entities": MagicMock(),
@@ -63,17 +66,20 @@ async def test_runner_processes_single_qa():
         "community_reports": MagicMock(),
         "text_units": MagicMock(),
     }
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', return_value=mock_result):
+
+    with patch.object(runner, "_run_search", return_value=mock_result):
         result = await runner.evaluate_single(
-            imdb_key="tt0097576",
             question="Who is Indiana Jones?",
             ground_truth="An archaeologist",
+            context="Context from dataset",
             method="tog",
+            index_data=mock_index_data,
         )
 
-    assert result.imdb_key == "tt0097576"
+    assert result.question == "Who is Indiana Jones?"
     assert result.method == "tog"
+    assert result.context == "Context from dataset"
+    assert result.scores is not None
     assert result.scores.correctness.score == 1
 
 
@@ -97,16 +103,17 @@ async def test_evaluate_single_search_failure():
         "text_units": MagicMock(),
     }
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', side_effect=Exception("Search failed")):
+    with patch.object(runner, "_run_search", side_effect=Exception("Search failed")):
         result = await runner.evaluate_single(
-            imdb_key="tt0097576",
             question="Test question",
             ground_truth="Expected",
+            context="Context from dataset",
             method="tog",
+            index_data=mock_index_data,
         )
 
     assert "ERROR" in result.response
+    assert result.scores is not None
     assert result.scores.correctness.score == 0
 
 
@@ -118,6 +125,7 @@ async def test_run_evaluation_batch():
 
     # Mock judge to return scores
     from graphrag.eval.metrics import MetricScores, JudgeResult
+
     mock_scores = MetricScores(
         correctness=JudgeResult(1, "OK"),
         faithfulness=JudgeResult(1, "OK"),
@@ -129,13 +137,13 @@ async def test_run_evaluation_batch():
     runner = EvaluationRunner(
         config=mock_config,
         judge=mock_judge,
-        index_roots={"tt0097576": "tt0097576", "tt0102798": "tt0102798"},
     )
 
+    # New format dataset without imdb_key
     sample_qa_dataset = [
-        {"question": "Q1?", "answer": "A1", "imdb_key": "tt0097576"},
-        {"question": "Q2?", "answer": "A2", "imdb_key": "tt0097576"},
-        {"question": "Q3?", "answer": "A3", "imdb_key": "tt0102798"},
+        {"question": "Q1?", "ground_truth": "A1", "context": "Context 1"},
+        {"question": "Q2?", "ground_truth": "A2", "context": "Context 2"},
+        {"question": "Q3?", "ground_truth": "A3", "context": "Context 3"},
     ]
 
     mock_index_data = {
@@ -148,6 +156,7 @@ async def test_run_evaluation_batch():
     }
 
     from graphrag.query.structured_search.base import SearchResult
+
     mock_result = SearchResult(
         response="Test answer",
         context_data={},
@@ -158,11 +167,11 @@ async def test_run_evaluation_batch():
         output_tokens=200,
     )
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', return_value=mock_result):
+    with patch.object(runner, "_run_search", return_value=mock_result):
         results = await runner.run_evaluation(
             dataset=sample_qa_dataset,
             methods=["tog"],
+            index_data=mock_index_data,
         )
 
     assert len(results) == 3  # 3 QA pairs * 1 method
@@ -176,6 +185,7 @@ async def test_run_evaluation_multiple_methods():
 
     # Mock judge to return scores
     from graphrag.eval.metrics import MetricScores, JudgeResult
+
     mock_scores = MetricScores(
         correctness=JudgeResult(1, "OK"),
         faithfulness=JudgeResult(1, "OK"),
@@ -187,10 +197,10 @@ async def test_run_evaluation_multiple_methods():
     runner = EvaluationRunner(
         config=mock_config,
         judge=mock_judge,
-        index_roots={"tt0097576": "tt0097576"},
     )
 
-    dataset = [{"question": "Test?", "answer": "Yes", "imdb_key": "tt0097576"}]
+    # New format dataset
+    dataset = [{"question": "Test?", "ground_truth": "Yes", "context": "Test context"}]
 
     mock_index_data = {
         "config": mock_config,
@@ -202,6 +212,7 @@ async def test_run_evaluation_multiple_methods():
     }
 
     from graphrag.query.structured_search.base import SearchResult
+
     mock_result = SearchResult(
         response="Test answer",
         context_data={},
@@ -212,11 +223,11 @@ async def test_run_evaluation_multiple_methods():
         output_tokens=200,
     )
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', return_value=mock_result):
+    with patch.object(runner, "_run_search", return_value=mock_result):
         results = await runner.run_evaluation(
             dataset=dataset,
             methods=["tog", "local", "basic"],
+            index_data=mock_index_data,
         )
 
     assert len(results) == 3  # 1 QA pair * 3 methods
@@ -230,6 +241,7 @@ async def test_progress_callback():
 
     # Mock judge to return scores
     from graphrag.eval.metrics import MetricScores, JudgeResult
+
     mock_scores = MetricScores(
         correctness=JudgeResult(1, "OK"),
         faithfulness=JudgeResult(1, "OK"),
@@ -241,14 +253,14 @@ async def test_progress_callback():
     runner = EvaluationRunner(
         config=mock_config,
         judge=mock_judge,
-        index_roots={"tt0097576": "tt0097576"},
     )
 
-    dataset = [{"question": "Test?", "answer": "Yes", "imdb_key": "tt0097576"}]
+    # New format dataset
+    dataset = [{"question": "Test?", "ground_truth": "Yes", "context": "Test context"}]
     progress_calls = []
 
-    def progress(current, total, movie, method):
-        progress_calls.append((current, total, movie, method))
+    def progress(current, total, question, method):
+        progress_calls.append((current, total, question, method))
 
     mock_index_data = {
         "config": mock_config,
@@ -260,6 +272,7 @@ async def test_progress_callback():
     }
 
     from graphrag.query.structured_search.base import SearchResult
+
     mock_result = SearchResult(
         response="Test answer",
         context_data={},
@@ -270,14 +283,48 @@ async def test_progress_callback():
         output_tokens=200,
     )
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', return_value=mock_result):
+    with patch.object(runner, "_run_search", return_value=mock_result):
         await runner.run_evaluation(
             dataset=dataset,
             methods=["tog"],
+            index_data=mock_index_data,
             progress_callback=progress,
         )
 
     assert len(progress_calls) == 1
     assert progress_calls[0][0] == 1  # current
     assert progress_calls[0][1] == 1  # total
+
+
+@pytest.mark.asyncio
+async def test_query_result_to_simple_dict():
+    """QueryResult.to_simple_dict() should return required JSON format."""
+    from graphrag.eval.runner import EfficiencyMetrics
+
+    result = QueryResult(
+        question="Test question?",
+        method="tog",
+        response="Test response",
+        context="Context from dataset",
+        context_text="Context from search",
+        ground_truth="Ground truth answer",
+        efficiency=EfficiencyMetrics(
+            latency=1.5,
+            llm_calls=5,
+            prompt_tokens=1000,
+            output_tokens=200,
+        ),
+    )
+
+    simple_dict = result.to_simple_dict()
+
+    assert simple_dict["question"] == "Test question?"
+    assert simple_dict["response"] == "Test response"
+    assert simple_dict["context"] == "Context from dataset"
+    assert simple_dict["context_text"] == "Context from search"
+    assert simple_dict["ground_truth"] == "Ground truth answer"
+    assert simple_dict["method"] == "tog"
+    assert simple_dict["latency"] == 1.5
+    assert simple_dict["llm_calls"] == 5
+    assert simple_dict["prompt_tokens"] == 1000
+    assert simple_dict["output_tokens"] == 200

@@ -21,7 +21,6 @@ def eval_cli(
     root_dir: Path,
     eval_config: Path | None,
     methods: str | None,
-    imdb_key: str | None,
     resume: bool,
     skip_evaluation: bool,
     verbose: bool,
@@ -50,13 +49,6 @@ def eval_cli(
     # Override methods if specified
     if methods:
         eval_cfg.methods = methods.split(",")
-
-    # Filter to single movie if specified
-    if imdb_key:
-        if imdb_key not in eval_cfg.indexes:
-            print(f"Error: imdb_key '{imdb_key}' not found in config indexes.")
-            sys.exit(1)
-        eval_cfg.indexes = {imdb_key: eval_cfg.indexes[imdb_key]}
 
     # Run evaluation
     asyncio.run(run_evaluation(root, eval_cfg, resume, skip_evaluation, verbose))
@@ -103,17 +95,22 @@ async def run_evaluation(
     with open(dataset_path, "r") as f:
         dataset = json.load(f)
 
-    # Filter dataset to configured indexes
-    dataset = [qa for qa in dataset if qa["imdb_key"] in eval_cfg.indexes]
-
+    # Validate dataset format
     if not dataset:
-        print("Error: No QA pairs found for configured indexes.")
+        print("Error: Empty dataset.")
         return
 
-    print(f"Loaded {len(dataset)} QA pairs for {len(eval_cfg.indexes)} movies")
+    print(f"Loaded {len(dataset)} QA pairs")
     print(f"Methods: {', '.join(eval_cfg.methods)}")
     print(f"Total evaluations: {len(dataset) * len(eval_cfg.methods)}")
     print()
+
+    # Load index data once for all queries
+    from pathlib import Path as PathLib
+
+    index_data = await runner._load_index(
+        list(eval_cfg.indexes.keys())[0] if eval_cfg.indexes else "default"
+    )
 
     # Resume logic
     completed_results = []
@@ -123,9 +120,7 @@ async def run_evaluation(
             with open(checkpoint_path, "r") as f:
                 checkpoint = json.load(f)
             completed_results = checkpoint.get("results", [])
-            completed_keys = {
-                (r["imdb_key"], r["question"], r["method"]) for r in completed_results
-            }
+            completed_keys = {(r["question"], r["method"]) for r in completed_results}
             print(f"Resuming from checkpoint: {len(completed_results)} completed")
         else:
             completed_keys = set()
@@ -143,6 +138,7 @@ async def run_evaluation(
         results = await runner.run_evaluation(
             dataset=dataset,
             methods=eval_cfg.methods,
+            index_data=index_data,
             progress_callback=progress if verbose else None,
             skip_evaluation=skip_evaluation,
         )
@@ -183,12 +179,12 @@ async def run_evaluation(
                 scores = None
                 efficiency = None
             qr = QueryResult(
-                imdb_key=r["imdb_key"],
                 question=r["question"],
                 method=r["method"],
                 response=r["response"],
-                ground_truth=r.get("ground_truth", ""),
+                context=r.get("context", ""),
                 context_text=r.get("context_text", ""),
+                ground_truth=r.get("ground_truth", ""),
                 scores=scores,
                 efficiency=efficiency,
             )

@@ -36,23 +36,23 @@ class EfficiencyMetrics:
 class QueryResult:
     """Result from evaluating a single query with a single method."""
 
-    imdb_key: str
     question: str
     method: str
     response: str
-    scores: MetricScores | None = None
+    context: str  # context from dataset
+    context_text: str  # context from search
+    ground_truth: str
     efficiency: EfficiencyMetrics | None = None
-    ground_truth: str = ""
-    context_text: str = ""
+    scores: MetricScores | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result = {
-            "imdb_key": self.imdb_key,
             "question": self.question,
             "method": self.method,
             "response": self.response,
-            "ground_truth": self.ground_truth,
+            "context": self.context,
             "context_text": self.context_text,
+            "ground_truth": self.ground_truth,
         }
         if self.scores:
             result["scores"] = self.scores.to_dict()
@@ -61,14 +61,21 @@ class QueryResult:
         return result
 
     def to_simple_dict(self) -> dict[str, Any]:
-        """Return simple dict with only essential fields (no evaluation)."""
-        return {
-            "imdb_key": self.imdb_key,
+        """Return simple dict with required fields for JSON output."""
+        result = {
             "question": self.question,
-            "ground_truth": self.ground_truth,
-            "context_text": self.context_text,
             "response": self.response,
+            "context": self.context,
+            "context_text": self.context_text,
+            "ground_truth": self.ground_truth,
+            "method": self.method,
         }
+        if self.efficiency:
+            result["latency"] = self.efficiency.latency
+            result["llm_calls"] = self.efficiency.llm_calls
+            result["prompt_tokens"] = self.efficiency.prompt_tokens
+            result["output_tokens"] = self.efficiency.output_tokens
+        return result
 
 
 @dataclass
@@ -253,17 +260,15 @@ class EvaluationRunner:
 
     async def evaluate_single(
         self,
-        imdb_key: str,
         question: str,
         ground_truth: str,
+        context: str,
         method: str,
+        index_data: dict,
         skip_evaluation: bool = False,
     ) -> QueryResult:
         """Evaluate a single query with a single method."""
         import time
-
-        # Load index
-        index_data = await self._load_index(imdb_key)
 
         # Run search
         start_time = time.time()
@@ -271,27 +276,27 @@ class EvaluationRunner:
             result = await self._run_search(method, question, index_data)
             latency = time.time() - start_time
         except Exception as e:
-            logger.error(f"Search failed for {imdb_key}/{method}: {e}")
+            logger.error(f"Search failed for {method}: {e}")
             # Return failure result
             from graphrag.eval.metrics import JudgeResult
 
             if skip_evaluation:
                 return QueryResult(
-                    imdb_key=imdb_key,
                     question=question,
                     method=method,
                     response=f"ERROR: {str(e)}",
-                    ground_truth=ground_truth,
+                    context=context,
                     context_text="",
+                    ground_truth=ground_truth,
                 )
             else:
                 return QueryResult(
-                    imdb_key=imdb_key,
                     question=question,
                     method=method,
                     response=f"ERROR: {str(e)}",
-                    ground_truth=ground_truth,
+                    context=context,
                     context_text="",
+                    ground_truth=ground_truth,
                     scores=MetricScores(
                         correctness=JudgeResult(0, "Search failed"),
                         faithfulness=JudgeResult(0, "Search failed"),
@@ -320,12 +325,18 @@ class EvaluationRunner:
         # Skip evaluation if requested
         if skip_evaluation:
             return QueryResult(
-                imdb_key=imdb_key,
                 question=question,
                 method=method,
                 response=response_text,
-                ground_truth=ground_truth,
+                context=context,
                 context_text=context_text,
+                ground_truth=ground_truth,
+                efficiency=EfficiencyMetrics(
+                    latency=latency,
+                    llm_calls=result.llm_calls,
+                    prompt_tokens=result.prompt_tokens,
+                    output_tokens=result.output_tokens,
+                ),
             )
 
         # Evaluate with judge
@@ -337,12 +348,12 @@ class EvaluationRunner:
         )
 
         return QueryResult(
-            imdb_key=imdb_key,
             question=question,
             method=method,
             response=response_text,
-            ground_truth=ground_truth,
+            context=context,
             context_text=context_text,
+            ground_truth=ground_truth,
             scores=scores,
             efficiency=EfficiencyMetrics(
                 latency=latency,
@@ -356,6 +367,7 @@ class EvaluationRunner:
         self,
         dataset: list[dict],
         methods: list[str],
+        index_data: dict,
         progress_callback: callable = None,
         skip_evaluation: bool = False,
     ) -> list[QueryResult]:
@@ -365,21 +377,22 @@ class EvaluationRunner:
         current = 0
 
         for qa in dataset:
-            imdb_key = qa["imdb_key"]
             question = qa["question"]
-            ground_truth = qa["answer"]
+            ground_truth = qa["ground_truth"]
+            context = qa.get("context", "")
 
             for method in methods:
                 current += 1
                 if progress_callback:
-                    progress_callback(current, total, imdb_key, method)
+                    progress_callback(current, total, question[:50], method)
 
                 try:
                     result = await self.evaluate_single(
-                        imdb_key=imdb_key,
                         question=question,
                         ground_truth=ground_truth,
+                        context=context,
                         method=method,
+                        index_data=index_data,
                         skip_evaluation=skip_evaluation,
                     )
                     results.append(result)

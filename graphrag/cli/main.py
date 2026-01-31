@@ -584,12 +584,6 @@ def _eval_cli(
         "-m",
         help="Comma-separated list of methods to evaluate (e.g., tog,local,basic).",
     ),
-    imdb_key: str | None = typer.Option(
-        None,
-        "--imdb-key",
-        "-k",
-        help="Evaluate only this movie (must be in config).",
-    ),
     resume: bool = typer.Option(
         False,
         "--resume",
@@ -615,7 +609,6 @@ def _eval_cli(
         root_dir=root,
         eval_config=config,
         methods=methods,
-        imdb_key=imdb_key,
         resume=resume,
         skip_evaluation=skip_evaluation,
         verbose=verbose,

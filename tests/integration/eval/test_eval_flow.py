@@ -16,8 +16,10 @@ from graphrag.query.structured_search.base import SearchResult
 class AsyncIteratorMock:
     def __init__(self, items):
         self.items = iter(items)
+
     def __aiter__(self):
         return self
+
     async def __anext__(self):
         try:
             return next(self.items)
@@ -32,7 +34,9 @@ async def test_full_evaluation_flow(tmp_path):
     mock_model = MagicMock()
     # Each judge call gets its own response
     mock_model.achat_stream = MagicMock(
-        side_effect=lambda *args, **kwargs: AsyncIteratorMock(['{"score": 1, "reason": "Correct"}'])
+        side_effect=lambda *args, **kwargs: AsyncIteratorMock([
+            '{"score": 1, "reason": "Correct"}'
+        ])
     )
 
     # Create judge
@@ -45,7 +49,6 @@ async def test_full_evaluation_flow(tmp_path):
     runner = EvaluationRunner(
         config=mock_config,
         judge=judge,
-        index_roots={"tt0097576": "tt0097576"},
     )
 
     # Mock search result
@@ -59,10 +62,10 @@ async def test_full_evaluation_flow(tmp_path):
         output_tokens=200,
     )
 
-    # Sample dataset
+    # Sample dataset (new format without imdb_key)
     dataset = [
-        {"question": "Q1?", "answer": "A1", "imdb_key": "tt0097576"},
-        {"question": "Q2?", "answer": "A2", "imdb_key": "tt0097576"},
+        {"question": "Q1?", "ground_truth": "A1", "context": "Context 1"},
+        {"question": "Q2?", "ground_truth": "A2", "context": "Context 2"},
     ]
 
     # Mock the search
@@ -75,17 +78,18 @@ async def test_full_evaluation_flow(tmp_path):
         "text_units": MagicMock(),
     }
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', return_value=mock_search_result):
+    with patch.object(runner, "_run_search", return_value=mock_search_result):
         # Run evaluation
         results = await runner.run_evaluation(
             dataset=dataset,
             methods=["tog"],
+            index_data=mock_index_data,
         )
 
     # Verify results
     assert len(results) == 2
     for r in results:
+        assert r.scores is not None
         assert r.scores.correctness.score == 1
 
     # Aggregate
@@ -130,7 +134,6 @@ async def test_evaluation_with_mixed_scores():
     runner = EvaluationRunner(
         config=mock_config,
         judge=judge,
-        index_roots={"tt0097576": "tt0097576"},
     )
 
     mock_search_result = SearchResult(
@@ -143,8 +146,9 @@ async def test_evaluation_with_mixed_scores():
         output_tokens=50,
     )
 
+    # New format dataset
     dataset = [
-        {"question": "Q1?", "answer": "A1", "imdb_key": "tt0097576"},
+        {"question": "Q1?", "ground_truth": "A1", "context": "Context 1"},
     ]
 
     mock_index_data = {
@@ -156,9 +160,12 @@ async def test_evaluation_with_mixed_scores():
         "text_units": MagicMock(),
     }
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', return_value=mock_search_result):
-        results = await runner.run_evaluation(dataset=dataset, methods=["tog"])
+    with patch.object(runner, "_run_search", return_value=mock_search_result):
+        results = await runner.run_evaluation(
+            dataset=dataset,
+            methods=["tog"],
+            index_data=mock_index_data,
+        )
 
     # First query gets scores: correctness=1, faithfulness=0, relevance=1, completeness=0
     # (alternating pattern)
@@ -183,12 +190,12 @@ async def test_evaluation_handles_search_errors():
     runner = EvaluationRunner(
         config=mock_config,
         judge=judge,
-        index_roots={"tt0097576": "tt0097576"},
     )
 
+    # New format dataset
     dataset = [
-        {"question": "Q1?", "answer": "A1", "imdb_key": "tt0097576"},
-        {"question": "Q2?", "answer": "A2", "imdb_key": "tt0097576"},
+        {"question": "Q1?", "ground_truth": "A1", "context": "Context 1"},
+        {"question": "Q2?", "ground_truth": "A2", "context": "Context 2"},
     ]
 
     call_count = [0]
@@ -216,16 +223,20 @@ async def test_evaluation_handles_search_errors():
         "text_units": MagicMock(),
     }
 
-    with patch.object(runner, '_load_index', return_value=mock_index_data), \
-         patch.object(runner, '_run_search', side_effect=failing_search):
-        results = await runner.run_evaluation(dataset=dataset, methods=["tog"])
+    with patch.object(runner, "_run_search", side_effect=failing_search):
+        results = await runner.run_evaluation(
+            dataset=dataset,
+            methods=["tog"],
+            index_data=mock_index_data,
+        )
 
     # Should have 2 results (one error, one success)
     assert len(results) == 2
 
     # First should be error
     assert "ERROR" in results[0].response
+    assert results[0].scores is not None
     assert results[0].scores.correctness.score == 0
 
-    # Second should succeed (but won't have judge scores since judge wasn't called)
-    # because search succeeded but the test doesn't run judge after successful search
+    # Second should succeed
+    assert "Success" in results[1].response
