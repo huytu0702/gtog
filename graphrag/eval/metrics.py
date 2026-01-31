@@ -1,9 +1,9 @@
 """LLM-as-Judge metrics for evaluation."""
 
+import json
+import logging
 from dataclasses import dataclass
 from typing import Any
-import logging
-import json
 
 from graphrag.language_model.protocol.base import ChatModel
 
@@ -60,6 +60,7 @@ Return JSON: {{"score": 0 or 1, "reason": "brief explanation"}}"""
 @dataclass
 class JudgeResult:
     """Result from a single LLM judge evaluation."""
+
     score: int  # 0 or 1
     reason: str
 
@@ -70,6 +71,7 @@ class JudgeResult:
 @dataclass
 class MetricScores:
     """All metric scores for a single query-response pair."""
+
     correctness: JudgeResult
     faithfulness: JudgeResult
     relevance: JudgeResult
@@ -117,8 +119,13 @@ class LLMJudge:
 
         try:
             # Try to parse JSON from response
-            # Handle potential markdown code blocks
+            # Handle potential markdown code blocks and "Return JSON:" prefix
             response = response.strip()
+
+            # Remove "Return JSON:" prefix if present
+            if response.lower().startswith("return json:"):
+                response = response[12:].strip()
+
             if response.startswith("```"):
                 # Extract content between code blocks
                 lines = response.split("\n")
@@ -140,7 +147,9 @@ class LLMJudge:
                 reason=result.get("reason", "No reason provided"),
             )
         except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"Failed to parse judge response: {response[:100]}... Error: {e}")
+            logger.warning(
+                f"Failed to parse judge response: {response[:100]}... Error: {e}"
+            )
             # Try to extract score from text
             if "1" in response and "0" not in response:
                 return JudgeResult(score=1, reason=f"Inferred from: {response[:100]}")

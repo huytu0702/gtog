@@ -124,31 +124,52 @@ class EvaluationRunner:
         index_data: dict,
     ) -> SearchResult:
         """Run a search method and return SearchResult."""
-        import graphrag.api as api
+        from graphrag.config.embeddings import (
+            entity_description_embedding,
+            text_unit_text_embedding,
+        )
+        from graphrag.query.factory import (
+            get_basic_search_engine,
+            get_local_search_engine,
+            get_tog_search_engine,
+        )
+        from graphrag.query.indexer_adapters import (
+            read_indexer_entities,
+            read_indexer_relationships,
+            read_indexer_reports,
+            read_indexer_text_units,
+        )
+        from graphrag.utils.api import get_embedding_store, load_search_prompt
 
         config = index_data["config"]
         entities = index_data["entities"]
         relationships = index_data["relationships"]
 
         if method == "tog":
-            response, context = await api.tog_search(
-                config=config,
+            entities_ = read_indexer_entities(
                 entities=entities,
-                relationships=relationships,
-                query=query,
+                communities=None,
+                community_level=None,
             )
-            # Wrap in SearchResult if not already
-            if isinstance(response, str):
-                return SearchResult(
-                    response=response,
-                    context_data=context,
-                    context_text=str(context),
-                    completion_time=0,  # Not tracked in current API
-                    llm_calls=0,
-                    prompt_tokens=0,
-                    output_tokens=0,
-                )
-            return response
+            relationships_ = read_indexer_relationships(relationships)
+
+            vector_store_args = {
+                index: store.model_dump()
+                for index, store in config.vector_store.items()
+            }
+            entity_text_embeddings = get_embedding_store(
+                config_args=vector_store_args,
+                embedding_name=entity_description_embedding,
+            )
+
+            search_engine = get_tog_search_engine(
+                config=config,
+                entities=entities_,
+                relationships=relationships_,
+                response_type="detailed",
+                entity_text_embeddings=entity_text_embeddings,
+            )
+            return await search_engine.search(query=query)
 
         elif method == "local":
             communities = index_data["communities"]
@@ -158,47 +179,55 @@ class EvaluationRunner:
             if communities is None:
                 raise ValueError(f"Local search requires communities table")
 
-            response, context = await api.local_search(
+            vector_store_args = {
+                index: store.model_dump()
+                for index, store in config.vector_store.items()
+            }
+            description_embedding_store = get_embedding_store(
+                config_args=vector_store_args,
+                embedding_name=entity_description_embedding,
+            )
+            prompt = load_search_prompt(config.root_dir, config.local_search.prompt)
+
+            search_engine = get_local_search_engine(
                 config=config,
-                entities=entities,
-                communities=communities,
-                community_reports=community_reports,
-                text_units=text_units,
-                relationships=relationships,
-                covariates=None,
-                community_level=2,
+                reports=read_indexer_reports(
+                    community_reports, communities, community_level=2
+                ),
+                text_units=read_indexer_text_units(text_units),
+                entities=read_indexer_entities(
+                    entities=entities, communities=communities, community_level=2
+                ),
+                relationships=read_indexer_relationships(relationships),
+                covariates={"claims": []},
                 response_type="Multiple Paragraphs",
-                query=query,
+                description_embedding_store=description_embedding_store,
+                system_prompt=prompt,
             )
-            return SearchResult(
-                response=response,
-                context_data=context,
-                context_text=str(context),
-                completion_time=0,
-                llm_calls=0,
-                prompt_tokens=0,
-                output_tokens=0,
-            )
+            return await search_engine.search(query=query)
 
         elif method == "basic":
             text_units = index_data["text_units"]
             if text_units is None:
                 raise ValueError(f"Basic search requires text_units table")
 
-            response, context = await api.basic_search(
+            vector_store_args = {
+                index: store.model_dump()
+                for index, store in config.vector_store.items()
+            }
+            embedding_store = get_embedding_store(
+                config_args=vector_store_args,
+                embedding_name=text_unit_text_embedding,
+            )
+            prompt = load_search_prompt(config.root_dir, config.basic_search.prompt)
+
+            search_engine = get_basic_search_engine(
                 config=config,
-                text_units=text_units,
-                query=query,
+                text_units=read_indexer_text_units(text_units),
+                text_unit_embeddings=embedding_store,
+                system_prompt=prompt,
             )
-            return SearchResult(
-                response=response,
-                context_data=context,
-                context_text=str(context),
-                completion_time=0,
-                llm_calls=0,
-                prompt_tokens=0,
-                output_tokens=0,
-            )
+            return await search_engine.search(query=query)
 
         else:
             raise ValueError(f"Unknown method: {method}")

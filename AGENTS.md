@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -66,9 +66,6 @@ pyright                              # Type checking
 uv run poe format                     # Format using poe
 uv run poe fix                        # Auto-fix issues
 uv run poe check                      # Run all static checks
-
-# Run Evaluation
-graphrag eval --root . --config eval/eval_config_test.yaml --verbose
 ```
 
 ### Development Setup

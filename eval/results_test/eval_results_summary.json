@@ -1,76 +1,76 @@
 {
   "metadata": {
-    "timestamp": "2026-01-29T23:32:16.877835",
-    "total_questions": 3,
+    "timestamp": "2026-01-31T16:21:49.277493",
+    "total_questions": 2,
     "methods": [
-      "basic",
       "tog",
-      "local"
+      "local",
+      "basic"
     ],
     "movies": [
       "tt0097576"
     ]
   },
   "by_method": {
-    "basic": {
-      "correctness": 0.3333333333333333,
-      "faithfulness": 0.3333333333333333,
-      "relevance": 0.0,
-      "completeness": 0.3333333333333333
-    },
     "tog": {
-      "correctness": 0.3333333333333333,
-      "faithfulness": 0.0,
-      "relevance": 0.3333333333333333,
-      "completeness": 0.6666666666666666
+      "correctness": 1.0,
+      "faithfulness": 0.5,
+      "relevance": 0.5,
+      "completeness": 1.0
     },
     "local": {
-      "correctness": 0.3333333333333333,
-      "faithfulness": 0.0,
+      "correctness": 0.5,
+      "faithfulness": 1.0,
       "relevance": 1.0,
-      "completeness": 0.3333333333333333
+      "completeness": 1.0
+    },
+    "basic": {
+      "correctness": 1.0,
+      "faithfulness": 1.0,
+      "relevance": 1.0,
+      "completeness": 1.0
     }
   },
   "by_movie": {
     "tt0097576": {
-      "basic": {
-        "correctness": 0.3333333333333333,
-        "faithfulness": 0.3333333333333333,
-        "relevance": 0.0,
-        "completeness": 0.3333333333333333
-      },
       "tog": {
-        "correctness": 0.3333333333333333,
-        "faithfulness": 0.0,
-        "relevance": 0.3333333333333333,
-        "completeness": 0.6666666666666666
+        "correctness": 1.0,
+        "faithfulness": 0.5,
+        "relevance": 0.5,
+        "completeness": 1.0
       },
       "local": {
-        "correctness": 0.3333333333333333,
-        "faithfulness": 0.0,
+        "correctness": 0.5,
+        "faithfulness": 1.0,
         "relevance": 1.0,
-        "completeness": 0.3333333333333333
+        "completeness": 1.0
+      },
+      "basic": {
+        "correctness": 1.0,
+        "faithfulness": 1.0,
+        "relevance": 1.0,
+        "completeness": 1.0
       }
     }
   },
   "efficiency": {
-    "basic": {
-      "avg_latency": 5.384858131408691,
-      "avg_llm_calls": 0.0,
-      "avg_prompt_tokens": 0.0,
-      "avg_output_tokens": 0.0
-    },
     "tog": {
-      "avg_latency": 17.750834147135418,
-      "avg_llm_calls": 0.0,
-      "avg_prompt_tokens": 0.0,
-      "avg_output_tokens": 0.0
+      "avg_latency": 7.8072227239608765,
+      "avg_llm_calls": 7.5,
+      "avg_prompt_tokens": 4641.5,
+      "avg_output_tokens": 194.5
     },
     "local": {
-      "avg_latency": 5.07826042175293,
-      "avg_llm_calls": 0.0,
-      "avg_prompt_tokens": 0.0,
-      "avg_output_tokens": 0.0
+      "avg_latency": 10.619397282600403,
+      "avg_llm_calls": 1.0,
+      "avg_prompt_tokens": 7531.0,
+      "avg_output_tokens": 211.0
+    },
+    "basic": {
+      "avg_latency": 3.879961609840393,
+      "avg_llm_calls": 1.0,
+      "avg_prompt_tokens": 3933.0,
+      "avg_output_tokens": 129.5
     }
   }
 }

@@ -3,11 +3,11 @@
 
 """Query Factory methods to support CLI."""
 
-from typing import Optional
+from pathlib import Path
 
 from graphrag.callbacks.query_callbacks import QueryCallbacks
-from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.config.embeddings import entity_description_embedding
+from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.data_model.community import Community
 from graphrag.data_model.community_report import CommunityReport
 from graphrag.data_model.covariate import Covariate
@@ -35,13 +35,13 @@ from graphrag.query.structured_search.local_search.mixed_context import (
     LocalSearchMixedContext,
 )
 from graphrag.query.structured_search.local_search.search import LocalSearch
-from graphrag.query.structured_search.tog_search.search import ToGSearch
 from graphrag.query.structured_search.tog_search.pruning import (
+    BM25Pruning,
     LLMPruning,
     SemanticPruning,
-    BM25Pruning,
 )
 from graphrag.query.structured_search.tog_search.reasoning import ToGReasoning
+from graphrag.query.structured_search.tog_search.search import ToGSearch
 from graphrag.tokenizer.get_tokenizer import get_tokenizer
 from graphrag.utils.api import get_embedding_store
 from graphrag.vector_stores.base import BaseVectorStore
@@ -314,16 +314,29 @@ def get_basic_search_engine(
     )
 
 
+def _resolve_prompt_path(prompt_path: str | None, root_dir: str) -> str | None:
+    """Resolve prompt path relative to root directory if it's a relative path."""
+    if prompt_path is None:
+        return None
+
+    # If it's already an absolute path or not a file path, return as-is
+    if not prompt_path.endswith((".txt", ".md")) or Path(prompt_path).is_absolute():
+        return prompt_path
+
+    # Resolve relative to root_dir
+    resolved_path = str(Path(root_dir) / prompt_path)
+    return resolved_path
+
+
 def get_tog_search_engine(
     config: GraphRagConfig,
     entities: list[Entity],
     relationships: list[Relationship],
     response_type: str,
     callbacks: list[QueryCallbacks] | None = None,
-    entity_text_embeddings: Optional[BaseVectorStore] = None,
+    entity_text_embeddings: BaseVectorStore | None = None,
 ) -> ToGSearch:
     """Create a ToG search engine based on data + configuration."""
-
     # Create entity embedding store if not provided
     if entity_text_embeddings is None:
         vector_store_args = config.vector_store.model_dump()
@@ -354,13 +367,24 @@ def get_tog_search_engine(
 
     tokenizer = get_tokenizer(model_config=chat_model_settings)
 
+    # Resolve prompt paths relative to root_dir
+    relation_scoring_prompt = _resolve_prompt_path(
+        config.tog_search.relation_scoring_prompt, config.root_dir
+    )
+    entity_scoring_prompt = _resolve_prompt_path(
+        config.tog_search.entity_scoring_prompt, config.root_dir
+    )
+    reasoning_prompt = _resolve_prompt_path(
+        config.tog_search.reasoning_prompt, config.root_dir
+    )
+
     # Create pruning strategy
     if config.tog_search.prune_strategy == "llm":
         pruning_strategy = LLMPruning(
             model=chat_model,
             temperature=config.tog_search.temperature_exploration,
-            relation_scoring_prompt=config.tog_search.relation_scoring_prompt,
-            entity_scoring_prompt=config.tog_search.entity_scoring_prompt,
+            relation_scoring_prompt=relation_scoring_prompt,
+            entity_scoring_prompt=entity_scoring_prompt,
         )
     elif config.tog_search.prune_strategy == "semantic":
         pruning_strategy = SemanticPruning(
@@ -379,7 +403,7 @@ def get_tog_search_engine(
     reasoning_module = ToGReasoning(
         model=chat_model,
         temperature=config.tog_search.temperature_reasoning,
-        reasoning_prompt=config.tog_search.reasoning_prompt,
+        reasoning_prompt=reasoning_prompt,
     )
 
     return ToGSearch(
