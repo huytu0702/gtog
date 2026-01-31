@@ -595,6 +595,12 @@ def _eval_cli(
         "--resume",
         help="Resume from checkpoint if available.",
     ),
+    skip_evaluation: bool = typer.Option(
+        False,
+        "--skip-evaluation",
+        "-s",
+        help="Skip LLM-as-Judge evaluation, only collect responses.",
+    ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -611,5 +617,6 @@ def _eval_cli(
         methods=methods,
         imdb_key=imdb_key,
         resume=resume,
+        skip_evaluation=skip_evaluation,
         verbose=verbose,
     )

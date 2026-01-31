@@ -67,8 +67,12 @@ uv run poe format                     # Format using poe
 uv run poe fix                        # Auto-fix issues
 uv run poe check                      # Run all static checks
 
-# Run Evaluation
-graphrag eval --root . --config eval/eval_config_test.yaml --verbose
+# Chạy với đánh giá đầy đủ (mặc định)
+graphrag eval --root ./my-project
+# Chạy không đánh giá - chỉ lưu kết quả thô
+graphrag eval --root ./my-project --skip-evaluation
+# hoặc
+graphrag eval --root ./my-project -s
 ```
 
 ### Development Setup

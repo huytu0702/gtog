@@ -12,6 +12,7 @@ from graphrag.eval.runner import QueryResult
 @dataclass
 class MethodSummary:
     """Summary statistics for a single method."""
+
     correctness: float
     faithfulness: float
     relevance: float
@@ -39,6 +40,7 @@ class MethodSummary:
 @dataclass
 class EvaluationResults:
     """Aggregated evaluation results."""
+
     metadata: dict[str, Any]
     results: list[QueryResult]
     by_method: dict[str, dict[str, float]]
@@ -58,24 +60,36 @@ class EvaluationResults:
 
     def to_detailed_dict(self) -> dict[str, Any]:
         """Full results including per-query details."""
+        results_list = []
+        for r in self.results:
+            result_entry = {
+                "imdb_key": r.imdb_key,
+                "question": r.question,
+                "ground_truth": r.ground_truth,
+                "methods": {
+                    r.method: {
+                        "response": r.response,
+                        "context_text": r.context_text,
+                    }
+                },
+            }
+            # Only include scores and efficiency if they exist
+            if r.scores is not None and r.efficiency is not None:
+                result_entry["methods"][r.method]["scores"] = r.scores.to_dict()
+                result_entry["methods"][r.method]["efficiency"] = r.efficiency.to_dict()
+            results_list.append(result_entry)
+
         return {
             "metadata": self.metadata,
-            "results": [
-                {
-                    "imdb_key": r.imdb_key,
-                    "question": r.question,
-                    "ground_truth": r.ground_truth,
-                    "methods": {
-                        r.method: {
-                            "response": r.response,
-                            "scores": r.scores.to_dict(),
-                            "efficiency": r.efficiency.to_dict(),
-                        }
-                    },
-                }
-                for r in self.results
-            ],
+            "results": results_list,
         }
+
+    def to_simple_dict(self) -> list[dict[str, Any]]:
+        """Simple results without evaluation metrics - just imdb_key, question, ground_truth, context_text, response."""
+        return [r.to_simple_dict() for r in self.results]
+
+    def to_simple_json(self, indent: int = 2) -> str:
+        return json.dumps(self.to_simple_dict(), indent=indent)
 
     def to_detailed_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_detailed_dict(), indent=indent)
@@ -95,6 +109,16 @@ class EvaluationResults:
         with open(detailed_path, "w") as f:
             f.write(self.to_detailed_json())
 
+    def save_simple(self, output_dir: str) -> None:
+        """Save simple results (no evaluation metrics) to file."""
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Save simple results
+        simple_path = output_path / "eval_results_simple.json"
+        with open(simple_path, "w") as f:
+            f.write(self.to_simple_json())
+
 
 def aggregate_results(results: list[QueryResult]) -> EvaluationResults:
     """Aggregate QueryResults into summary statistics."""
@@ -111,42 +135,83 @@ def aggregate_results(results: list[QueryResult]) -> EvaluationResults:
     methods = set(r.method for r in results)
     movies = set(r.imdb_key for r in results)
 
-    # Aggregate by method
-    by_method = {}
+    # Aggregate by method (only if scores exist)
+    by_method: dict[str, dict[str, float]] = {}
     for method in methods:
-        method_results = [r for r in results if r.method == method]
+        method_results = [
+            r for r in results if r.method == method and r.scores is not None
+        ]
         if method_results:
+            # type: ignore[union-attr] - filtered for non-None scores above
             by_method[method] = {
-                "correctness": sum(r.scores.correctness.score for r in method_results) / len(method_results),
-                "faithfulness": sum(r.scores.faithfulness.score for r in method_results) / len(method_results),
-                "relevance": sum(r.scores.relevance.score for r in method_results) / len(method_results),
-                "completeness": sum(r.scores.completeness.score for r in method_results) / len(method_results),
+                "correctness": sum(r.scores.correctness.score for r in method_results)  # type: ignore[union-attr]
+                / len(method_results),
+                "faithfulness": sum(r.scores.faithfulness.score for r in method_results)  # type: ignore[union-attr]
+                / len(method_results),
+                "relevance": sum(r.scores.relevance.score for r in method_results)  # type: ignore[union-attr]
+                / len(method_results),
+                "completeness": sum(r.scores.completeness.score for r in method_results)  # type: ignore[union-attr]
+                / len(method_results),
             }
 
-    # Aggregate by movie
-    by_movie = {}
+    # Aggregate by movie (only if scores exist)
+    by_movie: dict[str, dict[str, dict[str, float]]] = {}
     for movie in movies:
         by_movie[movie] = {}
         for method in methods:
-            movie_method_results = [r for r in results if r.imdb_key == movie and r.method == method]
+            movie_method_results = [
+                r
+                for r in results
+                if r.imdb_key == movie and r.method == method and r.scores is not None
+            ]
             if movie_method_results:
+                # type: ignore[union-attr] - filtered for non-None scores above
                 by_movie[movie][method] = {
-                    "correctness": sum(r.scores.correctness.score for r in movie_method_results) / len(movie_method_results),
-                    "faithfulness": sum(r.scores.faithfulness.score for r in movie_method_results) / len(movie_method_results),
-                    "relevance": sum(r.scores.relevance.score for r in movie_method_results) / len(movie_method_results),
-                    "completeness": sum(r.scores.completeness.score for r in movie_method_results) / len(movie_method_results),
+                    "correctness": sum(
+                        r.scores.correctness.score
+                        for r in movie_method_results  # type: ignore[union-attr]
+                    )
+                    / len(movie_method_results),
+                    "faithfulness": sum(
+                        r.scores.faithfulness.score
+                        for r in movie_method_results  # type: ignore[union-attr]
+                    )
+                    / len(movie_method_results),
+                    "relevance": sum(
+                        r.scores.relevance.score
+                        for r in movie_method_results  # type: ignore[union-attr]
+                    )
+                    / len(movie_method_results),
+                    "completeness": sum(
+                        r.scores.completeness.score
+                        for r in movie_method_results  # type: ignore[union-attr]
+                    )
+                    / len(movie_method_results),
                 }
 
-    # Aggregate efficiency by method
-    efficiency = {}
+    # Aggregate efficiency by method (only if efficiency exists)
+    efficiency: dict[str, dict[str, float]] = {}
     for method in methods:
-        method_results = [r for r in results if r.method == method]
+        method_results = [
+            r for r in results if r.method == method and r.efficiency is not None
+        ]
         if method_results:
+            # type: ignore[union-attr] - filtered for non-None efficiency above
             efficiency[method] = {
-                "avg_latency": sum(r.efficiency.latency for r in method_results) / len(method_results),
-                "avg_llm_calls": sum(r.efficiency.llm_calls for r in method_results) / len(method_results),
-                "avg_prompt_tokens": sum(r.efficiency.prompt_tokens for r in method_results) / len(method_results),
-                "avg_output_tokens": sum(r.efficiency.output_tokens for r in method_results) / len(method_results),
+                "avg_latency": sum(r.efficiency.latency for r in method_results)  # type: ignore[union-attr]
+                / len(method_results),
+                "avg_llm_calls": sum(r.efficiency.llm_calls for r in method_results)  # type: ignore[union-attr]
+                / len(method_results),
+                "avg_prompt_tokens": sum(
+                    r.efficiency.prompt_tokens
+                    for r in method_results  # type: ignore[union-attr]
+                )
+                / len(method_results),
+                "avg_output_tokens": sum(
+                    r.efficiency.output_tokens
+                    for r in method_results  # type: ignore[union-attr]
+                )
+                / len(method_results),
             }
 
     # Build metadata

@@ -23,6 +23,7 @@ def eval_cli(
     methods: str | None,
     imdb_key: str | None,
     resume: bool,
+    skip_evaluation: bool,
     verbose: bool,
 ):
     """Run evaluation on GraphRAG indexes.
@@ -33,7 +34,9 @@ def eval_cli(
 
     # Load eval config
     if eval_config:
-        config_path = root / eval_config if not eval_config.is_absolute() else eval_config
+        config_path = (
+            root / eval_config if not eval_config.is_absolute() else eval_config
+        )
         eval_cfg = EvalConfig.from_yaml(str(config_path))
     else:
         # Look for default config
@@ -56,37 +59,44 @@ def eval_cli(
         eval_cfg.indexes = {imdb_key: eval_cfg.indexes[imdb_key]}
 
     # Run evaluation
-    asyncio.run(run_evaluation(root, eval_cfg, resume, verbose))
+    asyncio.run(run_evaluation(root, eval_cfg, resume, skip_evaluation, verbose))
 
 
 async def run_evaluation(
     root: Path,
     eval_cfg: EvalConfig,
     resume: bool,
+    skip_evaluation: bool,
     verbose: bool,
 ):
     """Execute the evaluation run."""
     # Load main graphrag config for LLM settings
     graphrag_config = load_config(root)
 
-    # Create LLM judge using the default chat model
-    model_settings = graphrag_config.get_language_model_config("default_chat_model")
-    judge_model = ModelManager().get_or_create_chat_model(
-        name="eval_judge",
-        model_type=model_settings.type,
-        config=model_settings,
-    )
-    judge = LLMJudge(
-        model=judge_model,
-        temperature=eval_cfg.judge.temperature,
-    )
-
-    # Create runner
-    runner = EvaluationRunner(
-        config=graphrag_config,
-        judge=judge,
-        index_roots=eval_cfg.indexes,
-    )
+    # Create runner (judge only needed if not skipping evaluation)
+    if skip_evaluation:
+        runner = EvaluationRunner(
+            config=graphrag_config,
+            judge=None,  # type: ignore[arg-type]
+            index_roots=eval_cfg.indexes,
+        )
+    else:
+        # Create LLM judge using the default chat model
+        model_settings = graphrag_config.get_language_model_config("default_chat_model")
+        judge_model = ModelManager().get_or_create_chat_model(
+            name="eval_judge",
+            model_type=model_settings.type,
+            config=model_settings,
+        )
+        judge = LLMJudge(
+            model=judge_model,
+            temperature=eval_cfg.judge.temperature,
+        )
+        runner = EvaluationRunner(
+            config=graphrag_config,
+            judge=judge,
+            index_roots=eval_cfg.indexes,
+        )
 
     # Load dataset
     dataset_path = root / eval_cfg.dataset.path
@@ -113,7 +123,9 @@ async def run_evaluation(
             with open(checkpoint_path, "r") as f:
                 checkpoint = json.load(f)
             completed_results = checkpoint.get("results", [])
-            completed_keys = {(r["imdb_key"], r["question"], r["method"]) for r in completed_results}
+            completed_keys = {
+                (r["imdb_key"], r["question"], r["method"]) for r in completed_results
+            }
             print(f"Resuming from checkpoint: {len(completed_results)} completed")
         else:
             completed_keys = set()
@@ -132,6 +144,7 @@ async def run_evaluation(
             dataset=dataset,
             methods=eval_cfg.methods,
             progress_callback=progress if verbose else None,
+            skip_evaluation=skip_evaluation,
         )
     except KeyboardInterrupt:
         print("\n\nInterrupted. Saving checkpoint...")
@@ -157,13 +170,18 @@ async def run_evaluation(
     query_results = []
     for r in all_results:
         if isinstance(r, dict):
-            scores = MetricScores(
-                correctness=JudgeResult(r["scores"]["correctness"], ""),
-                faithfulness=JudgeResult(r["scores"]["faithfulness"], ""),
-                relevance=JudgeResult(r["scores"]["relevance"], ""),
-                completeness=JudgeResult(r["scores"]["completeness"], ""),
-            )
-            efficiency = EfficiencyMetrics(**r["efficiency"])
+            # Handle both simple results (no evaluation) and full results
+            if "scores" in r and "efficiency" in r:
+                scores = MetricScores(
+                    correctness=JudgeResult(r["scores"]["correctness"], ""),
+                    faithfulness=JudgeResult(r["scores"]["faithfulness"], ""),
+                    relevance=JudgeResult(r["scores"]["relevance"], ""),
+                    completeness=JudgeResult(r["scores"]["completeness"], ""),
+                )
+                efficiency = EfficiencyMetrics(**r["efficiency"])
+            else:
+                scores = None
+                efficiency = None
             qr = QueryResult(
                 imdb_key=r["imdb_key"],
                 question=r["question"],
@@ -179,16 +197,21 @@ async def run_evaluation(
             query_results.append(r)
 
     aggregated = aggregate_results(query_results)
-    aggregated.save(eval_cfg.output.dir)
 
-    # Print summary
-    print("\n=== Evaluation Summary ===\n")
-    for method, scores in aggregated.by_method.items():
-        print(f"{method.upper()}:")
-        print(f"  Correctness:  {scores['correctness']:.2%}")
-        print(f"  Faithfulness: {scores['faithfulness']:.2%}")
-        print(f"  Relevance:    {scores['relevance']:.2%}")
-        print(f"  Completeness: {scores['completeness']:.2%}")
-        print()
-
-    print(f"\nResults saved to {eval_cfg.output.dir}/")
+    # Save results (simple or full)
+    if skip_evaluation:
+        aggregated.save_simple(eval_cfg.output.dir)
+        print(f"\n=== Simple Results Saved ===")
+        print(f"Results saved to {eval_cfg.output.dir}/eval_results_simple.json")
+    else:
+        aggregated.save(eval_cfg.output.dir)
+        # Print summary
+        print("\n=== Evaluation Summary ===\n")
+        for method, scores in aggregated.by_method.items():
+            print(f"{method.upper()}:")
+            print(f"  Correctness:  {scores['correctness']:.2%}")
+            print(f"  Faithfulness: {scores['faithfulness']:.2%}")
+            print(f"  Relevance:    {scores['relevance']:.2%}")
+            print(f"  Completeness: {scores['completeness']:.2%}")
+            print()
+        print(f"\nResults saved to {eval_cfg.output.dir}/")
