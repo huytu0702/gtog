@@ -69,6 +69,8 @@ vector_store:
     type: lancedb
     db_uri: output\lancedb
     container_name: default
+    index_schma:
+      vector_size: 1536
 
 ### Workflow settings ###
 
