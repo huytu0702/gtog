@@ -10,7 +10,7 @@ FastAPI backend for GraphRAG that enables document indexing and querying with mu
 - **Search Methods**: Support for 4 search methods:
   - **Global Search**: High-level overview across entire dataset
   - **Local Search**: Entity-specific detailed information
-  - **ToG Search**: Tree-of-Graph reasoning-based exploration
+  - **ToG Search**: Think-on-Graph reasoning-based exploration
   - **DRIFT Search**: Multi-hop reasoning and relationships
 
 ## Setup

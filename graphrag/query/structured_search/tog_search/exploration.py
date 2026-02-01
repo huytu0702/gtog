@@ -98,6 +98,47 @@ class GraphExplorer:
             return (entity.title, entity.description or "")
         return None
 
+    def get_full_entity_info(self, entity_id: str) -> Tuple[str, str, str] | None:
+        """Get entity id, name and full description."""
+        entity = self.entities.get(entity_id)
+        if entity:
+            return (entity.id, entity.title, entity.description or "")
+        return None
+
+    def get_full_relation_info(
+        self, source_id: str, target_id: str, rel_desc: str
+    ) -> Tuple[str, str, str, str, float] | None:
+        """Get full relationship information including description."""
+        # Search in outgoing relations
+        for rel in self.relationships:
+            if (
+                rel.source == source_id
+                and rel.target == target_id
+                and rel.description == rel_desc
+            ):
+                return (
+                    rel.id,
+                    rel.description or rel_desc,
+                    rel.source,
+                    rel.target,
+                    rel.weight or 1.0,
+                )
+        # Search in incoming relations
+        for rel in self.relationships:
+            if (
+                rel.target == source_id
+                and rel.source == target_id
+                and rel.description == rel_desc
+            ):
+                return (
+                    rel.id,
+                    rel.description or rel_desc,
+                    rel.source,
+                    rel.target,
+                    rel.weight or 1.0,
+                )
+        return None
+
     async def _compute_entity_embeddings(self) -> None:
         """Compute and cache embeddings for all entities."""
         if self._entity_embeddings is not None:

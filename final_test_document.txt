@@ -1,3 +1,0 @@
-This is a simple test document for the final verification test.
-GraphRAG functionality includes knowledge graph creation and community detection.
-The system should be able to process this document and answer questions about it.

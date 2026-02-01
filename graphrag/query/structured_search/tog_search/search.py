@@ -94,7 +94,9 @@ class ToGSearch:
         response_chunks: List[str] = []
         context_paths: List[str] = []
 
-        async for chunk, paths, chunk_metrics in self._stream_search_with_metrics(query):
+        async for chunk, paths, chunk_metrics in self._stream_search_with_metrics(
+            query
+        ):
             if chunk:
                 response_chunks.append(chunk)
             if paths:
@@ -123,7 +125,10 @@ class ToGSearch:
                 "reasoning": metrics.reasoning_llm_calls,
             },
             prompt_tokens_categories={
-                "exploration": metrics.prompt_tokens - (metrics.prompt_tokens - metrics.embedding_tokens) if metrics.embedding_tokens else 0,
+                "exploration": metrics.prompt_tokens
+                - (metrics.prompt_tokens - metrics.embedding_tokens)
+                if metrics.embedding_tokens
+                else 0,
                 "reasoning": metrics.prompt_tokens,
             },
             output_tokens_categories={
@@ -156,7 +161,11 @@ class ToGSearch:
 
         if not starting_entities:
             available_entities = list(self.explorer.entities.keys())[:10]
-            yield (f"No relevant entities found for query '{query}'. Available entities: {available_entities}", [], None)
+            yield (
+                f"No relevant entities found for query '{query}'. Available entities: {available_entities}",
+                [],
+                None,
+            )
             return
 
         # Initialize search state
@@ -171,17 +180,21 @@ class ToGSearch:
 
         # Create initial nodes from starting entities
         for entity_id in starting_entities:
-            name, description = self.explorer.get_entity_info(entity_id)
-            initial_node = ExplorationNode(
-                entity_id=entity_id,
-                entity_name=name,
-                entity_description=description,
-                depth=0,
-                score=1.0,  # Initial score for starting nodes
-                parent=None,
-                relation_from_parent=None,
-            )
-            state.add_node(initial_node)
+            entity_info = self.explorer.get_full_entity_info(entity_id)
+            if entity_info:
+                entity_id_full, name, full_description = entity_info
+                initial_node = ExplorationNode(
+                    entity_id=entity_id,
+                    entity_name=name,
+                    entity_description=full_description,
+                    depth=0,
+                    score=1.0,  # Initial score for starting nodes
+                    parent=None,
+                    relation_from_parent=None,
+                    relation_full_description=None,
+                    entity_full_description=full_description,
+                )
+                state.add_node(initial_node)
 
         # Exploration loop
         while state.current_depth < state.max_depth:
@@ -204,7 +217,10 @@ class ToGSearch:
                     continue  # No relations to explore from this node
 
                 # Score relations
-                scored_relations, pruning_metrics = await self.pruning_strategy.score_relations(
+                (
+                    scored_relations,
+                    pruning_metrics,
+                ) = await self.pruning_strategy.score_relations(
                     query, node.entity_name, relations
                 )
 
@@ -217,16 +233,23 @@ class ToGSearch:
 
                 # Create new exploration nodes
                 for rel_desc, target_id, direction, weight, score in top_relations:
-                    target_name, target_desc = self.explorer.get_entity_info(target_id)
-                    if target_name:
+                    target_info = self.explorer.get_full_entity_info(target_id)
+                    rel_info = self.explorer.get_full_relation_info(
+                        node.entity_id, target_id, rel_desc
+                    )
+                    if target_info:
+                        entity_id_full, target_name, target_full_desc = target_info
+                        rel_full_desc = rel_info[1] if rel_info else rel_desc
                         new_node = ExplorationNode(
                             entity_id=target_id,
                             entity_name=target_name,
-                            entity_description=target_desc,
+                            entity_description=target_full_desc,
                             depth=next_depth,
                             score=score,
                             parent=node,
                             relation_from_parent=rel_desc,
+                            relation_full_description=rel_full_desc,
+                            entity_full_description=target_full_desc,
                         )
                         next_level_nodes.append(new_node)
 
@@ -243,7 +266,11 @@ class ToGSearch:
                 kept_nodes = state.get_current_frontier()
                 for node in kept_nodes:
                     if node.parent:
-                        yield (f"[DEPTH {next_depth}] {node.parent.entity_name} --[{node.relation_from_parent}]--> {node.entity_name} (score: {node.score:.2f})\n", [], None)
+                        yield (
+                            f"[DEPTH {next_depth}] {node.parent.entity_name} --[{node.relation_from_parent}]--> {node.entity_name} (score: {node.score:.2f})\n",
+                            [],
+                            None,
+                        )
 
             # Check for early termination
             (
@@ -254,17 +281,23 @@ class ToGSearch:
                 query, state.get_current_frontier()
             )
 
-            # Yield early termination metrics
-            yield ("", [], early_term_metrics)
-
             if should_terminate and answer:
+                reasoning_paths = self.reasoning_module.get_reasoning_paths(
+                    state.get_current_frontier()
+                )
+                yield (answer, reasoning_paths, early_term_metrics)
                 # Disabled debug output for early termination
                 if False:
                     yield (f"=== ToG EARLY TERMINATION ===\n", [], None)
-                    yield (f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n", [], None)
+                    yield (
+                        f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n",
+                        [],
+                        None,
+                    )
                     yield (f"=== ToG REASONING ANSWER ===\n\n", [], None)
-                yield (answer, [], None)
                 return
+            # Yield early termination metrics (non-terminating case)
+            yield ("", [], early_term_metrics)
 
         # Generate final answer from explored paths
         all_paths = []
@@ -272,14 +305,20 @@ class ToGSearch:
             all_paths.extend(depth_nodes)
 
         if not all_paths:
-            yield ("No exploration paths were generated. The knowledge graph may not contain relevant information for this query.", [], None)
+            yield (
+                "No exploration paths were generated. The knowledge graph may not contain relevant information for this query.",
+                [],
+                None,
+            )
             return
 
         # Use reasoning module to generate final answer
         try:
-            answer, reasoning_paths, answer_metrics = await self.reasoning_module.generate_answer(
-                query, all_paths
-            )
+            (
+                answer,
+                reasoning_paths,
+                answer_metrics,
+            ) = await self.reasoning_module.generate_answer(query, all_paths)
 
             # Yield answer metrics
             yield ("", reasoning_paths, answer_metrics)
@@ -291,7 +330,11 @@ class ToGSearch:
                 yield (f"Query: {query}\n", [], None)
                 yield (f"Max Depth: {self.depth}, Beam Width: {self.width}\n", [], None)
                 yield (f"Total exploration paths found: {len(all_paths)}\n", [], None)
-                yield (f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n", [], None)
+                yield (
+                    f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n",
+                    [],
+                    None,
+                )
 
                 yield (f"=== EXPLORATION PATHS (with scores) ===\n", [], None)
                 for i, path in enumerate(reasoning_paths, 1):
@@ -309,7 +352,11 @@ class ToGSearch:
                                 if node.parent
                                 else ""
                             )
-                            yield (f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n", [], None)
+                            yield (
+                                f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n",
+                                [],
+                                None,
+                            )
                         yield ("\n", [], None)
 
                 yield (f"=== ToG REASONING ANSWER ===\n\n", [], None)
@@ -320,9 +367,13 @@ class ToGSearch:
                 f"- {node.entity_name}: {node.entity_description[:100]}..."
                 for node in all_paths[:5]
             ])
-            yield (f"""Error during reasoning: {str(e)}
+            yield (
+                f"""Error during reasoning: {str(e)}
 
 However, I found these relevant entities during exploration:
 {paths_summary}
 
-Based on the exploration, I found {len(all_paths)} potential paths. Please try rephrasing your query or check if the entities are relevant to your question.""", [], None)
+Based on the exploration, I found {len(all_paths)} potential paths. Please try rephrasing your query or check if the entities are relevant to your question.""",
+                [],
+                None,
+            )

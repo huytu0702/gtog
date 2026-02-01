@@ -8,6 +8,7 @@ from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
 @dataclass
 class ReasoningMetrics:
     """Metrics from reasoning operations."""
+
     llm_calls: int = 0
     prompt_tokens: int = 0
     output_tokens: int = 0
@@ -112,57 +113,85 @@ Structure your response as:
         """Format exploration paths with rich context including entity and relationship descriptions."""
         if not nodes:
             return "No exploration paths available."
-        
+
         # Collect unique entities and relationships with full descriptions
-        seen_entities = {}  # entity_name -> description
-        relationships = []  # List of (source, relation_desc, target, source_desc, target_desc)
-        
+        seen_entities = {}  # entity_name -> full_description
+        relationships = []  # List of (source, relation_desc, target, source_full_desc, target_full_desc)
+        relation_details = {}  # (source, target, relation_desc) -> full_relation_desc
+
         for node in nodes:
             # Collect entity info from the entire path
             current = node
             while current is not None:
+                # Use entity_full_description if available, otherwise fall back to entity_description
+                entity_desc = (
+                    current.entity_full_description
+                    or current.entity_description
+                    or "No description available"
+                )
                 if current.entity_name not in seen_entities:
-                    seen_entities[current.entity_name] = current.entity_description or "No description available"
-                
+                    seen_entities[current.entity_name] = entity_desc
+
                 # Collect relationship if has parent
                 if current.parent is not None:
                     rel_info = (
                         current.parent.entity_name,
                         current.relation_from_parent or "related_to",
                         current.entity_name,
-                        current.parent.entity_description or "",
-                        current.entity_description or ""
+                        current.parent.entity_full_description
+                        or current.parent.entity_description
+                        or "",
+                        current.entity_full_description
+                        or current.entity_description
+                        or "",
                     )
                     if rel_info[:3] not in [(r[0], r[1], r[2]) for r in relationships]:
                         relationships.append(rel_info)
-                
+                        # Store full relationship description
+                        rel_key = (
+                            current.parent.entity_name,
+                            current.entity_name,
+                            current.relation_from_parent,
+                        )
+                        rel_full_desc = (
+                            current.relation_full_description
+                            or current.relation_from_parent
+                            or "No description available"
+                        )
+                        relation_details[rel_key] = rel_full_desc
+
                 current = current.parent
-        
+
         # Build rich context output
         output_parts = []
-        
+
         # Section 1: Entity Descriptions
         output_parts.append("=== ENTITIES ===")
         for entity_name, description in seen_entities.items():
             # Include full description, not truncated
             output_parts.append(f"\n[{entity_name}]")
             output_parts.append(f"Description: {description}")
-        
-        # Section 2: Relationships with context
+
+        # Section 2: Relationships
         output_parts.append("\n\n=== RELATIONSHIPS ===")
         for source, relation, target, source_desc, target_desc in relationships:
             output_parts.append(f"\n• {source} --[{relation}]--> {target}")
-            # Add brief context about the relationship
-            if source_desc or target_desc:
-                output_parts.append(f"  Context: {source_desc[:100]}..." if len(source_desc) > 100 else f"  Context: {source_desc}" if source_desc else "")
-        
+
+        # Section 3: Relationship Descriptions (NEW)
+        output_parts.append("\n\n=== RELATIONSHIP DESCRIPTIONS ===")
+        for (source, target, relation), full_desc in relation_details.items():
+            output_parts.append(f"\n• {relation}")
+            output_parts.append(f"  Full description: {full_desc}")
+            output_parts.append(f"  Source: {source}")
+            output_parts.append(f"  Target: {target}")
+
         return "\n".join(output_parts)
-    
+
     def _extract_triplets(self, node: ExplorationNode) -> List[tuple]:
         """Extract knowledge triplets from a path with descriptions."""
         triplets = []
         current = node
-        
+
         while current.parent is not None:
             # Create enriched triplet: (parent_entity, relation, current_entity, parent_desc, current_desc)
             triplet = (
@@ -170,27 +199,31 @@ Structure your response as:
                 current.relation_from_parent or "related_to",
                 current.entity_name,
                 current.parent.entity_description or "",
-                current.entity_description or ""
+                current.entity_description or "",
             )
             triplets.append(triplet)
             current = current.parent
-        
+
         return list(reversed(triplets))
 
     def _path_to_string(self, node: ExplorationNode) -> str:
         """Convert exploration path to triplet-based string."""
         triplets = self._extract_triplets(node)
-        
+
         if not triplets:
             return node.entity_name
-        
+
         # Format as chain of triplets (triplets now have 5 elements, use first 3)
         parts = []
         for triplet in triplets:
             source, relation, target = triplet[0], triplet[1], triplet[2]
             parts.append(f"{source} --[{relation}]--> {target}")
-        
+
         return " | ".join(parts)
+
+    def get_reasoning_paths(self, nodes: List[ExplorationNode]) -> List[str]:
+        """Return path strings for a set of exploration nodes."""
+        return [self._path_to_string(node) for node in nodes]
 
     async def check_early_termination(
         self,
