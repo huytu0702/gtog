@@ -7,6 +7,8 @@ indexes:
 
 methods:
   - tog
+  - local
+  - basic
 
 output:
   dir: "eval_results"
