@@ -1256,16 +1256,9 @@ async def tog_search(
     init_loggers(config=config, verbose=verbose, filename="query.log")
 
     callbacks = callbacks or []
-    full_response = ""
-    context_data = {}
 
-    def on_context(context: Any) -> None:
-        nonlocal context_data
-        context_data = context
-
-    local_callbacks = NoopQueryCallbacks()
-    local_callbacks.on_context = on_context
-    callbacks.append(local_callbacks)
+    entities_ = read_indexer_entities(entities, communities=None, community_level=None)
+    relationships_ = read_indexer_relationships(relationships)
 
     # Load entity description embedding store
     vector_store_args = {}
@@ -1277,17 +1270,17 @@ async def tog_search(
     )
 
     logger.debug("Executing ToG search query: %s", query)
-    async for chunk in tog_search_streaming(
+    search_engine = get_tog_search_engine(
         config=config,
-        entities=entities,
-        relationships=relationships,
-        query=query,
+        entities=entities_,
+        relationships=relationships_,
+        response_type="detailed",  # ToG always provides detailed responses
         callbacks=callbacks,
         entity_text_embeddings=entity_text_embeddings,
-    ):
-        full_response += chunk
-    logger.debug("Query response: %s", truncate(full_response, 400))
-    return full_response, context_data
+    )
+    result = await search_engine.search(query=query)
+    logger.debug("Query response: %s", truncate(str(result.response), 400))
+    return result.response, result.context_data
 
 
 @validate_call(config={"arbitrary_types_allowed": True})

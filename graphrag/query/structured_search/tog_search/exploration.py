@@ -59,6 +59,7 @@ class GraphExplorer:
         """Build adjacency lists for efficient graph traversal."""
         self.outgoing = {}  # entity_id -> [(relation, target_entity_id)]
         self.incoming = {}  # entity_id -> [(relation, source_entity_id)]
+        self._relation_index = {}  # (source, target, description) -> Relationship
 
         for rel in self.relationships:
             # Outgoing edges
@@ -70,6 +71,11 @@ class GraphExplorer:
             if rel.target not in self.incoming:
                 self.incoming[rel.target] = []
             self.incoming[rel.target].append((rel.description, rel.source, rel.weight))
+
+            # Index relationship for quick lookup (preserve first occurrence)
+            key = (rel.source, rel.target, rel.description)
+            if key not in self._relation_index:
+                self._relation_index[key] = rel
 
     def get_relations(
         self, entity_id: str, bidirectional: bool = True
@@ -98,6 +104,40 @@ class GraphExplorer:
             return (entity.title, entity.description or "")
         return None
 
+    def get_full_entity_info(self, entity_id: str) -> Tuple[str, str, str] | None:
+        """Get entity id, name and full description."""
+        entity = self.entities.get(entity_id)
+        if entity:
+            return (entity.id, entity.title, entity.description or "")
+        return None
+
+    def get_full_relation_info(
+        self, source_id: str, target_id: str, rel_desc: str
+    ) -> Tuple[str, str, str, str, float] | None:
+        """Get full relationship information including description."""
+        rel = self._relation_index.get((source_id, target_id, rel_desc))
+        if not rel:
+            rel = self._relation_index.get((target_id, source_id, rel_desc))
+        if not rel:
+            return None
+
+        # Build full description from description + attributes if available
+        full_desc = rel.description or rel_desc
+        if rel.attributes:
+            attr_text = " ".join([
+                f"{k}: {v}" for k, v in rel.attributes.items() if v
+            ])
+            if attr_text:
+                full_desc = f"{full_desc} ({attr_text})" if full_desc else attr_text
+
+        return (
+            rel.id,
+            full_desc,
+            rel.source,
+            rel.target,
+            rel.weight or 1.0,
+        )
+
     async def _compute_entity_embeddings(self) -> None:
         """Compute and cache embeddings for all entities."""
         if self._entity_embeddings is not None:
@@ -106,29 +146,36 @@ class GraphExplorer:
         # Priority 1: Use pre-computed embeddings from vector store
         if self.entity_embedding_store and self.entity_list:
             try:
-                embeddings = []
-                self._entity_texts = []
+                embeddings: List[Optional[List[float]]] = [
+                    None for _ in self.entity_list
+                ]
+                self._entity_texts = [
+                    f"{entity.title}: {entity.description or ''}"[:500]
+                    for entity in self.entity_list
+                ]
+                missing_indices: List[int] = []
+                missing_texts: List[str] = []
 
-                for entity in self.entity_list:
+                for i, entity in enumerate(self.entity_list):
                     # Try to get pre-computed embedding from vector store
                     doc = self.entity_embedding_store.search_by_id(entity.id)
                     if doc and doc.vector:
-                        embeddings.append(doc.vector)
-                        self._entity_texts.append(
-                            f"{entity.title}: {entity.description or ''}"[:500]
-                        )
+                        embeddings[i] = doc.vector
                     else:
-                        # Fallback: compute embedding if not found in store
-                        if self.embedding_model:
-                            text = f"{entity.title}: {entity.description or ''}"[:500]
-                            emb = await self.embedding_model.aembed(text=text)
-                            embeddings.append(emb)
-                            self._entity_texts.append(text)
-                        else:
+                        if not self.embedding_model:
                             logger.warning(
                                 f"No embedding found for entity {entity.id} and no embedding model available"
                             )
                             return
+                        missing_indices.append(i)
+                        missing_texts.append(self._entity_texts[i])
+
+                if missing_indices:
+                    batch_embeddings = await self.embedding_model.aembed_batch(
+                        text_list=missing_texts
+                    )
+                    for idx, emb in zip(missing_indices, batch_embeddings):
+                        embeddings[idx] = emb
 
                 self._entity_embeddings = np.array(embeddings)
                 logger.debug(

@@ -7,7 +7,11 @@
       "Bash(curl:*)",
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
-      "Bash(uvicorn:*)"
+      "Bash(uvicorn:*)",
+      "Bash(pytest:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(eval\\): create evaluation package structure\n\nPlaceholder __init__.py for graphrag.eval module.\n\nCo-Authored-By: Claude \\(glm-4.7\\) <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

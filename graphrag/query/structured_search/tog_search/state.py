@@ -13,6 +13,10 @@ class ExplorationNode:
     score: float
     parent: Union["ExplorationNode", None]
     relation_from_parent: Union[str, None]
+    relation_full_description: Union[str, None] = None  # Full relationship description
+    entity_full_description: Union[str, None] = (
+        None  # Full entity description from Entity object
+    )
 
     def get_path(self) -> List[tuple[str, str]]:
         """Returns the path from root to this node as (entity, relation) pairs."""

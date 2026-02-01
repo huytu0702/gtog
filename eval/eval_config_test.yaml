@@ -1,0 +1,20 @@
+# Test evaluation configuration for GraphRAG
+
+dataset:
+  path: "eval/qa_eval_sub.json"
+
+indexes:
+  tt0097576: "tt0097576_test"
+
+methods:
+  - tog
+  - local
+  - basic
+
+output:
+  dir: "eval/results_test"
+  save_intermediate: true
+
+judge:
+  model: null  # uses default from settings.yaml
+  temperature: 0.0

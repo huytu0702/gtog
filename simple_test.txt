@@ -1,3 +1,0 @@
-This is a simple test document for GraphRAG.
-It contains basic information about testing the backend API.
-The document should be indexed and searchable.

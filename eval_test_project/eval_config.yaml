@@ -1,0 +1,19 @@
+# eval_config.yaml
+dataset:
+  path: "ground_truth.json"
+
+indexes:
+  test: "eval_test_project"
+
+methods:
+  - tog
+  - local
+  - basic
+
+output:
+  dir: "eval_results"
+  save_intermediate: true
+
+judge:
+  model: null  # Sử dụng model mặc định từ settings.yaml
+  temperature: 0.0

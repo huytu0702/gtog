@@ -553,3 +553,63 @@ def _query_cli(
             )
         case _:
             raise ValueError(INVALID_METHOD_ERROR)
+
+
+@app.command("eval")
+def _eval_cli(
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Evaluation configuration file (eval_config.yaml).",
+        exists=True,
+        file_okay=True,
+        readable=True,
+        autocompletion=CONFIG_AUTOCOMPLETE,
+    ),
+    root: Path = typer.Option(
+        Path(),
+        "--root",
+        "-r",
+        help="The project root directory.",
+        exists=True,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        autocompletion=ROOT_AUTOCOMPLETE,
+    ),
+    methods: str | None = typer.Option(
+        None,
+        "--methods",
+        "-m",
+        help="Comma-separated list of methods to evaluate (e.g., tog,local,basic).",
+    ),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="Resume from checkpoint if available.",
+    ),
+    skip_evaluation: bool = typer.Option(
+        False,
+        "--skip-evaluation",
+        "-s",
+        help="Skip LLM-as-Judge evaluation, only collect responses.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show progress during evaluation.",
+    ),
+) -> None:
+    """Evaluate GraphRAG search methods using LLM-as-Judge metrics."""
+    from graphrag.cli.eval import eval_cli
+
+    eval_cli(
+        root_dir=root,
+        eval_config=config,
+        methods=methods,
+        resume=resume,
+        skip_evaluation=skip_evaluation,
+        verbose=verbose,
+    )

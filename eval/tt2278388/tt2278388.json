@@ -1,0 +1,1012 @@
+[
+    {
+        "question": "Where is the Grand Budapest Hotel located?",
+        "ground_truth": "In the Republic of Zubrowka",
+        "context": "Mr. Zero Moustafa was, at one time, the richest man in Zubrowka; and was still, indeed, the owner of the Grand Budapest. [1]"
+    },
+    {
+        "question": "What is the state of affairs in Zubrowka in 1932?",
+        "ground_truth": "The town is on the verge of war",
+        "context": "The front page of the Trans-Alpine Yodel. The headline is, “Will There Be War? Tanks at Frontier” [2]"
+    },
+    {
+        "question": "What is Moustafa's position at the hotel in 1932?",
+        "ground_truth": "He was a lobby boy",
+        "context": "And so, my life began. Junior Lobby Boy (in-training), Grand Budapest Hotel, under the strict command of M. Gustave H. [3]"
+    },
+    {
+        "question": "What is the state of the Grand Budapest Hotel in 1932?",
+        "ground_truth": "It gets a lot of wealthy clientele",
+        "context": "I began to realize that many of the hotel’s most valued and distinguished guests -- came for him. [4] The requirements were always the same. They had to be: rich, old, insecure, vain, superficial, blonde, needy. [5]"
+    },
+    {
+        "question": "What does Gustave do in his free time?",
+        "ground_truth": "He courts older women",
+        "context": "A succession of dames of varying grandeurs seen tête-à-tête with M. Gustave [6] The requirements were always the same. They had to be: rich, old, insecure, vain, superficial, blonde, needy. [5] I go to bed with all my friends. [7]"
+    },
+    {
+        "question": "Why did Moustafa come to Zubrowka in 1932?",
+        "ground_truth": "Because his home town was ruined and his family killed",
+        "context": "Well, you see, my father was murdered, and the rest of my family were executed by firing squad. Our village was burned to the ground. Those who managed to survive were forced to flee. I left -- because of the war. [8]"
+    },
+    {
+        "question": "Who does Moustafa get as a girlfriend in the beginning of the story?",
+        "ground_truth": "Agatha",
+        "context": "This was also when I met Agatha [9] She’s my girlfriend. You can’t just buy her things. [10]"
+    },
+    {
+        "question": "How does the unknown hotel owner pass on messages to the hotel staff?",
+        "ground_truth": "Through Deputy Kovacs",
+        "context": "The identity of the owner of the hotel was unknown to all of us. Each month, his emissary, known as Deputy Kovacs, arrived to review the books and convey messages on behalf of the mysterious proprietor. [11], [12]"
+    },
+    {
+        "question": "What is Gustave's opinion about the approaching war in Zubrowka?",
+        "ground_truth": "He is not concerned with it",
+        "context": "The headline is, “Will There Be War? Tanks at Frontier” -- but a column below the fold reads: Dowager Countess Found Dead in Boudoir... As M. Gustave reads the article, he says gravely: Dear God. [2], [13] We must go to her. [13]"
+    },
+    {
+        "question": "Who is the owner of the Grand Budapest hotel in 1932?",
+        "ground_truth": "The owner is unknown",
+        "context": "The identity of the owner of the hotel was unknown to all of us. [11]"
+    },
+    {
+        "question": "What is Agatha's job?",
+        "ground_truth": "She is a pastry chef",
+        "context": "She works a rolling-pin over a wide expanse of flattened pastry-dough. [9] Zero. I’m a baker. ZERO (correcting her) You’re a pastry chef. One of the best in the -- [14]"
+    },
+    {
+        "question": "In what year does Moustafa's story begin?",
+        "ground_truth": "The story begins in 1932",
+        "context": "Part 1: “M. Gustave”... The early thirties. [15]"
+    },
+    {
+        "question": "In what way is deputy Kovacs connected to the Grand Budapest hotel, at least in the beginning of the movie?",
+        "ground_truth": "The unknown owner sends messages to the staff via Kovacs",
+        "context": "Each month, his emissary, known as Deputy Kovacs, arrived to review the books and convey messages on behalf of the mysterious proprietor. [11], [12]"
+    },
+    {
+        "question": "Which of the women does Gustave spend a night with the night before her departure?",
+        "ground_truth": "Madame Cline Villeneuve",
+        "context": "Good morning, Madame. Your breakfast is served... you will be en route in precisely -- (checks his watch) -- eleven minutes. [16] It’s quite a thing winning the loyalty of a woman like that for nineteen consecutive seasons. [17] I hereby place you under arrest for the murder of Madame Céline Villeneuve Desgoffe und Taxis. [18]"
+    },
+    {
+        "question": "Who is the Grand Budapest hotel's concierge in 1932?",
+        "ground_truth": "Monsieur Gustave",
+        "context": "A tall, blond, forty-year-old concierge stands patiently alone surveying the room. He is tranquil, perfectly composed, waiting... He is M. Gustave. [15], [19]"
+    },
+    {
+        "question": "Who is Monsieur Ivan?",
+        "ground_truth": "A concierge of the hotel",
+        "context": "Guten abend. M. Ivan, bitte. [20] A slim concierge with a long moustache talks on the telephone. He is M. Ivan. [21]"
+    },
+    {
+        "question": "Who is Jopling?",
+        "ground_truth": "A cold-blooded assassin working for Dmitri",
+        "context": "A thug in a leather coat with close-shaven head and high-heeled boots sits slightly behind and beside him [Dmitri]. He wears brass knuckles on both hands. He is Jopling. [22] Dmitri and Jopling: ruthless, cold-blooded savages. [23]"
+    },
+    {
+        "question": "What do Gustave and Moustafa use to chase after Jopling?",
+        "ground_truth": "A sled",
+        "context": "Zero turns to the display next to them... shoves the sled full-speed across the church-yard... M. Gustave chases after Zero, and they jump onboard just as the sled dips sharply and accelerates like mad down the mountain. [24]"
+    },
+    {
+        "question": "What does Jopling do after he kills Serge?",
+        "ground_truth": "He flees the monastery on skis",
+        "context": "Jopling (without cloak, on skis) exploding out the door of the shed, making a hard pivot, and launching through the monastery gate, down the steep slope. [25]"
+    },
+    {
+        "question": "Who is Jopling working for?",
+        "ground_truth": "He is working for Dmitri",
+        "context": "A thug in a leather coat... sits slightly behind and beside him [Dmitri]... He is Jopling. [22] You work for the family Desgoffe und Taxis? Pause. Jopling nods. [26]"
+    },
+    {
+        "question": "What does Jopling do to Kovacs when he refuses to work with Dmitri?",
+        "ground_truth": "He chops off his fingers and kills him",
+        "context": "The door hammers shut with a bang. Four of Deputy Kovacs’ fingers, gripping the door-frame, pop-off at the knuckles all at once... On the other side of the door, there is a scream of blood-curdling agony, then a thump, a thwhack, and, finally, a wallop. [27]"
+    },
+    {
+        "question": "What happens when Serge meets with Gustave and Moustafa?",
+        "ground_truth": "Jopling strangles him",
+        "context": "Zero darts to the other side and cracks open the other door. He peeks-in and sees: Serge with a bloody garotte-wire strung around his neck. [28]"
+    },
+    {
+        "question": "Why do Gustave and Moustafa want to meet with Serge X?",
+        "ground_truth": "He is the only person that can clear Gustave's murder accusations",
+        "context": "I really must ask you to clear my name. [29] the key witness who actually (ostensibly) saw the alleged events appears to have fled the jurisdiction... is Serge X. [30]"
+    },
+    {
+        "question": "Where is the monastery that Gustave and Moustafa go to located?",
+        "ground_truth": "On the top of a mountain",
+        "context": "The peak of an icy butte. A narrow, domed building sticks up into the sky at the top... M. Gustave and Zero shiver at the end of the railing. [31]"
+    },
+    {
+        "question": "Who does Gustave call for help after Jopling kills Kovacs?",
+        "ground_truth": "A concierge Ivan",
+        "context": "Guten abend. M. Ivan, bitte. Danke. [20] I’m formally calling upon the special services of -- [32] The Society of the Crossed Keys [32] A slim concierge with a long moustache talks on the telephone. He is M. Ivan. [21]"
+    },
+    {
+        "question": "Who pursues Gustave and Moustafa as they try to prove Gustave's innocence?",
+        "ground_truth": "A cold-blooded assassin working for Dmitri",
+        "context": "Dmitri and Jopling: ruthless, cold-blooded savages. [23] Jopling, skiing superbly up ahead, looks back. He sees M. Gustave and Zero closing-in. [24]"
+    },
+    {
+        "question": "What important information is Serge about to reveal to Gustave and Moustafa before he's killed?",
+        "ground_truth": "Information regarding a second will from Madame D. Zero",
+        "context": "I was the official witness in Madame D’s presence to the creation of a second will to be executed only in the event of her death by murder... But they destroyed it... However... I pulled a copy."
+    },
+    {
+        "question": "What happens when Moustafa and Gustave face Jopling at the edge of a cliff?",
+        "ground_truth": "Zero pushes Jopling down the cliff",
+        "context": "There is a powerful thump, and Jopling flies head-first, screaming, off the cliff over M. Gustave’s head. Zero, in the midst of a diving shove, lands on his face and nearly goes over the edge, himself."
+    },
+    {
+        "question": "What is the Society of the Crossed Keys?",
+        "ground_truth": "A fraternal order of concierges who attempt to assist other members",
+        "context": "I’m formally calling upon the special services of -- The Society of the Crossed Keys... A slim concierge with a long moustache talks on the telephone... A very tall, bony concierge... A stocky concierge..."
+    },
+    {
+        "question": "What happens to Jopling when he's pushed off the cliff?",
+        "ground_truth": "He dies",
+        "context": "Far, far below: Jopling’s arms and legs flail as he disappears down into the deepest reaches of the chasm."
+    },
+    {
+        "question": "Who is the Author with when he finishes narrating his memoirs?",
+        "ground_truth": "His grandson",
+        "context": "The author (at seventy-five) sits in an armchair writing in an identical small note-book. The six-year-old boy plays with an army of metal soldiers on the floor beside him."
+    },
+    {
+        "question": "In which year does the Author complete his memoirs?",
+        "ground_truth": "In 1985",
+        "context": "Twenty years ago. A cluttered office... The author, seventy-five and identical to his sculpted image... sits in an armchair writing in an identical small note-book."
+    },
+    {
+        "question": "Who inherits Gustave's fortune, including the hotel?",
+        "ground_truth": " Zero.",
+        "context": "In the end, they shot him. So it all went to me... He anointed me his successor... Zero Moustafa had traded a great and important fortune in exchange for one costly, unprofitable, doomed hotel."
+    },
+    {
+        "question": "What happens to Gustave and Moustafa during a train journey across the border?",
+        "ground_truth": "Their papers are inspected by soldiers.",
+        "context": "The train has, in fact, come to a halt in the middle of nowhere again... Three soldiers appear in the compartment doorway... Documents, please."
+    },
+    {
+        "question": "What happens to Gustave as he tries to defend Moustafa from the soldiers?",
+        "ground_truth": "He is shot.",
+        "context": "M. Gustave is instantly on his feet, tussling. Zero jumps up to intervene... and is immediately bashed in the face... In the end, they shot him."
+    },
+    {
+        "question": "What does Agatha die from?",
+        "ground_truth": "The Prussian Grippe.",
+        "context": "She and our infant son would be killed two years later by the Prussian grippe."
+    },
+    {
+        "question": "What is Moustafa forced to do to keep in business?",
+        "ground_truth": "To give his inheritance to the government.",
+        "context": "Zero Moustafa had traded a great and important fortune in exchange for one costly, unprofitable, doomed hotel. Why?"
+    },
+    {
+        "question": "What happens to the hotel when the Communist revolution takes place in Zubrowka?",
+        "ground_truth": "The hotel starts to decay.",
+        "context": "In recent years, of course, such properties and holdings as the Grand Budapest had with very few exceptions become -- common property... It was an enchanting, old ruin."
+    },
+    {
+        "question": "What happens to Agatha's infant son?",
+        "ground_truth": "He dies.",
+        "context": "She and our infant son would be killed two years later by the Prussian grippe."
+    },
+    {
+        "question": "What happens to Zubrowka after the war?",
+        "ground_truth": "The country is annexed.",
+        "context": "On the first day of the occupation, the morning the independent state of Zubrowka officially ceased to exist..."
+    },
+    {
+        "question": "What does Moustafa vow to do after inheriting Gustave's fortune?",
+        "ground_truth": "Hem vows to continue his legacy at the Grand Budapest.",
+        "context": "No, the hotel -- I keep for Agatha... I will say: he certainly sustained the illusion with a marvelous grace!"
+    },
+    {
+        "question": "Why is Madame D's family angry over Gustave inheriting the painting?",
+        "ground_truth": "All of whom hoped to inherit it.",
+        "context": "When the destiny of a great fortune is at stake, men’s greed spreads like a poison in the bloodstream. Uncles, nephews, cousins -- in-laws of increasingly tenuous connection. The old woman’s most distant relations had come foraging out of the wood-work."
+    },
+    {
+        "question": "Who does Gustave go with to Madame D's wake and will reading?",
+        "ground_truth": "Zero",
+        "context": "We must go to her... M. Gustave and Zero enter the vestibule... M. Gustave picks up a chair, carries it to the body... Zero and Clotilde, watching discreetly..."
+    },
+    {
+        "question": "Who is forced to testify about seeing Gustave in Madame D's house on a certain night?",
+        "ground_truth": "Serge X",
+        "context": "the key witness who actually (ostensibly) saw the alleged events appears to have fled the jurisdiction... is Serge X."
+    },
+    {
+        "question": "What happens to Gustave after his return to the hotel?",
+        "ground_truth": "Gustave is arrested and imprisoned for the murder of Madame D",
+        "context": "By order of the Commissioner of Police, Zubrowka Province, I hereby place you under arrest for the murder of Madame Céline Villeneuve Desgoffe und Taxis."
+    },
+    {
+        "question": "Who does Gustave share his prison cell with?",
+        "ground_truth": "Gustave share his prison cell with hardened criminals",
+        "context": "M. Gustave pushes a metal cart... in front of a large cell where four convicts loiter... Pinky... Günther and Wolf... Ludwig... You’re one of us now."
+    },
+    {
+        "question": "Who is the executor of Madame D's will?",
+        "ground_truth": "Kovacs",
+        "context": "Deputy Kovacs (himself an important attorney, of course). He was the executor of the dead widow’s estate."
+    },
+    {
+        "question": "What has Madame D left Gustave, according to her will?",
+        "ground_truth": "She has bequeathed to Gustave a very valuable painting, Boy with Apple",
+        "context": "I bequeath, bestow, and devise, free of all taxation and with full and absolute fiduciary entitlement, the painting known as ‘Boy with Apple’"
+    },
+    {
+        "question": "Where does Gustave keep the painting?",
+        "ground_truth": "Gustave keeps the painting in the hotel's safe",
+        "context": "A vault adjacent to the meeting room above the lobby. There are rows of safety-deposit boxes... M. Gustave hides the wrapped package behind a radiator."
+    },
+    {
+        "question": "Why can't Gustave use his alibi to defend himself?",
+        "ground_truth": "He could never cite his aristocratic lady bedmistress in court.",
+        "context": "You have an alibi? Certainly, but she’s married to the Duke of Westfalia. I can’t allow her name to get mixed-up in all this monkey business."
+    },
+    {
+        "question": "What happens after the reading of the will?",
+        "ground_truth": "With the help of Zero, Gustave steals the painting.",
+        "context": "M. Gustave lifts the painting off its hooks... Zero spots a wood-cut print... He grabs it and hangs it in the painting’s place."
+    },
+    {
+        "question": "How does Dmitri react to Gustave inheriting his mother's painting?",
+        "ground_truth": "Dmitri lashes out at Gustave",
+        "context": "Dmitri is on his feet, advancing toward the back of the room, flanked by Jopling, as he explodes, pointing at M. Gustave... Dmitri cold-cocks M. Gustave an upper-cut to the jaw and drops him with one punch."
+    },
+    {
+        "question": "How does Gustave earn the respect of his cellmates?",
+        "ground_truth": "He \"beat the shit\" out of one of them for \"challenging [his] virility\"",
+        "context": "What happened, my dear Zero, is I beat the living shit out of a snivelling, little runt called Pinky Bandinski who had the gall to question my virility... Me and the boys talked it over. We think you’re a real straight fella. You’re one of us now."
+    },
+    {
+        "question": "How does Madame D's family react to Gustave inheriting the painting?",
+        "ground_truth": "This enrages her family, all of whom hoped to inherit it.",
+        "context": "The room erupts. All the distant relations start talking at once. Dmitri is on his feet... This man is an intruder in my home!"
+    },
+    {
+        "question": "What does Gustave learn about Madame D, a month after their night together?",
+        "ground_truth": "Gustave is informed that Madame D has died under mysterious circumstances",
+        "context": "The headline is, “Will There Be War? Tanks at Frontier” -- but a column below the fold reads: Dowager Countess Found Dead in Boudoir... A photograph shows Madame D’s corpse flat on her back on a white carpet."
+    },
+    {
+        "question": "What pact does Gustave make with Moustafa on their way back from Madame D's wake?",
+        "ground_truth": "In return for the latter's help, he makes Zero his heir.",
+        "context": "In exchange for your help, your loyalty, and your services as my personal valet, I pledge to you: one-point-five percent of the net sale-price... if I die first, and I most certainly will, you: will be my sole heir."
+    },
+    {
+        "question": "Why does Gustave beat one of his cellmates?",
+        "ground_truth": "For challenging his virility",
+        "context": "I beat the living shit out of a snivelling, little runt called Pinky Bandinski who had the gall to question my virility"
+    },
+    {
+        "question": "Who is Serge X?",
+        "ground_truth": "Madame D's butler",
+        "context": "An extremely anxious, petite butler enters with an ice-bucket. He is Serge... the key witness... is Serge X."
+    },
+    {
+        "question": "Who is Dmitri?",
+        "ground_truth": "Madame D's son",
+        "context": "Madame D’s intention that control of the vast bulk of her estate should be transferred, forthwith, to her son, Dmitri"
+    },
+    {
+        "question": "What does Gustave tell Moustafa about his whereabouts on the alleged night?",
+        "ground_truth": "He has an alibi for that night but could never cite his aristocratic lady bedmistress in court.",
+        "context": "You have an alibi? Certainly, but she’s married to the Duke of Westfalia. I can’t allow her name to get mixed-up in all this monkey business."
+    },
+    {
+        "question": "Where do Moustafa and the Author have their meeting?",
+        "ground_truth": "In the hotel's enormous dining room",
+        "context": "INT. DINING ROOM. NIGHT... The enormous restaurant as before -- but now one of the tables has been set for two and is occupied by the author and Mr. Moustafa."
+    },
+    {
+        "question": "What is the state of the Republic of Zubrowka when the Author visits?",
+        "ground_truth": "A fictional Central European state ravaged by war and poverty",
+        "context": "It was off-season and, by that time, decidedly out-of-fashion; and it had already begun its descent into shabbiness and eventual demolition."
+    },
+    {
+        "question": "In what state does the Author find the Grand Budapest Hotel?",
+        "ground_truth": "Republic of Zubrowka, a fictional Central European state",
+        "context": "The spa town of Nebelsbad below the Alpine Sudetenwaltz... Mr. Zero Moustafa was, at one time, the richest man in Zubrowka"
+    },
+    {
+        "question": "Who is the hotel owner?",
+        "ground_truth": "Zero Moustafa",
+        "context": "Mr. Zero Moustafa was, at one time, the richest man in Zubrowka; and was still, indeed, the owner of the Grand Budapest."
+    },
+    {
+        "question": "What happens when the Author meets Moustafa?",
+        "ground_truth": "Mr. Moustafa tells him the tale of how he took ownership of the hotel and why he is unwilling to close it down.",
+        "context": "may I invite you to dine with me tonight, and it will be my pleasure and, indeed, my privilege to tell you -- 'my' story."
+    },
+    {
+        "question": "What does Moustafa tell the Author during their meeting?",
+        "ground_truth": "Mr. Moustafa tells him the tale of how he took ownership of the hotel and why he is unwilling to close it down.",
+        "context": "It begins, as it must, with our mutual friend’s predecessor... Zero Moustafa had traded a great and important fortune in exchange for one costly, unprofitable, doomed hotel."
+    },
+    {
+        "question": "Who gets away with the painting during the chaos?",
+        "ground_truth": "Agatha",
+        "context": "Agatha pulls out the wrapped painting. Agatha tucks the package under her arm... Agatha running as fast as she can, already sixty feet ahead"
+    },
+    {
+        "question": "How does Gustave respond to the sight of the hotel being converted into a barracks?",
+        "ground_truth": "A heartbroken Gustave vows to never again pass the threshold.",
+        "context": "The Grand Budapest has become a troop’s barracks. I shall never cross its threshold again in my lifetime."
+    },
+    {
+        "question": "What does the second will reveal?",
+        "ground_truth": "The will also reveals that Madame D was the owner of the Grand Budapest.",
+        "context": "She left everything to M. Gustave... this very 'institution' -- the Grand Budapest Hotel."
+    },
+    {
+        "question": "Who turns out to be Madame D's murderer?",
+        "ground_truth": "The identity of Madame D's murderer is left ambiguous.",
+        "context": "That’s Dmitri Desgoffe und Taxis! He’s responsible for the killings of Deputy Kovacs, Serge X. and his club-footed sister, plus his own mother!"
+    },
+    {
+        "question": "What happens between Moustafa and Agatha?",
+        "ground_truth": "They've got married",
+        "context": "I had asked for her hand in marriage, and she had agreed... Zero and Agatha hold hands while M. Gustave reads from a Bible, officiating."
+    },
+    {
+        "question": "What is Agatha's plan to get inside the hotel and retrieve the painting?",
+        "ground_truth": "Agatha joins the two and agrees to find a way to go inside by delivering pastries and retrieve the painting.",
+        "context": "Agatha comes in the front doors carrying a tall stack of pink, card-board pastry-boxes... She dashes up a staircase... Agatha pulls out the wrapped painting."
+    },
+    {
+        "question": "Where is Madame D's copy of the second will found?",
+        "ground_truth": "It was hid in the back of the painting",
+        "context": "Agatha holds a piece of the torn and crumbled wrapping paper. She and Zero both look straight up... A pair of hands flips it over to reveal the pale-pink envelope on the reverse. [1], [2]"
+    },
+    {
+        "question": "What is Dmitri's fate?",
+        "ground_truth": "Dmitri disappears",
+        "context": "A column below the fold reads, “Son of Murdered Countess Disappears without Trace.” [3]"
+    },
+    {
+        "question": "What happens when Dmitri discovers Agatha with the painting?",
+        "ground_truth": "A chase and a chaotic gunfight ensues.",
+        "context": "Dmitri breaks into a full sprint... Dmitri instantly leans down, lifts up his trouser leg, and draws a small-calibre hand-gun from a strap under his sock. He fires... The entire group opens fire once more. [4], [5], [6]"
+    },
+    {
+        "question": "What is happening back at the Grand Budapest?",
+        "ground_truth": "Back at the Grand Budapest, the outbreak of war is imminent",
+        "context": "The war began at midnight... The Grand Budapest has become a troop’s barracks. [7], [8]"
+    },
+    {
+        "question": "What is important about Madame D's second will?",
+        "ground_truth": "This will was to take effect only if she was murdered",
+        "context": "I was the official witness in Madame D’s presence to the creation of a second will to be executed only in the event of her death by murder. [9]"
+    },
+    {
+        "question": "What is included in the second will?",
+        "ground_truth": "She leaves much of her fortune, the hotel, and the painting to Gustave.",
+        "context": "She left everything to M. Gustave... The mansion... the factories... and... this very 'institution' -- the Grand Budapest Hotel. [10], [11]"
+    },
+    {
+        "question": "What helps Gustave prove his innocence?",
+        "ground_truth": "Gustave's innocence is finally proven by the discovery of the copy of Madame D's second will",
+        "context": "Henckels carefully peels the envelope loose from the back of the canvas... Headline: Cleared of All Charges. [10], [3]"
+    },
+    {
+        "question": "What happens when Gustave becomes rich?",
+        "ground_truth": "He becomes one of the hotel's regular guests",
+        "context": "In the end, he was even rich... Across the lobby, M. Gustave sits drinking a cocktail with a beautiful, begemmed, ninety-year-old woman. [12]"
+    },
+    {
+        "question": "What is the teenager girl doing, back in the present?",
+        "ground_truth": "the girl continues reading in front of the statue",
+        "context": "The girl in the trench coat and beret sits on a bench near the statue of the author. She is just finishing the final chapter of: THE GRAND BUDAPEST HOTEL. [13]"
+    },
+    {
+        "question": "How do the convicts survive being captured by the guards?",
+        "ground_truth": "The group narrowly escape after one of them sacrifices himself to kill a large posse of guards.",
+        "context": "Günther was slain in the catacombs... he went out with a bloody knife in his fist jammed into the gut of a dyin’ prison guard. [14], [15]"
+    },
+    {
+        "question": "Who makes the cakes brought to Gustave in prison?",
+        "ground_truth": "Zero's fiance Agatha",
+        "context": "She is Agatha. She works a rolling-pin... beautifully-decorated pastries shaped like hour-glass figures. (These are Courtesans au chocolat.) [16]"
+    },
+    {
+        "question": "How does Moustafa help Gustave break out of prison?",
+        "ground_truth": "Zero aids Gustave in escaping from prison by sending a series of stoneworking tools",
+        "context": "Agatha delicately places a little tool into the fillings of each: a slender file, the head of a small hammer, and a half-scale chisel. [17]"
+    },
+    {
+        "question": "How does Gustave break out of prison?",
+        "ground_truth": "Along with a group of convicts Gustave digs his way out of his cell with the help of the tools",
+        "context": "M. Gustave, Pinky, Günther, and Ludwig work diligently by candle-light under a wooden table... Four small hammers tap rapid-fire at four half-scale chisels, chipping away into a cement pot-hole. [18], [19]"
+    },
+    {
+        "question": "What does Gustave do after his escape from prison?",
+        "ground_truth": "Gustave then teams up with Zero to prove his innocence",
+        "context": "We’ll just have to wing it, I suppose... I really must ask you to clear my name. [20], [9]"
+    },
+    {
+        "question": "Who does Gustave escape from prison with?",
+        "ground_truth": "Group of convicts including Ludwig",
+        "context": "M. Gustave, Pinky, Günther, Wolf, and Ludwig all on the rope-ladder at once like a string of beads dangling down the outside of the tower. [21]"
+    },
+    {
+        "question": "How does Moustafa pass on the stoneworking tools used to aid Gustave's escape from prison?",
+        "ground_truth": "The tools are concealed inside the cakes.",
+        "context": "Agatha delicately places a little tool into the fillings of each... The camera zooms-in slowly toward the crinkled wrapper of the Courtesan au chocolat as the five inmates all stare at it. [17], [22]"
+    },
+    {
+        "question": "How does Ludwig and his group escape?",
+        "ground_truth": "Ludwig and his crew escape by car",
+        "context": "Pinky, Wolf, and Ludwig sprint away into the woods. [23]"
+    },
+    {
+        "question": "What happens when the teenage girl starts reading from the book?",
+        "ground_truth": "The Author begins narrating the tale from his desk in 1985",
+        "context": "The author... sits in an armchair writing in an identical small note-book... addresses the camera: The incidents that follow were described to me exactly as I present them here. [24], [25]"
+    },
+    {
+        "question": "What is the teenage girl approaching?",
+        "ground_truth": "Teenage girl approaches a monument to a writer in a cemetery",
+        "context": "A teenaged girl... stands facing a tarnished bust of a slender, balding, spectacled old man. A bronze plaque below reads, in large letters: AUTHOR. [26]"
+    },
+    {
+        "question": "What is the teenage girl holding?",
+        "ground_truth": "In her arms is a memoir penned by a character known only as \"The Author\"",
+        "context": "A teenaged girl... with a wellread, dog-eared novel called THE GRAND BUDAPEST HOTEL tucked under her arm. [26]"
+    },
+    {
+        "question": "Who wrote the memoir the girl is holding?",
+        "ground_truth": "The memoir penned by a character known only as \"The Author\"",
+        "context": "A bronze plaque below reads, in large letters: AUTHOR. [26]"
+    },
+    {
+        "question": "What is the Author's story about?",
+        "ground_truth": "About a trip he made to the Grand Budapest Hotel in 1968",
+        "context": "The late sixties... I had decided to spend the month of August in the spa town of Nebelsbad... and had taken up rooms in the Grand Budapest. [25], [27]"
+    },
+    {
+        "question": "What does the teenage girl do with the book?",
+        "ground_truth": "She starts reading a chapter from the book.",
+        "context": "The girl... sits on a bench near the statue of the author. She is just finishing the final chapter of: THE GRAND BUDAPEST HOTEL. [13]"
+    },
+    {
+        "question": "Where is the teenage girl when the movie opens?",
+        "ground_truth": "Cemetery",
+        "context": "EXT. CEMETERY. DAY... The present. A graveyard in the city-center... A teenaged girl in a beret... stands facing a tarnished bust of a slender, balding, spectacled old man."
+    },
+    {
+        "question": "In what year is the Author narrating his story?",
+        "ground_truth": "1985",
+        "context": "INT. STUDY. DAY... Twenty years ago... The author, seventy-five... sits in an armchair writing in an identical small note-book."
+    },
+    {
+        "question": "What does Moustafa give the Author after their meeting?",
+        "ground_truth": "A key to the \"M. Gustave Suite\"",
+        "context": "INSERT: The author’s room key as Mr. Moustafa places it onto the desk. It is labelled M. GUSTAVE SUITE."
+    },
+    {
+        "question": "What does Moustafa confess to the Author as the real reason he can't close the hotel?",
+        "ground_truth": "It is his last remaining link to his beloved Agatha and the best years of his life.",
+        "context": "No, the hotel -- I keep for Agatha... We were happy here. For a little while."
+    },
+    {
+        "question": "What does Moustafa do before he goes to his room?",
+        "ground_truth": "Mr. Moustafa gives the Author a key to the \"M. Gustave Suite\" and readjusts the crooked painting.",
+        "context": "Mr. Moustafa takes great pleasure as he... straightens “Boy with Apple” slightly; then takes two keys off their hooks... INSERT: The author’s room key as Mr. Moustafa places it onto the desk."
+    },
+    {
+        "question": "What does the Author do later?",
+        "ground_truth": "The Young Author later departs for South America and never returns to the hotel.",
+        "context": "The next week, I sailed for a cure in South America and began a long, wandering journey abroad. I did not return to Europe for many years... I never managed to see it again."
+    },
+    {
+        "question": "Where is the famous painting, \"Boy with Apple\" now?",
+        "ground_truth": "Sits on the wall behind the concierge counter",
+        "context": "On the wall behind M. Jean, there is a beautiful, Flemish painting of a pale, young boy holding a piece of golden fruit. This is “Boy with Apple”."
+    },
+    {
+        "question": "What is the teenage girl holding under her arm in the cemetery?",
+        "ground_truth": "A well-read, dog-eared novel called THE GRAND BUDAPEST HOTEL.",
+        "context": "A teenaged girl in a beret and trench-coat with a wellread, dog-eared novel called THE GRAND BUDAPEST HOTEL tucked under her arm"
+    },
+    {
+        "question": "What items are hanging from the hooks at the base of the Author's statue?",
+        "ground_truth": "Hundreds of hotel-room keys.",
+        "context": "All around the base of the statue, there are little metal hooks with hundreds of hotel-room keys of every age and variety from all over the world hanging from them."
+    },
+    {
+        "question": "How does the six-year-old boy interact with the Author in his study?",
+        "ground_truth": "He fires a miniature Luger pistol at the Author.",
+        "context": "A six-year-old boy... points a miniature Luger pistol at the author... The boy hesitates, then fires. A yellow, plastic pellet ricochets off the author’s chest"
+    },
+    {
+        "question": "Why did the Author decide to visit Nebelsbad in the late sixties?",
+        "ground_truth": "He was suffering from \"Scribe's Fever\".",
+        "context": "while suffering from a mild case of “Scribe’s Fever” (a form of neurasthenia common among the intelligentsia of that time) I had decided to spend the month of August in the spa town of Nebelsbad"
+    },
+    {
+        "question": "What does M. Jean do with his cigarette when the Author approaches him?",
+        "ground_truth": "He stubs it out and tucks the butt into his pocket.",
+        "context": "M. Jean quickly stubs out his cigarette as the author approaches -- and tucks the butt into his coat pocket."
+    },
+    {
+        "question": "Where does Mr. Moustafa stay when he visits the Grand Budapest Hotel in his later years?",
+        "ground_truth": "In a small single room without a bath on the top floor.",
+        "context": "He takes only a single-bed sleeping-room without a bath in the rear corner of the top floor -- and it’s smaller than the service elevator!"
+    },
+    {
+        "question": "How does Mr. Moustafa first initiate a conversation with the Author?",
+        "ground_truth": "He compliments the Author's work while they are in the thermal baths.",
+        "context": "A voice interrupts from off-screen: MR. MOUSTAFA (O.S.) I admire your work... The author hesitates. He looks around."
+    },
+    {
+        "question": "What does M. Gustave ask Madame D to do for him when she leaves?",
+        "ground_truth": "He asks if she will light a candle for him.",
+        "context": "MADAME D. Will you light a candle for me, please? In the sacristy at Santa Maria... M. GUSTAVE I’ll see to it myself immediately."
+    },
+    {
+        "question": "What does M. Gustave send Zero to buy immediately after Madame D departs?",
+        "ground_truth": "A Courtesan au chocolat from Mendl's.",
+        "context": "go to Mendl’s and get me a Courtesan au chocolat. If there’s any money left, give it to the crippled shoe-shine boy."
+    },
+    {
+        "question": "How does M. Gustave describe Zero's experience during their first interview?",
+        "ground_truth": "He describes it as zero.",
+        "context": "Experience? Hotel Kinski, Kitchen Boy, six months... M. GUSTAVE (noting this) Experience: zero."
+    },
+    {
+        "question": "What common traits do M. Gustave's female companions share?",
+        "ground_truth": "They are all rich, old, insecure, vain, superficial, blonde, and needy.",
+        "context": "The requirements were always the same. They had to be: rich, old, insecure, vain, superficial, blonde, needy."
+    },
+    {
+        "question": "Who acts as the executor of Madame D's estate?",
+        "ground_truth": "Deputy Kovacs.",
+        "context": "Deputy Kovacs (himself an important attorney, of course). He was the executor of the dead widow’s estate."
+    },
+    {
+        "question": "Who is the artist of the painting \"Boy with Apple\"?",
+        "ground_truth": "Johannes van Hoytl the Younger.",
+        "context": "the painting known as ‘Boy with Apple’ -- ... -- by Johannes van Hoytl -- ... -- the younger"
+    },
+    {
+        "question": "What object does Zero use to replace the stolen painting on the wall?",
+        "ground_truth": "A wood-cut print of two lesbians masturbating.",
+        "context": "Zero spots a wood-cut print of two lesbians masturbating. He grabs it and hangs it in the painting’s place."
+    },
+    {
+        "question": "What reward does M. Gustave promise Zero for his help in selling the painting?",
+        "ground_truth": "1.5% of the net sale price and to be his sole heir.",
+        "context": "I pledge to you: one-point-five percent of the net sale-price... if I die first, and I most certainly will, you: will be my sole heir."
+    },
+    {
+        "question": "How are the escape tools smuggled into the prison?",
+        "ground_truth": "They are hidden inside the fillings of pastries.",
+        "context": "Agatha delicately places a little tool into the fillings of each: a slender file, the head of a small hammer, and a half-scale chisel."
+    },
+    {
+        "question": "Who is the key witness required to clear M. Gustave's name?",
+        "ground_truth": "Serge X.",
+        "context": "the key witness who actually (ostensibly) saw the alleged events appears to have fled the jurisdiction... is Serge X."
+    },
+    {
+        "question": "How does Jopling die?",
+        "ground_truth": "Zero pushes him off a cliff.",
+        "context": "There is a powerful thump, and Jopling flies head-first, screaming, off the cliff over M. Gustave’s head. Zero, in the midst of a diving shove"
+    },
+    {
+        "question": "Where is the second copy of Madame D's second will found?",
+        "ground_truth": "On the back of the painting \"Boy with Apple\".",
+        "context": "The painting, upside-down. A pair of hands flips it over to reveal the pale-pink envelope on the reverse."
+    },
+    {
+        "question": "Why does Mr. Moustafa decide to keep the hotel despite it being unprofitable?",
+        "ground_truth": "He keeps it for Agatha, as it was where they were happy.",
+        "context": "No, the hotel -- I keep for Agatha... We were happy here. For a little while."
+    },
+    {
+        "question": "What is written on the bronze plaque below the bust of the Author?",
+        "ground_truth": "In Memory of Our National Treasure",
+        "context": "A bronze plaque below reads, in large letters: AUTHOR... There is a block of smaller text at the bottom which states simply: In Memory of Our National Treasure [1], [2]"
+    },
+    {
+        "question": "What misconception about writers does the Author correct?",
+        "ground_truth": "That they invent stories out of thin air; actually, stories seek them out.",
+        "context": "people think the writer’s imagination is always at work... that he simply dreams-up his stories out of thin air. In point of fact, the opposite is true. [3]"
+    },
+    {
+        "question": "What happens when the six-year-old boy fires the miniature pistol at the Author?",
+        "ground_truth": "A yellow plastic pellet hits the Author's chest.",
+        "context": "The boy hesitates, then fires. A yellow, plastic pellet ricochets off the author’s chest and rings against a whiskey glass [4]"
+    },
+    {
+        "question": "What ailment was the Author suffering from when he visited Nebelsbad?",
+        "ground_truth": "Scribe's Fever.",
+        "context": "while suffering from a mild case of “Scribe’s Fever” (a form of neurasthenia common among the intelligentsia of that time) [5], [6]"
+    },
+    {
+        "question": "How did the hotel guests interact with one another in the late sixties?",
+        "ground_truth": "They were solitary and only exchanged polite nods.",
+        "context": "I do not believe any acquaintance among our number had proceeded beyond the polite nods we exchanged... We were a very reserved group, it seemed -- and, without exception, solitary. [7]"
+    },
+    {
+        "question": "What does M. Jean do with his cigarette when the Author approaches?",
+        "ground_truth": "He stubs it out and puts the butt in his pocket.",
+        "context": "M. Jean quickly stubs out his cigarette as the author approaches -- and tucks the butt into his coat pocket. [8]"
+    },
+    {
+        "question": "Where does Mr. Moustafa stay when he visits his own hotel?",
+        "ground_truth": "In a small single room without a bath in the rear corner of the top floor.",
+        "context": "He takes only a single-bed sleeping-room without a bath in the rear corner of the top floor -- and it’s smaller than the service elevator! [9]"
+    },
+    {
+        "question": "How is the fat businessman saved from choking in the lobby?",
+        "ground_truth": "M. Jean performs the Heimlich maneuver and a St. Bernard dog brings him brandy.",
+        "context": "M. Jean dashes out... performs an improvised version of the Heimlich maneuver... The rescue dog... pours a generous shot of brandy into a water glass, and forces it down the fat businessman’s throat. [10], [11]"
+    },
+    {
+        "question": "What does Mr. Moustafa say about the condition of the thermal baths in 1968?",
+        "ground_truth": "They are too decadent for current tastes, but he loves the enchanting old ruin.",
+        "context": "Too decadent for current tastes -- but I love it all, just the same. This enchanting, old ruin. [12]"
+    },
+    {
+        "question": "What is Zero's answer when M. Gustave asks about his family during the interview?",
+        "ground_truth": "Zero.",
+        "context": "M. GUSTAVE Family? ZERO (long pause) Zero. [13]"
+    },
+    {
+        "question": "According to M. Gustave's sermon, what is rudeness?",
+        "ground_truth": "Merely the expression of fear.",
+        "context": "Rudeness is merely the expression of fear. People fear they won’t get what they want. [14]"
+    },
+    {
+        "question": "What distinctive feature does Agatha have on her face?",
+        "ground_truth": "A birthmark the shape of Mexico.",
+        "context": "A plain, graceful, seventeen-year-old beanpole with freckles and a birthmark the shape of Mexico on the side of her face. [15]"
+    },
+    {
+        "question": "What does M. Gustave request Zero to bring on the train to Lutz?",
+        "ground_truth": "A bottle of Pouilly-Jouvé ‘26 in an ice-bucket with two glasses.",
+        "context": "bring a bottle of the Pouilly-Jouvé ‘26 in an ice-bucket with two glasses so we don’t have to drink the cat-piss they serve in the dining car. [16]"
+    },
+    {
+        "question": "How does M. Gustave recognize Corporal Franz Müller on the train?",
+        "ground_truth": "He correctly guesses that the 'F' on his name tag stands for Franz.",
+        "context": "What’s the “F” stand for? Fritz? Franz. SOLDIER #1 (hesitates) Franz. M. GUSTAVE (exceedingly pleased) I knew it! [17]"
+    },
+    {
+        "question": "Why does Henckels order the soldiers to release M. Gustave and Zero?",
+        "ground_truth": "Because M. Gustave was kind to him when he was a lonely boy.",
+        "context": "Your companion was very kind to me when I was a lonely little boy. (to both M. Gustave and Zero) My men and I apologize for disturbing you. [18]"
+    },
+    {
+        "question": "What change does M. Gustave notice on Madame D's corpse?",
+        "ground_truth": "She changed her nail polish color.",
+        "context": "Madame D’s fingernails. They are now lacquered in a rich plum. M. Gustave says, deeply moved: M. GUSTAVE You changed it, after all. It’s perfect. [19]"
+    },
+    {
+        "question": "What happens to Deputy Kovacs' cat?",
+        "ground_truth": "Jopling throws it out the window.",
+        "context": "Did he just throw my cat out the window?... A pedestrian in a bowler hat far below standing over a sprawled speck on the sidewalk. [20]"
+    },
+    {
+        "question": "What does Jopling do after killing Deputy Kovacs?",
+        "ground_truth": "He collects Kovacs' severed fingers.",
+        "context": "He takes out a handkerchief, leans down and collects the four fingers off the ground, wraps them up, slips them into his pocket [21]"
+    },
+    {
+        "question": "How do M. Gustave and the convicts escape their cell?",
+        "ground_truth": "Through a hole in the floor they chiseled leading to a storm-drain.",
+        "context": "Pinky pulls away an oil-skin tarp to reveal the cement pot-hole which has now been chiselled all the way through the thick sub-floor clear into the room below [22]"
+    },
+    {
+        "question": "What happened to the convict Günther during the escape?",
+        "ground_truth": "He was slain in the catacombs.",
+        "context": "Günther was slain in the catacombs... he went out with a bloody knife in his fist jammed into the gut of a dyin’ prison guard. [23], [24]"
+    },
+    {
+        "question": "Why is M. Gustave furious with Zero after the prison break?",
+        "ground_truth": "Because Zero forgot to bring the L'air de Panache.",
+        "context": "Honestly -- you forgot the L’air de Panache? I don’t believe it. How could you? I’ve been in jail, Zero! [25], [26]"
+    },
+    {
+        "question": "Who does M. Gustave call for help from the telephone booth?",
+        "ground_truth": "The Society of the Crossed Keys.",
+        "context": "I’m formally calling upon the special services of -- The Society of the Crossed Keys [27]"
+    },
+    {
+        "question": "What clue does Jopling find in the prison cell?",
+        "ground_truth": "A flattened Mendl's pastry box.",
+        "context": "He leans down and picks up a flattened, pink, cardboard box off the floor. He scrapes a ridge of icing with his finger and licks the tip. JOPLING Mendl’s. [28], [29]"
+    },
+    {
+        "question": "How does Dmitri react when he sees the wood-cut print replacing the painting?",
+        "ground_truth": "He smashes it over a statue.",
+        "context": "Dmitri grabs the wood-cut off the wall and slams it (punching a thick hole through the center) over a small marble discus-thrower. [30]"
+    },
+    {
+        "question": "What was found in the laundry basket at Command Head-Quarters?",
+        "ground_truth": "Serge's sister's severed head.",
+        "context": "He reaches into it and lifts out, by the hair: Serge’s sister’s severed head. [31], [32]"
+    },
+    {
+        "question": "What password does the monk use to identify M. Gustave?",
+        "ground_truth": "Are you M. Gustave of the Grand Budapest Hotel in Nebelsbad?",
+        "context": "MONK #1 Are you M. Gustave of the Grand Budapest Hotel in Nebelsbad? [33]"
+    },
+    {
+        "question": "Where do M. Gustave and Zero find Serge X?",
+        "ground_truth": "In a confessional booth.",
+        "context": "A panel slides open. Through the lattice screen: Serge has aged a decade... SERGE Forgive me, M. Gustave. [34], [35]"
+    },
+    {
+        "question": "How does the shootout in the hotel corridor end?",
+        "ground_truth": "Henckels yells 'Cease fire' and Zero escapes through a window.",
+        "context": "HENCKELS Cease fire! Cease fire! Stop it!... Zero sprints out of the service elevator and races up the corridor... His head thrusts out the window. [36], [37]"
+    },
+    {
+        "question": "How does Zero prove M. Gustave's innocence?",
+        "ground_truth": "By revealing the second will hidden in the painting.",
+        "context": "Henckels carefully peels the envelope loose from the back of the canvas... She left everything to M. Gustave, of course. [38]"
+    },
+    {
+        "question": "What happens to M. Gustave in the end?",
+        "ground_truth": "He is shot by soldiers.",
+        "context": "In the end, they shot him. (pause) So it all went to me. [39]"
+    },
+    {
+        "question": "What tribute does the teenage girl add to the Author's statue?",
+        "ground_truth": "A new set of hotel-room keys.",
+        "context": "All around the base of the statue, there are little metal hooks with hundreds of hotel-room keys... The girl adds a new set to the tribute. [1]"
+    },
+    {
+        "question": "How does the Author describe the common mistake people make about writers?",
+        "ground_truth": "They think writers invent stories out of thin air, but actually stories seek them out.",
+        "context": "people think the writer’s imagination is always at work... that he simply dreams-up his stories out of thin air. In point of fact, the opposite is true. [2]"
+    },
+    {
+        "question": "What specific medical condition was the Author suffering from when he visited Nebelsbad?",
+        "ground_truth": "Scribe’s Fever.",
+        "context": "while suffering from a mild case of “Scribe’s Fever” (a form of neurasthenia common among the intelligentsia of that time) [3]"
+    },
+    {
+        "question": "What does M. Jean do with his cigarette when the Author approaches?",
+        "ground_truth": "He stubs it out and tucks the butt into his coat pocket.",
+        "context": "M. Jean quickly stubs out his cigarette as the author approaches -- and tucks the butt into his coat pocket. [4]"
+    },
+    {
+        "question": "Where is Mr. Moustafa's room located in the hotel?",
+        "ground_truth": "In the rear corner of the top floor.",
+        "context": "He takes only a single-bed sleeping-room without a bath in the rear corner of the top floor [5]"
+    },
+    {
+        "question": "How is the fat businessman saved from choking in the lobby?",
+        "ground_truth": "M. Jean performs the Heimlich maneuver and a St. Bernard dog brings him brandy.",
+        "context": "M. Jean dashes out. As he performs an improvised version of the Heimlich maneuver... The rescue dog... pours a generous shot of brandy into a water glass, and forces it down the fat businessman’s throat. [6], [7]"
+    },
+    {
+        "question": "What does Mr. Moustafa say about the condition of the thermal baths?",
+        "ground_truth": "He calls them an enchanting, old ruin.",
+        "context": "Too decadent for current tastes -- but I love it all, just the same. This enchanting, old ruin. [8]"
+    },
+    {
+        "question": "How does Mr. Moustafa respond when asked how he bought the Grand Budapest?",
+        "ground_truth": "He states that he didn't buy it.",
+        "context": "How did you come to buy it, if I may ask? The Grand Budapest... I didn’t. [8], [9]"
+    },
+    {
+        "question": "What does M. Gustave ask Madame D to do at the cathedral?",
+        "ground_truth": "Light a candle for him.",
+        "context": "Will you light a candle for me, please? In the sacristy at Santa Maria. [10], [11]"
+    },
+    {
+        "question": "What color was Madame D's nail polish when she left the hotel?",
+        "ground_truth": "An understated, pale-pink polish.",
+        "context": "Madame D. wears an understated, pale-pink polish. [12]"
+    },
+    {
+        "question": "What does M. Gustave criticize about Madame D's appearance before she leaves?",
+        "ground_truth": "Her nail varnish.",
+        "context": "This diabolical varnish. The color’s completely wrong. [13]"
+    },
+    {
+        "question": "What does M. Gustave tell Zero about the flowers brought by the doorman?",
+        "ground_truth": "He says they are not acceptable.",
+        "context": "M. GUSTAVE (studying the roses) These are not acceptable. [14]"
+    },
+    {
+        "question": "What is Zero's response when asked about his family during the interview?",
+        "ground_truth": "Zero.",
+        "context": "M. GUSTAVE Family? ZERO (long pause) Zero. [15]"
+    },
+    {
+        "question": "According to M. Gustave, what is rudeness?",
+        "ground_truth": "Merely the expression of fear.",
+        "context": "Rudeness is merely the expression of fear. People fear they won’t get what they want. [16]"
+    },
+    {
+        "question": "How does Zero discover that Madame D has died?",
+        "ground_truth": "He reads it in a newspaper headline.",
+        "context": "Zero stops. His eyes are glued to one of the articles... Dowager Countess Found Dead in Boudoir [17], [18]"
+    },
+    {
+        "question": "How does M. Gustave recognize the soldier on the train?",
+        "ground_truth": "By the 'F' on his name tag, guessing it stands for Franz.",
+        "context": "What’s the “F” stand for? Fritz? Franz... I knew it! [19]"
+    },
+    {
+        "question": "What does M. Gustave notice about Madame D's corpse?",
+        "ground_truth": "She changed her nail polish to a rich plum.",
+        "context": "Madame D’s fingernails. They are now lacquered in a rich plum. M. Gustave says, deeply moved: M. GUSTAVE You changed it, after all. It’s perfect. [20]"
+    },
+    {
+        "question": "Where does Serge X hide when M. Gustave comes to the pantry?",
+        "ground_truth": "He disappears back out the door after getting ice.",
+        "context": "Serge... swallows, holds up a quick finger for M. Gustave to wait, then disappears back out the door. [21]"
+    },
+    {
+        "question": "Who is Jopling?",
+        "ground_truth": "A thug in a leather coat working for Dmitri.",
+        "context": "A thug in a leather coat... sits slightly behind and beside him. He wears brass knuckles on both hands. He is Jopling. [22]"
+    },
+    {
+        "question": "What happens to Deputy Kovacs' cat?",
+        "ground_truth": "It is thrown out the window.",
+        "context": "Did he just throw my cat out the window?... A pedestrian in a bowler hat far below standing over a sprawled speck on the sidewalk. [23]"
+    },
+    {
+        "question": "What painting does Zero use to replace 'Boy with Apple'?",
+        "ground_truth": "A wood-cut print of two lesbians masturbating.",
+        "context": "Zero spots a wood-cut print of two lesbians masturbating. He grabs it and hangs it in the painting’s place. [24]"
+    },
+    {
+        "question": "What does M. Gustave promise Zero in their blood-pact?",
+        "ground_truth": "1.5% of the painting's sale price and to be his sole heir.",
+        "context": "I pledge to you: one-point-five percent of the net sale-price... if I die first... you: will be my sole heir. [25]"
+    },
+    {
+        "question": "Where does M. Gustave hide the painting?",
+        "ground_truth": "Behind a radiator in the storage pantry.",
+        "context": "M. Gustave hides the wrapped package behind a radiator. [26]"
+    },
+    {
+        "question": "How does M. Gustave establish dominance in prison?",
+        "ground_truth": "He beats up a convict named Pinky Bandinski.",
+        "context": "I beat the living shit out of a snivelling, little runt called Pinky Bandinski who had the gall to question my virility [27]"
+    },
+    {
+        "question": "What does M. Gustave offer the convicts from his cart?",
+        "ground_truth": "Mush.",
+        "context": "M. GUSTAVE May I offer any of you inmates a plate of mush? [28]"
+    },
+    {
+        "question": "What does the convict Ludwig provide for the escape?",
+        "ground_truth": "A detailed map of the prison.",
+        "context": "Ludwig produces a crude but highly detailed map and floor-plan of the castle compound drawn with charcoal on a strip of butcher paper. [29]"
+    },
+    {
+        "question": "How are the digging tools smuggled into the prison?",
+        "ground_truth": "Inside Mendl's pastries.",
+        "context": "The camera zooms-in slowly toward the crinkled wrapper of the Courtesan au chocolat as the five inmates all stare at it. [30]"
+    },
+    {
+        "question": "What gift does Zero give to Agatha?",
+        "ground_truth": "A book of Romantic Poetry.",
+        "context": "It’s a book... Romantic Poetry, Volume one. [31]"
+    },
+    {
+        "question": "What distinguishes Agatha's appearance?",
+        "ground_truth": "A birthmark the shape of Mexico on her face.",
+        "context": "A plain, graceful, seventeen-year-old beanpole with freckles and a birthmark the shape of Mexico on the side of her face. [32]"
+    },
+    {
+        "question": "What happens to Deputy Kovacs at the museum?",
+        "ground_truth": "Jopling chops off his fingers and kills him.",
+        "context": "Four of Deputy Kovacs’ fingers, gripping the door-frame, pop-off... On the other side of the door, there is a scream [33]"
+    },
+    {
+        "question": "How do the convicts signal silence during the escape?",
+        "ground_truth": "By sneezing.",
+        "context": "There is a loud but muffled sneeze. The feet begin to creak again and fade-away [34], [35]"
+    },
+    {
+        "question": "Who saves the group when the convict snitch yells for guards?",
+        "ground_truth": "The giant with the large scar.",
+        "context": "A single, large hand grabs the convict... The giant with the long scar across his face appears in the convict’s place [36]"
+    },
+    {
+        "question": "Why is M. Gustave furious with Zero after the escape?",
+        "ground_truth": "Zero forgot the L'air de Panache.",
+        "context": "Honestly -- you forgot the L’air de Panache? I don’t believe it. [37]"
+    },
+    {
+        "question": "Who does M. Gustave call for help from the phone booth?",
+        "ground_truth": "The Society of the Crossed Keys.",
+        "context": "I’m formally calling upon the special services of -- The Society of the Crossed Keys [38]"
+    },
+    {
+        "question": "What does M. Ivan give M. Gustave at the train station?",
+        "ground_truth": "A tiny bottle of L'air de Panache.",
+        "context": "M. Ivan... thrusts-out a tiny version of a familiar bottle... L’air de Panache! [39], [40]"
+    },
+    {
+        "question": "What evidence does Jopling find in the prison cell?",
+        "ground_truth": "A Mendl's pastry box.",
+        "context": "He leans down and picks up a flattened, pink, cardboard box... He says softly: JOPLING Mendl’s. [41], [42]"
+    },
+    {
+        "question": "How does Dmitri react to the wood-cut print replacing the painting?",
+        "ground_truth": "He destroys it over a statue.",
+        "context": "Dmitri grabs the wood-cut off the wall and slams it (punching a thick hole through the center) over a small marble discus-thrower. [43]"
+    },
+    {
+        "question": "What is found in the laundry basket at Command Head-Quarters?",
+        "ground_truth": "Serge's sister's severed head.",
+        "context": "He reaches into it and lifts out, by the hair: Serge’s sister’s severed head. [44]"
+    },
+    {
+        "question": "What does M. Gustave recite while hanging from the cliff?",
+        "ground_truth": "Poetry.",
+        "context": "M. Gustave sadly recites: M. GUSTAVE “’If this do be me end: farewell!’ cried the wounded piper-boy...” [45]"
+    },
+    {
+        "question": "How is Jopling defeated?",
+        "ground_truth": "Zero pushes him off the cliff.",
+        "context": "There is a powerful thump, and Jopling flies head-first, screaming, off the cliff... Zero, in the midst of a diving shove [46]"
+    },
+    {
+        "question": "What symbol marks the occupation of the hotel?",
+        "ground_truth": "Z-Z.",
+        "context": "“Z-Z” symbols are plastered across every conceivable surface. [47], [48]"
+    },
+    {
+        "question": "Who is M. Chuck?",
+        "ground_truth": "The new Military Concierge at the hotel.",
+        "context": "An officer with a crew-cut mans the concierge desk... He is M. Chuck. [49]"
+    },
+    {
+        "question": "What item does Agatha use to retrieve the painting?",
+        "ground_truth": "A brass key found on the picture rail.",
+        "context": "She immediately stands on a chair and runs her hand along the top of a picture rail... She finds a brass key. [50]"
+    },
+    {
+        "question": "Where does Zero find the second will?",
+        "ground_truth": "Attached to the back of the painting 'Boy with Apple'.",
+        "context": "The painting, upside-down. A pair of hands flips it over to reveal the pale-pink envelope on the reverse. [51]"
+    },
+    {
+        "question": "Who clears M. Gustave's name?",
+        "ground_truth": "Henckels, after reading the second will.",
+        "context": "Henckels carefully peels the envelope loose... Headline: Cleared of All Charges [52], [53]"
+    },
+    {
+        "question": "How does Agatha die?",
+        "ground_truth": "She dies of the Prussian grippe.",
+        "context": "She and our infant son would be killed two years later by the Prussian grippe. [54]"
+    },
+    {
+        "question": "What happens to M. Gustave on the final train ride?",
+        "ground_truth": "He is shot by soldiers.",
+        "context": "In the end, they shot him. [55]"
+    },
+    {
+        "question": "Why does Mr. Moustafa keep the hotel?",
+        "ground_truth": "For Agatha.",
+        "context": "No, the hotel -- I keep for Agatha... We were happy here. [56]"
+    },
+    {
+        "question": "Who officiates Zero and Agatha's wedding?",
+        "ground_truth": "M. Gustave.",
+        "context": "Zero and Agatha hold hands while M. Gustave reads from a Bible, officiating. [54]"
+    },
+    {
+        "question": "What does Mr. Moustafa show the Author in the elevator?",
+        "ground_truth": "Agatha's crossed-keys pendant.",
+        "context": "Mr. Moustafa pulls up his lapel slightly and shows the author Agatha’s crossed-keys pendant pinned to his jacket. [56]"
+    }
+]

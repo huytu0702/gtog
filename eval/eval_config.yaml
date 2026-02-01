@@ -1,0 +1,23 @@
+# eval/eval_config.yaml
+# Example evaluation configuration for GraphRAG
+
+dataset:
+  path: "eval/qa_eval.json"
+
+indexes:
+  tt0097576: "tt0097576"
+  tt0102798: "tt0102798"
+  tt2278388: "tt2278388"
+
+methods:
+  - tog
+  - local
+  - basic
+
+output:
+  dir: "eval/results"
+  save_intermediate: true
+
+judge:
+  model: null  # uses default from settings.yaml
+  temperature: 0.0
