@@ -327,21 +327,26 @@ class SemanticPruning(PruningStrategy):
         # Priority 1: Use pre-computed embeddings from vector store
         if self.entity_embedding_store:
             try:
-                embeddings = []
-                self._entity_texts = []
+                embeddings: List[Optional[List[float]]] = [None for _ in entities]
+                self._entity_texts = [f"{name}: {desc}" for _, name, desc in entities]
+                missing_indices: List[int] = []
+                missing_texts: List[str] = []
 
-                for entity_id, name, desc in entities:
+                for i, (entity_id, _name, _desc) in enumerate(entities):
                     # Try to get pre-computed embedding from vector store
                     doc = self.entity_embedding_store.search_by_id(entity_id)
                     if doc and doc.vector:
-                        embeddings.append(doc.vector)
-                        self._entity_texts.append(f"{name}: {desc}")
+                        embeddings[i] = doc.vector
                     else:
-                        # Fallback: compute embedding if not found in store
-                        text = f"{name}: {desc}"
-                        emb = await self.embedding_model.aembed(text=text)
-                        embeddings.append(emb)
-                        self._entity_texts.append(text)
+                        missing_indices.append(i)
+                        missing_texts.append(self._entity_texts[i])
+
+                if missing_indices:
+                    batch_embeddings = await self.embedding_model.aembed_batch(
+                        text_list=missing_texts
+                    )
+                    for idx, emb in zip(missing_indices, batch_embeddings):
+                        embeddings[idx] = emb
 
                 self._entity_embeddings = np.array(embeddings)
                 logger.debug(
