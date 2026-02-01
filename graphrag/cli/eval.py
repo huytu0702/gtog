@@ -145,6 +145,16 @@ async def run_evaluation(
     except KeyboardInterrupt:
         print("\n\nInterrupted. Saving checkpoint...")
         results = []
+    finally:
+        # Ensure any LiteLLM async clients are closed to avoid aiohttp warnings.
+        try:
+            from litellm.llms.custom_httpx.async_client_cleanup import (
+                close_litellm_async_clients,
+            )
+
+            await close_litellm_async_clients()
+        except Exception:
+            pass
 
     print()  # Newline after progress
 

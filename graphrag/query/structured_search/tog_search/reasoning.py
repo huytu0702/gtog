@@ -172,18 +172,15 @@ Structure your response as:
             output_parts.append(f"\n[{entity_name}]")
             output_parts.append(f"Description: {description}")
 
-        # Section 2: Relationships
+        # Section 2: Relationships (merged with descriptions)
         output_parts.append("\n\n=== RELATIONSHIPS ===")
         for source, relation, target, source_desc, target_desc in relationships:
             output_parts.append(f"\n• {source} --[{relation}]--> {target}")
-
-        # Section 3: Relationship Descriptions (NEW)
-        output_parts.append("\n\n=== RELATIONSHIP DESCRIPTIONS ===")
-        for (source, target, relation), full_desc in relation_details.items():
-            output_parts.append(f"\n• {relation}")
-            output_parts.append(f"  Full description: {full_desc}")
-            output_parts.append(f"  Source: {source}")
-            output_parts.append(f"  Target: {target}")
+            # Add relationship description inline
+            rel_key = (source, target, relation)
+            if rel_key in relation_details:
+                full_desc = relation_details[rel_key]
+                output_parts.append(f"  Description: {full_desc}")
 
         return "\n".join(output_parts)
 

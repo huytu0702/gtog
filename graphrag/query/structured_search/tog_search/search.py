@@ -93,10 +93,14 @@ class ToGSearch:
 
         response_chunks: List[str] = []
         context_paths: List[str] = []
+        context_text = ""
 
-        async for chunk, paths, chunk_metrics in self._stream_search_with_metrics(
-            query
-        ):
+        async for (
+            chunk,
+            paths,
+            chunk_metrics,
+            ctx_text,
+        ) in self._stream_search_with_metrics(query):
             if chunk:
                 response_chunks.append(chunk)
             if paths:
@@ -106,11 +110,11 @@ class ToGSearch:
                     metrics.add_pruning(chunk_metrics)
                 elif isinstance(chunk_metrics, ReasoningMetrics):
                     metrics.add_reasoning(chunk_metrics)
+            if ctx_text:
+                context_text = ctx_text
 
         response = "".join(response_chunks)
         completion_time = time.time() - start_time
-
-        context_text = "\n".join(context_paths) if context_paths else ""
 
         return SearchResult(
             response=response,
@@ -139,14 +143,14 @@ class ToGSearch:
 
     async def stream_search(self, query: str) -> AsyncGenerator[str, None]:
         """Perform ToG search with streaming output (backward compatible)."""
-        async for chunk, _, _ in self._stream_search_with_metrics(query):
+        async for chunk, _, _, _ in self._stream_search_with_metrics(query):
             if chunk:  # Only yield non-empty chunks
                 yield chunk
 
     async def _stream_search_with_metrics(
         self, query: str
     ) -> AsyncGenerator[
-        Tuple[str, List[str], Union[PruningMetrics, ReasoningMetrics, None]], None
+        Tuple[str, List[str], Union[PruningMetrics, ReasoningMetrics, None], str], None
     ]:
         """Perform ToG search with streaming output."""
         # Find initial entities using semantic similarity (like ToG paper)
@@ -165,6 +169,7 @@ class ToGSearch:
                 f"No relevant entities found for query '{query}'. Available entities: {available_entities}",
                 [],
                 None,
+                "",
             )
             return
 
@@ -225,7 +230,7 @@ class ToGSearch:
                 )
 
                 # Yield pruning metrics
-                yield ("", [], pruning_metrics)
+                yield ("", [], pruning_metrics, "")
 
                 # Keep top entities based on scores
                 scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
@@ -270,6 +275,7 @@ class ToGSearch:
                             f"[DEPTH {next_depth}] {node.parent.entity_name} --[{node.relation_from_parent}]--> {node.entity_name} (score: {node.score:.2f})\n",
                             [],
                             None,
+                            "",
                         )
 
             # Check for early termination
@@ -285,19 +291,20 @@ class ToGSearch:
                 reasoning_paths = self.reasoning_module.get_reasoning_paths(
                     state.get_current_frontier()
                 )
-                yield (answer, reasoning_paths, early_term_metrics)
+                yield (answer, reasoning_paths, early_term_metrics, "")
                 # Disabled debug output for early termination
                 if False:
-                    yield (f"=== ToG EARLY TERMINATION ===\n", [], None)
+                    yield (f"=== ToG EARLY TERMINATION ===\n", [], None, "")
                     yield (
                         f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n",
                         [],
                         None,
+                        "",
                     )
-                    yield (f"=== ToG REASONING ANSWER ===\n\n", [], None)
+                    yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
                 return
             # Yield early termination metrics (non-terminating case)
-            yield ("", [], early_term_metrics)
+            yield ("", [], early_term_metrics, "")
 
         # Generate final answer from explored paths
         all_paths = []
@@ -309,8 +316,12 @@ class ToGSearch:
                 "No exploration paths were generated. The knowledge graph may not contain relevant information for this query.",
                 [],
                 None,
+                "",
             )
             return
+
+        # Generate rich context text with entity and relation descriptions
+        context_text = self.reasoning_module._format_paths(all_paths)
 
         # Use reasoning module to generate final answer
         try:
@@ -320,32 +331,43 @@ class ToGSearch:
                 answer_metrics,
             ) = await self.reasoning_module.generate_answer(query, all_paths)
 
-            # Yield answer metrics
-            yield ("", reasoning_paths, answer_metrics)
+            # Yield answer metrics with context_text
+            yield ("", reasoning_paths, answer_metrics, context_text)
 
             # Show exploration paths before answer
             # Disabled to only show final answer
             if False:
-                yield (f"=== ToG EXPLORATION ANALYSIS ===\n", [], None)
-                yield (f"Query: {query}\n", [], None)
-                yield (f"Max Depth: {self.depth}, Beam Width: {self.width}\n", [], None)
-                yield (f"Total exploration paths found: {len(all_paths)}\n", [], None)
+                yield (f"=== ToG EXPLORATION ANALYSIS ===\n", [], None, "")
+                yield (f"Query: {query}\n", [], None, "")
+                yield (
+                    f"Max Depth: {self.depth}, Beam Width: {self.width}\n",
+                    [],
+                    None,
+                    "",
+                )
+                yield (
+                    f"Total exploration paths found: {len(all_paths)}\n",
+                    [],
+                    None,
+                    "",
+                )
                 yield (
                     f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n",
                     [],
                     None,
+                    "",
                 )
 
-                yield (f"=== EXPLORATION PATHS (with scores) ===\n", [], None)
+                yield (f"=== EXPLORATION PATHS (with scores) ===\n", [], None, "")
                 for i, path in enumerate(reasoning_paths, 1):
-                    yield (f"Path {i}: {path}\n", [], None)
+                    yield (f"Path {i}: {path}\n", [], None, "")
 
                 # Show path details with scores
-                yield (f"\n=== PATH DETAILS ===\n", [], None)
+                yield (f"\n=== PATH DETAILS ===\n", [], None, "")
                 for depth in range(self.depth + 1):
                     depth_nodes = [node for node in all_paths if node.depth == depth]
                     if depth_nodes:
-                        yield (f"Depth {depth}:\n", [], None)
+                        yield (f"Depth {depth}:\n", [], None, "")
                         for node in depth_nodes:
                             parent_info = (
                                 f" (from: {node.parent.entity_name})"
@@ -356,11 +378,12 @@ class ToGSearch:
                                 f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n",
                                 [],
                                 None,
+                                "",
                             )
-                        yield ("\n", [], None)
+                        yield ("\n", [], None, "")
 
-                yield (f"=== ToG REASONING ANSWER ===\n\n", [], None)
-            yield (answer, reasoning_paths, None)
+                yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
+            yield (answer, reasoning_paths, None, "")
         except Exception as e:
             # Fallback response if reasoning fails
             paths_summary = "\n".join([
@@ -376,4 +399,5 @@ However, I found these relevant entities during exploration:
 Based on the exploration, I found {len(all_paths)} potential paths. Please try rephrasing your query or check if the entities are relevant to your question.""",
                 [],
                 None,
+                "",
             )
