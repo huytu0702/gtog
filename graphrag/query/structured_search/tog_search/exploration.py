@@ -116,9 +116,19 @@ class GraphExplorer:
                 and rel.target == target_id
                 and rel.description == rel_desc
             ):
+                # Build full description from description + attributes if available
+                full_desc = rel.description or rel_desc
+                if rel.attributes:
+                    attr_text = " ".join([
+                        f"{k}: {v}" for k, v in rel.attributes.items() if v
+                    ])
+                    if attr_text:
+                        full_desc = (
+                            f"{full_desc} ({attr_text})" if full_desc else attr_text
+                        )
                 return (
                     rel.id,
-                    rel.description or rel_desc,
+                    full_desc,
                     rel.source,
                     rel.target,
                     rel.weight or 1.0,
@@ -130,9 +140,19 @@ class GraphExplorer:
                 and rel.source == target_id
                 and rel.description == rel_desc
             ):
+                # Build full description from description + attributes if available
+                full_desc = rel.description or rel_desc
+                if rel.attributes:
+                    attr_text = " ".join([
+                        f"{k}: {v}" for k, v in rel.attributes.items() if v
+                    ])
+                    if attr_text:
+                        full_desc = (
+                            f"{full_desc} ({attr_text})" if full_desc else attr_text
+                        )
                 return (
                     rel.id,
-                    rel.description or rel_desc,
+                    full_desc,
                     rel.source,
                     rel.target,
                     rel.weight or 1.0,

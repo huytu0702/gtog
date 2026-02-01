@@ -176,11 +176,17 @@ Structure your response as:
         output_parts.append("\n\n=== RELATIONSHIPS ===")
         for source, relation, target, source_desc, target_desc in relationships:
             output_parts.append(f"\n• {source} --[{relation}]--> {target}")
-            # Add relationship description inline
+            # Add relationship description inline only if it provides additional information
             rel_key = (source, target, relation)
             if rel_key in relation_details:
                 full_desc = relation_details[rel_key]
-                output_parts.append(f"  Description: {full_desc}")
+                # Only show description if it's different from relation label and provides more detail
+                if (
+                    full_desc
+                    and full_desc.strip() != relation.strip()
+                    and len(full_desc.strip()) > len(relation.strip())
+                ):
+                    output_parts.append(f"  Description: {full_desc}")
 
         return "\n".join(output_parts)
 

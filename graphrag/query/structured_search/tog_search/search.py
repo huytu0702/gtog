@@ -291,7 +291,11 @@ class ToGSearch:
                 reasoning_paths = self.reasoning_module.get_reasoning_paths(
                     state.get_current_frontier()
                 )
-                yield (answer, reasoning_paths, early_term_metrics, "")
+                # Generate context_text for early termination
+                early_context_text = self.reasoning_module._format_paths(
+                    state.get_current_frontier()
+                )
+                yield (answer, reasoning_paths, early_term_metrics, early_context_text)
                 # Disabled debug output for early termination
                 if False:
                     yield (f"=== ToG EARLY TERMINATION ===\n", [], None, "")
@@ -383,7 +387,7 @@ class ToGSearch:
                         yield ("\n", [], None, "")
 
                 yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
-            yield (answer, reasoning_paths, None, "")
+            yield (answer, reasoning_paths, None, context_text)
         except Exception as e:
             # Fallback response if reasoning fails
             paths_summary = "\n".join([
