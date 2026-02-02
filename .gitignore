@@ -57,6 +57,9 @@ docsite/
 # PyCharm
 .idea/
 
+# Git worktrees
+.worktrees/
+
 # Jupyter notebook
 .ipynb_checkpoints/
 
