@@ -133,6 +133,29 @@ class SearchResponse(BaseModel):
     method: SearchMethod
 
 
+class AgentSearchRequest(BaseModel):
+    """Request model for agent-routed search."""
+
+    query: str = Field(..., min_length=1, max_length=1000)
+    stream: bool = True
+
+
+class WebSearchRequest(BaseModel):
+    """Request model for direct web search."""
+
+    query: str = Field(..., min_length=1, max_length=1000)
+    stream: bool = True
+
+
+class AgentSearchResponse(BaseModel):
+    """Response model for agent-routed search."""
+
+    method_used: str
+    router_reasoning: str
+    response: str
+    sources: list = Field(default_factory=list)
+
+
 # Health Check
 class HealthResponse(BaseModel):
     """Response model for health check."""

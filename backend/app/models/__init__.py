@@ -1,6 +1,13 @@
 """Models package."""
 
 from .enums import IndexStatus, SearchMethod
+from .events import (
+    ContentEvent,
+    DoneEvent,
+    ErrorEvent,
+    Source,
+    StatusEvent,
+)
 from .schemas import (
     CollectionCreate,
     CollectionList,
@@ -16,6 +23,9 @@ from .schemas import (
     SearchRequest,
     SearchResponse,
     ToGSearchRequest,
+    AgentSearchRequest,
+    AgentSearchResponse,
+    WebSearchRequest,
 )
 
 __all__ = [
@@ -39,6 +49,15 @@ __all__ = [
     "DriftSearchRequest",
     "ToGSearchRequest",
     "SearchResponse",
+    "AgentSearchRequest",
+    "AgentSearchResponse",
+    "WebSearchRequest",
     # Health
     "HealthResponse",
+    # SSE Events
+    "StatusEvent",
+    "ContentEvent",
+    "DoneEvent",
+    "ErrorEvent",
+    "Source",
 ]

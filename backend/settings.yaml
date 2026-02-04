@@ -7,10 +7,10 @@
 models:
   default_chat_model:
     type: chat
-    model_provider: openai
+    model_provider: gemini
     auth_type: api_key # or azure_managed_identity
     api_key: ${GRAPHRAG_API_KEY} # set this in the generated .env file, or remove if managed identity
-    model: gpt-4o-mini
+    model: gemini-2.0-flash
     # api_base: https://<instance>.openai.azure.com
     # api_version: 2024-05-01-preview
     model_supports_json: true # recommended if this is available for your model.
@@ -22,10 +22,10 @@ models:
     requests_per_minute: null
   default_embedding_model:
     type: embedding
-    model_provider: openai
+    model_provider: gemini
     auth_type: api_key
     api_key: ${GRAPHRAG_API_KEY}
-    model: text-embedding-3-small
+    model: gemini-embedding-001
     # api_base: https://<instance>.openai.azure.com
     # api_version: 2024-05-01-preview
     concurrent_requests: 25
@@ -69,6 +69,8 @@ vector_store:
     type: lancedb
     db_uri: output\lancedb
     container_name: default
+    index_schma:
+      vector_size: 1536
 
 ### Workflow settings ###
 
