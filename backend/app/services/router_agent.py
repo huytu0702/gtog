@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from openai import AsyncOpenAI
+from litellm import acompletion
 
 from ..config import settings
 
@@ -29,7 +29,6 @@ class RouterAgent:
 
     def __init__(self):
         """Initialize the router agent."""
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
         self.prompt_template = self._load_prompt()
 
     def _load_prompt(self) -> str:
@@ -49,8 +48,8 @@ Query: {query}
 Collection: {collection_context}"""
 
     async def _call_llm(self, prompt: str):
-        """Call OpenAI API."""
-        return await self.client.chat.completions.create(
+        """Call LLM API using litellm (supports OpenAI, Gemini, and others)."""
+        return await acompletion(
             model=settings.default_chat_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,

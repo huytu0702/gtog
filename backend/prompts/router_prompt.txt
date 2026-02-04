@@ -13,11 +13,11 @@ Collection context:
 User query: {query}
 
 Respond with a JSON object:
-{
+{{
   "method": "local|global|tog|drift|web",
   "confidence": 0.0-1.0,
   "reasoning": "Brief explanation of why this method was chosen"
-}
+}}
 
 Important:
 - If the query asks about current events, news, or real-time information, choose WEB.

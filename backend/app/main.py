@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,28 +24,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    logger.info("Starting GraphRAG FastAPI backend...")
+    
+    # Ensure storage directory exists
+    settings.collections_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Storage directory: {settings.collections_dir}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down GraphRAG FastAPI backend...")
+
+
 # Create FastAPI application
 app = FastAPI(
     title="GraphRAG API",
     description="FastAPI backend for GraphRAG document indexing and search",
     version="1.0.0",
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Startup event handler."""
-    logger.info("Starting GraphRAG FastAPI backend...")
-
-    # Ensure storage directory exists
-    settings.collections_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Storage directory: {settings.collections_dir}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown event handler."""
-    logger.info("Shutting down GraphRAG FastAPI backend...")
 
 
 # Add CORS middleware

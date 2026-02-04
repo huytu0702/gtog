@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from openai import AsyncOpenAI
-from tavily import TavilyClient
+from tavily import AsyncTavilyClient
 
 from ..config import settings
 from ..models.events import Source
@@ -27,7 +27,7 @@ class WebSearchService:
 
     def __init__(self):
         """Initialize the web search service."""
-        self.tavily = TavilyClient(api_key=settings.tavily_api_key)
+        self.tavily = AsyncTavilyClient(api_key=settings.tavily_api_key)
         self.openai = AsyncOpenAI(api_key=settings.openai_api_key)
         self.prompt_template = self._load_prompt()
 
@@ -105,7 +105,7 @@ Include [N] citations."""
             )
 
             llm_response = await self._call_llm(prompt)
-            synthesized = llm_response.choices[0].message.content
+            synthesized = llm_response.choices[0].message.content or ""
 
             return WebSearchResult(response=synthesized, sources=sources)
 
