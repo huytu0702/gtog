@@ -1,5 +1,6 @@
 """Router Agent service for intelligent query routing."""
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from litellm import acompletion
+from litellm.exceptions import RateLimitError
 
 from ..config import settings
 
@@ -48,13 +50,44 @@ Query: {query}
 Collection: {collection_context}"""
 
     async def _call_llm(self, prompt: str):
-        """Call LLM API using litellm (supports OpenAI, Gemini, and others)."""
-        return await acompletion(
-            model=settings.default_chat_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=200,
-        )
+        """Call LLM API using litellm with exponential backoff on rate limits."""
+        max_retries = 3
+        base_delay = 1.0
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await acompletion(
+                    model=settings.default_chat_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=500,  # Increased for more complete responses
+                    api_key=settings.google_api_key,
+                    response_format={"type": "json_object"},  # Force JSON output
+                )
+                return response
+            except RateLimitError as e:
+                if attempt == max_retries:
+                    logger.error(f"Rate limit exceeded after {max_retries} retries: {e}")
+                    raise
+
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    f"Rate limit hit on router agent (attempt {attempt + 1}/{max_retries + 1}). "
+                    f"Retrying in {delay}s..."
+                )
+                await asyncio.sleep(delay)
+            except Exception as e:
+                # If response_format not supported, try without it
+                if "response_format" in str(e):
+                    logger.warning("response_format not supported, falling back to standard completion")
+                    return await acompletion(
+                        model=settings.default_chat_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.1,
+                        max_tokens=500,
+                        api_key=settings.google_api_key,
+                    )
+                raise
 
     async def route(self, query: str, collection_context: str = "") -> RouteDecision:
         """
@@ -76,11 +109,31 @@ Collection: {collection_context}"""
             response = await self._call_llm(prompt)
             content = response.choices[0].message.content
 
+            # Log the raw response for debugging
+            logger.debug(f"Router LLM raw response: {content}")
+
+            if not content or not content.strip():
+                logger.warning("Router received empty response from LLM")
+                return RouteDecision(
+                    method="local",
+                    confidence=0.3,
+                    reasoning="Default to LOCAL - empty LLM response",
+                )
+
+            # Try to extract JSON if wrapped in markdown code blocks
+            content = content.strip()
+            if content.startswith("```"):
+                # Extract JSON from markdown code block
+                lines = content.split("\n")
+                content = "\n".join(lines[1:-1]) if len(lines) > 2 else content
+                content = content.replace("```json", "").replace("```", "").strip()
+
             # Parse JSON response
             decision = json.loads(content)
 
             method = decision.get("method", "local").lower()
             if method not in ("local", "global", "tog", "drift", "web"):
+                logger.warning(f"Invalid method '{method}' returned, defaulting to 'local'")
                 method = "local"
 
             return RouteDecision(
@@ -90,14 +143,14 @@ Collection: {collection_context}"""
             )
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning(f"Failed to parse router response: {e}")
+            logger.warning(f"Failed to parse router response. Error: {e}. Content: {content[:200] if 'content' in locals() else 'N/A'}")
             return RouteDecision(
                 method="local",
                 confidence=0.5,
                 reasoning=f"Default to LOCAL due to parse error: {e}",
             )
         except Exception as e:
-            logger.error(f"Router agent error: {e}")
+            logger.error(f"Router agent error: {e}", exc_info=True)
             return RouteDecision(
                 method="local",
                 confidence=0.3,

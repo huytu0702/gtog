@@ -12,7 +12,7 @@ Collection context:
 
 User query: {query}
 
-Respond with a JSON object:
+YOU MUST respond with ONLY a valid JSON object (no markdown, no code blocks, no explanations):
 {{
   "method": "local|global|tog|drift|web",
   "confidence": 0.0-1.0,

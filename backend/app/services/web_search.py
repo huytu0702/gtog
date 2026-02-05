@@ -1,11 +1,13 @@
 """Web Search service using Tavily API."""
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator
 
-from openai import AsyncOpenAI
+from litellm import acompletion
+from litellm.exceptions import RateLimitError
 from tavily import AsyncTavilyClient
 
 from ..config import settings
@@ -28,7 +30,6 @@ class WebSearchService:
     def __init__(self):
         """Initialize the web search service."""
         self.tavily = AsyncTavilyClient(api_key=settings.tavily_api_key)
-        self.openai = AsyncOpenAI(api_key=settings.openai_api_key)
         self.prompt_template = self._load_prompt()
 
     def _load_prompt(self) -> str:
@@ -48,13 +49,31 @@ Results: {search_results}
 Include [N] citations."""
 
     async def _call_llm(self, prompt: str):
-        """Call OpenAI API for synthesis."""
-        return await self.openai.chat.completions.create(
-            model=settings.default_chat_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1000,
-        )
+        """Call LLM API using litellm with exponential backoff on rate limits."""
+        max_retries = 3
+        base_delay = 1.0
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await acompletion(
+                    model=settings.default_chat_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                    max_tokens=1000,
+                    api_key=settings.google_api_key,
+                )
+                return response
+            except RateLimitError as e:
+                if attempt == max_retries:
+                    logger.error(f"Rate limit exceeded after {max_retries} retries: {e}")
+                    raise
+
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    f"Rate limit hit on web search synthesis (attempt {attempt + 1}/{max_retries + 1}). "
+                    f"Retrying in {delay}s..."
+                )
+                await asyncio.sleep(delay)
 
     async def search(self, query: str) -> WebSearchResult:
         """
@@ -68,7 +87,7 @@ Include [N] citations."""
         """
         try:
             # Call Tavily API
-            tavily_response = self.tavily.search(
+            tavily_response = await self.tavily.search(
                 query=query,
                 search_depth="advanced",
                 max_results=5,
@@ -125,46 +144,67 @@ Include [N] citations."""
         Yields:
             Chunks of the synthesized response
         """
-        try:
-            # Call Tavily API (non-streaming)
-            tavily_response = self.tavily.search(
-                query=query,
-                search_depth="advanced",
-                max_results=5,
-            )
+        max_retries = 3
+        base_delay = 1.0
 
-            results = tavily_response.get("results", [])
+        for attempt in range(max_retries + 1):
+            try:
+                # Call Tavily API (non-streaming)
+                tavily_response = await self.tavily.search(
+                    query=query,
+                    search_depth="advanced",
+                    max_results=5,
+                )
 
-            if not results:
-                yield "No relevant web search results found for your query."
+                results = tavily_response.get("results", [])
+
+                if not results:
+                    yield "No relevant web search results found for your query."
+                    return
+
+                # Format results for LLM
+                formatted_results = "\n\n".join([
+                    f"[{i + 1}] {r.get('title', 'Untitled')}\nURL: {r.get('url', '')}\n{r.get('content', '')}"
+                    for i, r in enumerate(results)
+                ])
+
+                prompt = self.prompt_template.format(
+                    query=query, search_results=formatted_results
+                )
+
+                # Stream LLM response
+                stream = await acompletion(
+                    model=settings.default_chat_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                    max_tokens=1000,
+                    stream=True,
+                    api_key=settings.google_api_key,
+                )
+
+                async for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+
+                return  # Success - exit retry loop
+
+            except RateLimitError as e:
+                if attempt == max_retries:
+                    logger.error(f"Rate limit exceeded after {max_retries} retries: {e}")
+                    yield f"Error: Rate limit exceeded. Please try again later."
+                    return
+
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    f"Rate limit hit on web search streaming (attempt {attempt + 1}/{max_retries + 1}). "
+                    f"Retrying in {delay}s..."
+                )
+                await asyncio.sleep(delay)
+
+            except Exception as e:
+                logger.error(f"Web search streaming error: {e}")
+                yield f"Error performing web search: {e}"
                 return
-
-            # Format results for LLM
-            formatted_results = "\n\n".join([
-                f"[{i + 1}] {r.get('title', 'Untitled')}\nURL: {r.get('url', '')}\n{r.get('content', '')}"
-                for i, r in enumerate(results)
-            ])
-
-            prompt = self.prompt_template.format(
-                query=query, search_results=formatted_results
-            )
-
-            # Stream LLM response
-            stream = await self.openai.chat.completions.create(
-                model=settings.default_chat_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=1000,
-                stream=True,
-            )
-
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-
-        except Exception as e:
-            logger.error(f"Web search streaming error: {e}")
-            yield f"Error performing web search: {e}"
 
 
 # Global web search service instance
