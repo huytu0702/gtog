@@ -1,6 +1,6 @@
 """Utility helper functions."""
 
-import os
+import logging
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -8,6 +8,53 @@ from graphrag.config.load_config import load_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
 from ..config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
+    """
+    Normalize model/provider pairs to avoid LiteLLM provider parsing failures.
+
+    Older configs may set model strings like ``google_ai_studio/gemini-embedding-001``.
+    For GraphRAG LiteLLM config, provider and model should be split as:
+    ``model_provider: gemini`` and ``model: gemini-embedding-001``.
+    """
+    provider_aliases = {
+        "google_ai_studio": "gemini",
+    }
+
+    for model_id, model_cfg in config.models.items():
+        raw_model = (model_cfg.model or "").strip()
+        raw_provider = (model_cfg.model_provider or "").strip()
+
+        # Provider aliases to canonical provider names.
+        if raw_provider in provider_aliases:
+            canonical_provider = provider_aliases[raw_provider]
+            model_cfg.model_provider = canonical_provider
+            logger.warning(
+                "Normalized model_provider for %s: '%s' -> '%s'",
+                model_id,
+                raw_provider,
+                canonical_provider,
+            )
+
+        # Split provider-prefixed model names into separate provider/model fields.
+        if "/" in raw_model:
+            prefix, normalized_model = raw_model.split("/", 1)
+            prefix = prefix.strip()
+            normalized_model = normalized_model.strip()
+
+            if prefix in provider_aliases and normalized_model:
+                model_cfg.model_provider = provider_aliases[prefix]
+                model_cfg.model = normalized_model
+                logger.warning(
+                    "Normalized model for %s: '%s' -> provider='%s', model='%s'",
+                    model_id,
+                    raw_model,
+                    model_cfg.model_provider,
+                    model_cfg.model,
+                )
 
 
 def load_graphrag_config(collection_id: str) -> GraphRagConfig:
@@ -39,6 +86,8 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
             "cache.base_dir": str(collection_dir / "cache"),
         },
     )
+
+    _normalize_litellm_model_config(config)
 
     return config
 
