@@ -139,6 +139,7 @@ drift_search:
   embedding_model_id: default_embedding_model
   prompt: "prompts/drift_search_system_prompt.txt"
   reduce_prompt: "prompts/drift_search_reduce_prompt.txt"
+  primer_folds: 1
 
 basic_search:
   chat_model_id: default_chat_model
