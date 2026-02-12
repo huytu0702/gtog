@@ -48,6 +48,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -83,7 +84,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "app.main:app",
         host=settings.host,
