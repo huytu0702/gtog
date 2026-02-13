@@ -110,6 +110,71 @@ The API will be available at:
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
 
+## Cosmos DB Emulator Workflow Scripts
+
+We provide helper scripts to manage the Cosmos DB emulator environment:
+
+### Bootstrap
+
+Start the full stack with a single command:
+
+```bash
+python scripts/cosmos/bootstrap.py
+```
+
+This will:
+1. Validate required tools (docker, docker compose)
+2. Check environment files (.env, .env.cosmos-emulator)
+3. Start containers (cosmos-emulator, backend, frontend)
+4. Poll backend health endpoint until ready
+5. Print next-step commands
+
+Options:
+- `--skip-health`: Skip health check polling
+- `--health-timeout 180`: Use 3-minute timeout instead of default 2-minute
+
+### Smoke Test
+
+Run an end-to-end API validation:
+
+```bash
+python scripts/cosmos/smoke_api.py --cleanup
+```
+
+This will:
+1. Create a temporary test collection
+2. Upload a sample document
+3. Start and monitor indexing until complete
+4. Execute a query to verify search works
+5. Delete the test collection (if `--cleanup` is passed)
+
+Options:
+- `--cleanup`: Delete test collection after test
+- `--indexing-timeout 600`: Wait up to 10 minutes for indexing
+
+### Reset
+
+**WARNING: This removes ALL data!**
+
+When to use reset:
+- Corrupted data or inconsistent state
+- Starting fresh after configuration changes
+- Cleaning up after testing
+- Troubleshooting connection issues
+
+```bash
+# Reset containers and volumes
+python scripts/cosmos/reset.py --yes
+
+# Also clean local backend storage
+python scripts/cosmos/reset.py --yes --clean-local-storage
+```
+
+After reset, restart with:
+```bash
+python scripts/cosmos/bootstrap.py
+```
+
 ## API Usage
 
 ### 1. Create a Collection
