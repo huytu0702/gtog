@@ -1,4 +1,4 @@
-"""File storage management service."""
+"""Storage management service with file and Cosmos DB backends."""
 
 import shutil
 from datetime import datetime
@@ -13,19 +13,58 @@ from ..models import CollectionResponse, DocumentResponse
 
 
 class StorageService:
-    """Service for managing file storage operations."""
+    """Service for managing storage operations with file or Cosmos DB backend."""
 
     def __init__(self):
-        """Initialize the storage service."""
+        """Initialize the storage service based on storage mode."""
         self.collections_dir = settings.collections_dir
-        # Ensure collections directory exists
-        self.collections_dir.mkdir(parents=True, exist_ok=True)
+        self._is_cosmos_mode = settings.is_cosmos_mode
+
+        # Initialize repositories based on storage mode
+        if self._is_cosmos_mode:
+            self._init_cosmos_repositories()
+        else:
+            # Ensure collections directory exists for file mode
+            self.collections_dir.mkdir(parents=True, exist_ok=True)
+
+    def _init_cosmos_repositories(self):
+        """Initialize Cosmos DB repositories."""
+        try:
+            from azure.cosmos import CosmosClient
+
+            self._cosmos_client = CosmosClient(
+                url=settings.cosmos_endpoint,
+                credential=settings.cosmos_key,
+            )
+            database = self._cosmos_client.get_database_client(settings.cosmos_database)
+            container = database.get_container_client(settings.cosmos_container)
+
+            from ..repositories.cosmos_collections import CosmosCollectionRepository
+            from ..repositories.cosmos_documents import CosmosDocumentRepository
+            from ..repositories.cosmos_prompts import CosmosPromptRepository
+
+            self._collection_repo = CosmosCollectionRepository(container)
+            self._document_repo = CosmosDocumentRepository(container)
+            self._prompt_repo = CosmosPromptRepository(container)
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to initialize Cosmos repositories: {e}")
+            raise
+
+    def _seed_default_prompts_file(self, prompts_dir: Path) -> None:
+        """Seed default prompts to local filesystem."""
+        from ..repositories.default_prompts import load_default_prompt_texts
+
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        default_prompts = load_default_prompt_texts()
+
+        for prompt_name, content in default_prompts.items():
+            (prompts_dir / prompt_name).write_text(content, encoding="utf-8")
 
     def create_collection(
         self, collection_id: str, description: Optional[str] = None
     ) -> CollectionResponse:
-        """
-        Create a new collection with its directory structure.
+        """Create a new collection.
 
         Args:
             collection_id: Unique identifier for the collection
@@ -37,135 +76,60 @@ class StorageService:
         Raises:
             ValueError: If collection already exists
         """
-        collection_dir = self.collections_dir / collection_id
+        if self._is_cosmos_mode:
+            # Check if collection already exists
+            existing = self._collection_repo.get(collection_id)
+            if existing:
+                raise ValueError(f"Collection '{collection_id}' already exists")
 
-        if collection_dir.exists():
-            raise ValueError(f"Collection '{collection_id}' already exists")
+            # Create collection in Cosmos
+            record = self._collection_repo.create(collection_id, description)
 
-        # Create directory structure (matching graphrag init)
-        collection_dir.mkdir(parents=True)
-        (collection_dir / "input").mkdir()
-        (collection_dir / "output").mkdir()
-        (collection_dir / "cache").mkdir()
-        (collection_dir / "prompts").mkdir()
+            # Seed default prompts
+            self._prompt_repo.seed_defaults(collection_id)
 
-        # Generate default prompts from graphrag package
-        try:
-            # Import index prompts
-            from graphrag.prompts.index.extract_claims import EXTRACT_CLAIMS_PROMPT
-            from graphrag.prompts.index.community_report import COMMUNITY_REPORT_PROMPT
-            from graphrag.prompts.index.community_report_text_units import (
-                COMMUNITY_REPORT_TEXT_PROMPT,
+            return CollectionResponse(
+                id=record.id,
+                name=record.name,
+                description=record.description,
+                created_at=record.created_at,
+                document_count=0,
+                indexed=False,
             )
-            from graphrag.prompts.index.extract_graph import GRAPH_EXTRACTION_PROMPT
-            from graphrag.prompts.index.summarize_descriptions import SUMMARIZE_PROMPT
+        else:
+            # File mode: create local directory structure
+            collection_dir = self.collections_dir / collection_id
 
-            # Import query prompts
-            from graphrag.prompts.query.basic_search_system_prompt import (
-                BASIC_SEARCH_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.drift_search_system_prompt import (
-                DRIFT_LOCAL_SYSTEM_PROMPT,
-                DRIFT_REDUCE_PROMPT,
-            )
-            from graphrag.prompts.query.global_search_knowledge_system_prompt import (
-                GENERAL_KNOWLEDGE_INSTRUCTION,
-            )
-            from graphrag.prompts.query.global_search_map_system_prompt import (
-                MAP_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.global_search_reduce_system_prompt import (
-                REDUCE_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.local_search_system_prompt import (
-                LOCAL_SEARCH_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.question_gen_system_prompt import (
-                QUESTION_SYSTEM_PROMPT,
-            )
+            if collection_dir.exists():
+                raise ValueError(f"Collection '{collection_id}' already exists")
 
-            # Import ToG prompts
-            from graphrag.prompts.query.tog_entity_scoring_prompt import (
-                TOG_ENTITY_SCORING_PROMPT,
-            )
-            from graphrag.prompts.query.tog_relation_scoring_prompt import (
-                TOG_RELATION_SCORING_PROMPT,
-            )
-            from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
+            # Create directory structure (matching graphrag init)
+            collection_dir.mkdir(parents=True)
+            (collection_dir / "input").mkdir()
+            (collection_dir / "output").mkdir()
+            (collection_dir / "cache").mkdir()
+            (collection_dir / "prompts").mkdir()
 
-            prompts_dir = collection_dir / "prompts"
+            # Generate default prompts from graphrag package
+            try:
+                self._seed_default_prompts_file(collection_dir / "prompts")
+            except Exception as e:
+                import logging
+                logging.warning(
+                    f"Failed to generate prompts for collection {collection_id}: {e}"
+                )
 
-            # Write index prompts
-            (prompts_dir / "extract_graph.txt").write_text(
-                GRAPH_EXTRACTION_PROMPT, encoding="utf-8"
+            return CollectionResponse(
+                id=collection_id,
+                name=collection_id,
+                description=description,
+                created_at=datetime.now(),
+                document_count=0,
+                indexed=False,
             )
-            (prompts_dir / "summarize_descriptions.txt").write_text(
-                SUMMARIZE_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "extract_claims.txt").write_text(
-                EXTRACT_CLAIMS_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "community_report_graph.txt").write_text(
-                COMMUNITY_REPORT_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "community_report_text.txt").write_text(
-                COMMUNITY_REPORT_TEXT_PROMPT, encoding="utf-8"
-            )
-
-            # Write query prompts
-            (prompts_dir / "drift_search_system_prompt.txt").write_text(
-                DRIFT_LOCAL_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "drift_search_reduce_prompt.txt").write_text(
-                DRIFT_REDUCE_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "global_search_map_system_prompt.txt").write_text(
-                MAP_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "global_search_reduce_system_prompt.txt").write_text(
-                REDUCE_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "global_search_knowledge_system_prompt.txt").write_text(
-                GENERAL_KNOWLEDGE_INSTRUCTION, encoding="utf-8"
-            )
-            (prompts_dir / "local_search_system_prompt.txt").write_text(
-                LOCAL_SEARCH_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "basic_search_system_prompt.txt").write_text(
-                BASIC_SEARCH_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "question_gen_system_prompt.txt").write_text(
-                QUESTION_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            # Write ToG prompts
-            (prompts_dir / "tog_entity_scoring_prompt.txt").write_text(
-                TOG_ENTITY_SCORING_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "tog_relation_scoring_prompt.txt").write_text(
-                TOG_RELATION_SCORING_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "tog_reasoning_prompt.txt").write_text(
-                TOG_REASONING_PROMPT, encoding="utf-8"
-            )
-        except Exception as e:
-            import logging
-
-            logging.warning(
-                f"Failed to generate prompts for collection {collection_id}: {e}"
-            )
-
-        return CollectionResponse(
-            id=collection_id,
-            name=collection_id,
-            description=description,
-            created_at=datetime.now(),
-            document_count=0,
-            indexed=False,
-        )
 
     def delete_collection(self, collection_id: str) -> bool:
-        """
-        Delete a collection and all its contents.
+        """Delete a collection and all its contents.
 
         Args:
             collection_id: The collection identifier
@@ -176,63 +140,90 @@ class StorageService:
         Raises:
             ValueError: If collection does not exist
         """
-        collection_dir = self.collections_dir / collection_id
+        if self._is_cosmos_mode:
+            # Delete collection from Cosmos
+            if not self._collection_repo.get(collection_id):
+                raise ValueError(f"Collection '{collection_id}' not found")
 
-        if not collection_dir.exists():
-            raise ValueError(f"Collection '{collection_id}' not found")
+            # Delete all documents in the collection
+            docs = self._document_repo.list(collection_id)
+            for doc in docs:
+                self._document_repo.delete(collection_id, doc.name)
 
-        shutil.rmtree(collection_dir)
-        return True
+            # Delete the collection
+            self._collection_repo.delete(collection_id)
+            return True
+        else:
+            # File mode: delete local directory
+            collection_dir = self.collections_dir / collection_id
+
+            if not collection_dir.exists():
+                raise ValueError(f"Collection '{collection_id}' not found")
+
+            shutil.rmtree(collection_dir)
+            return True
 
     def list_collections(self) -> List[CollectionResponse]:
-        """
-        List all available collections.
+        """List all available collections.
 
         Returns:
             List of CollectionResponse objects
         """
-        collections = []
+        if self._is_cosmos_mode:
+            records = self._collection_repo.list()
+            return [
+                CollectionResponse(
+                    id=rec.id,
+                    name=rec.name,
+                    description=rec.description,
+                    created_at=rec.created_at,
+                    document_count=len(self._document_repo.list(rec.id)),
+                    indexed=False,  # TODO: Check indexed status from Cosmos
+                )
+                for rec in records
+            ]
+        else:
+            collections = []
 
-        if not self.collections_dir.exists():
+            if not self.collections_dir.exists():
+                return collections
+
+            for collection_dir in self.collections_dir.iterdir():
+                if collection_dir.is_dir():
+                    collection_id = collection_dir.name
+                    input_dir = collection_dir / "input"
+                    output_dir = collection_dir / "output"
+
+                    # Count documents
+                    document_count = 0
+                    if input_dir.exists():
+                        document_count = len([
+                            f for f in input_dir.iterdir() if f.is_file()
+                        ])
+
+                    # Check if indexed (has output files)
+                    indexed = False
+                    if output_dir.exists():
+                        required_files = ["entities.parquet", "communities.parquet"]
+                        indexed = all((output_dir / f).exists() for f in required_files)
+
+                    collections.append(
+                        CollectionResponse(
+                            id=collection_id,
+                            name=collection_id,
+                            description=None,
+                            created_at=datetime.fromtimestamp(
+                                collection_dir.stat().st_ctime
+                            ),
+                            document_count=document_count,
+                            indexed=indexed,
+                        )
+                    )
+
             return collections
 
-        for collection_dir in self.collections_dir.iterdir():
-            if collection_dir.is_dir():
-                collection_id = collection_dir.name
-                input_dir = collection_dir / "input"
-                output_dir = collection_dir / "output"
-
-                # Count documents
-                document_count = 0
-                if input_dir.exists():
-                    document_count = len([
-                        f for f in input_dir.iterdir() if f.is_file()
-                    ])
-
-                # Check if indexed (has output files)
-                indexed = False
-                if output_dir.exists():
-                    required_files = ["entities.parquet", "communities.parquet"]
-                    indexed = all((output_dir / f).exists() for f in required_files)
-
-                collections.append(
-                    CollectionResponse(
-                        id=collection_id,
-                        name=collection_id,
-                        description=None,
-                        created_at=datetime.fromtimestamp(
-                            collection_dir.stat().st_ctime
-                        ),
-                        document_count=document_count,
-                        indexed=indexed,
-                    )
-                )
-
-        return collections
-
     def get_collection(self, collection_id: str) -> Optional[CollectionResponse]:
-        """
-        Get details about a specific collection.
+        """Get details about a specific collection.
 
         Args:
             collection_id: The collection identifier
@@ -240,39 +231,52 @@ class StorageService:
         Returns:
             CollectionResponse or None if not found
         """
-        collection_dir = self.collections_dir / collection_id
+        if self._is_cosmos_mode:
+            record = self._collection_repo.get(collection_id)
+            if not record:
+                return None
 
-        if not collection_dir.exists():
-            return None
+            return CollectionResponse(
+                id=record.id,
+                name=record.name,
+                description=record.description,
+                created_at=record.created_at,
+                document_count=len(self._document_repo.list(collection_id)),
+                indexed=False,  # TODO: Check indexed status from Cosmos
+            )
+        else:
+            collection_dir = self.collections_dir / collection_id
 
-        input_dir = collection_dir / "input"
-        output_dir = collection_dir / "output"
+            if not collection_dir.exists():
+                return None
 
-        # Count documents
-        document_count = 0
-        if input_dir.exists():
-            document_count = len([f for f in input_dir.iterdir() if f.is_file()])
+            input_dir = collection_dir / "input"
+            output_dir = collection_dir / "output"
 
-        # Check if indexed
-        indexed = False
-        if output_dir.exists():
-            required_files = ["entities.parquet", "communities.parquet"]
-            indexed = all((output_dir / f).exists() for f in required_files)
+            # Count documents
+            document_count = 0
+            if input_dir.exists():
+                document_count = len([f for f in input_dir.iterdir() if f.is_file()])
 
-        return CollectionResponse(
-            id=collection_id,
-            name=collection_id,
-            description=None,
-            created_at=datetime.fromtimestamp(collection_dir.stat().st_ctime),
-            document_count=document_count,
-            indexed=indexed,
-        )
+            # Check if indexed
+            indexed = False
+            if output_dir.exists():
+                required_files = ["entities.parquet", "communities.parquet"]
+                indexed = all((output_dir / f).exists() for f in required_files)
+
+            return CollectionResponse(
+                id=collection_id,
+                name=collection_id,
+                description=None,
+                created_at=datetime.fromtimestamp(collection_dir.stat().st_ctime),
+                document_count=document_count,
+                indexed=indexed,
+            )
 
     async def upload_document(
         self, collection_id: str, file: UploadFile
     ) -> DocumentResponse:
-        """
-        Upload a document to a collection.
+        """Upload a document to a collection.
 
         Args:
             collection_id: The collection identifier
@@ -284,28 +288,47 @@ class StorageService:
         Raises:
             ValueError: If collection does not exist
         """
-        collection_dir = self.collections_dir / collection_id
+        if self._is_cosmos_mode:
+            # Check if collection exists
+            if not self._collection_repo.get(collection_id):
+                raise ValueError(f"Collection '{collection_id}' not found")
 
-        if not collection_dir.exists():
-            raise ValueError(f"Collection '{collection_id}' not found")
-
-        input_dir = collection_dir / "input"
-        file_path = input_dir / file.filename
-
-        # Save the file
-        async with aiofiles.open(file_path, "wb") as f:
+            # Read file content
             content = await file.read()
-            await f.write(content)
+            filename = file.filename or "unnamed"
 
-        return DocumentResponse(
-            name=file.filename,
-            size=file_path.stat().st_size,
-            uploaded_at=datetime.now(),
-        )
+            # Store in Cosmos
+            record = self._document_repo.put(collection_id, filename, content)
+
+            return DocumentResponse(
+                name=record.name,
+                size=record.size,
+                uploaded_at=record.uploaded_at,
+            )
+        else:
+            # File mode
+            collection_dir = self.collections_dir / collection_id
+
+            if not collection_dir.exists():
+                raise ValueError(f"Collection '{collection_id}' not found")
+
+            input_dir = collection_dir / "input"
+            filename = file.filename or "unnamed"
+            file_path = input_dir / filename
+
+            # Save the file
+            async with aiofiles.open(file_path, "wb") as f:
+                content = await file.read()
+                await f.write(content)
+
+            return DocumentResponse(
+                name=filename,
+                size=file_path.stat().st_size,
+                uploaded_at=datetime.now(),
+            )
 
     def list_documents(self, collection_id: str) -> List[DocumentResponse]:
-        """
-        List all documents in a collection.
+        """List all documents in a collection.
 
         Args:
             collection_id: The collection identifier
@@ -316,32 +339,46 @@ class StorageService:
         Raises:
             ValueError: If collection does not exist
         """
-        collection_dir = self.collections_dir / collection_id
+        if self._is_cosmos_mode:
+            # Check if collection exists
+            if not self._collection_repo.get(collection_id):
+                raise ValueError(f"Collection '{collection_id}' not found")
 
-        if not collection_dir.exists():
-            raise ValueError(f"Collection '{collection_id}' not found")
+            records = self._document_repo.list(collection_id)
+            return [
+                DocumentResponse(
+                    name=rec.name,
+                    size=rec.size,
+                    uploaded_at=rec.uploaded_at,
+                )
+                for rec in records
+            ]
+        else:
+            collection_dir = self.collections_dir / collection_id
 
-        input_dir = collection_dir / "input"
-        documents = []
+            if not collection_dir.exists():
+                raise ValueError(f"Collection '{collection_id}' not found")
 
-        if input_dir.exists():
-            for file_path in input_dir.iterdir():
-                if file_path.is_file():
-                    documents.append(
-                        DocumentResponse(
-                            name=file_path.name,
-                            size=file_path.stat().st_size,
-                            uploaded_at=datetime.fromtimestamp(
-                                file_path.stat().st_mtime
-                            ),
+            input_dir = collection_dir / "input"
+            documents = []
+
+            if input_dir.exists():
+                for file_path in input_dir.iterdir():
+                    if file_path.is_file():
+                        documents.append(
+                            DocumentResponse(
+                                name=file_path.name,
+                                size=file_path.stat().st_size,
+                                uploaded_at=datetime.fromtimestamp(
+                                    file_path.stat().st_mtime
+                                ),
+                            )
                         )
-                    )
 
-        return documents
+            return documents
 
     def delete_document(self, collection_id: str, document_name: str) -> bool:
-        """
-        Delete a document from a collection.
+        """Delete a document from a collection.
 
         Args:
             collection_id: The collection identifier
@@ -353,22 +390,29 @@ class StorageService:
         Raises:
             ValueError: If collection or document does not exist
         """
-        collection_dir = self.collections_dir / collection_id
+        if self._is_cosmos_mode:
+            # Check if collection exists
+            if not self._collection_repo.get(collection_id):
+                raise ValueError(f"Collection '{collection_id}' not found")
 
-        if not collection_dir.exists():
-            raise ValueError(f"Collection '{collection_id}' not found")
+            self._document_repo.delete(collection_id, document_name)
+            return True
+        else:
+            collection_dir = self.collections_dir / collection_id
 
-        file_path = collection_dir / "input" / document_name
+            if not collection_dir.exists():
+                raise ValueError(f"Collection '{collection_id}' not found")
 
-        if not file_path.exists():
-            raise ValueError(f"Document '{document_name}' not found")
+            file_path = collection_dir / "input" / document_name
 
-        file_path.unlink()
-        return True
+            if not file_path.exists():
+                raise ValueError(f"Document '{document_name}' not found")
+
+            file_path.unlink()
+            return True
 
     def get_collection_path(self, collection_id: str) -> Dict[str, Path]:
-        """
-        Get paths for collection directories.
+        """Get paths for collection directories.
 
         Args:
             collection_id: The collection identifier
@@ -386,5 +430,27 @@ class StorageService:
         }
 
 
-# Global storage service instance
-storage_service = StorageService()
+# Global storage service instance (lazy initialization)
+_storage_service_instance: StorageService | None = None
+
+
+def get_storage_service() -> StorageService:
+    """Get or create the global storage service instance."""
+    global _storage_service_instance
+    if _storage_service_instance is None:
+        _storage_service_instance = StorageService()
+    return _storage_service_instance
+
+
+# Backward compatibility - lazy property
+class _LazyStorageService:
+    """Lazy wrapper for storage service to delay initialization."""
+
+    def __getattr__(self, name: str):
+        return getattr(get_storage_service(), name)
+
+    def __setattr__(self, name: str, value):
+        return setattr(get_storage_service(), name, value)
+
+
+storage_service = _LazyStorageService()

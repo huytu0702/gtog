@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     storage_root_dir: str = "./storage"
     storage_mode: str = "file"
 
+    # Cosmos DB Configuration
+    cosmos_endpoint: str = ""
+    cosmos_key: str = ""
+    cosmos_database: str = ""
+    cosmos_container: str = ""
+
     # GraphRAG Settings
     settings_file: str = "settings.yaml"
 
@@ -59,6 +65,11 @@ class Settings(BaseSettings):
         if path.is_absolute():
             return path
         return Path(__file__).parent.parent / path
+
+    @property
+    def is_cosmos_mode(self) -> bool:
+        """Check if storage mode is set to cosmos."""
+        return self.storage_mode.strip().lower() == "cosmos"
 
 
 # Global settings instance
