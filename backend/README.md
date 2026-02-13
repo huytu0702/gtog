@@ -58,6 +58,53 @@ From the `backend/` directory:
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Running Modes
+
+The backend supports two storage modes:
+
+#### File Mode (Default)
+Uses local file storage for GraphRAG data:
+
+```bash
+# Set in .env
+STORAGE_MODE=file
+GRAPHRAG_SETTINGS_FILE=settings.yaml
+
+# Run
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+#### Cosmos DB Emulator Mode
+Uses Azure Cosmos DB Emulator for storage:
+
+```bash
+# Copy cosmos env template
+cp .env.cosmos-emulator.example .env.cosmos-emulator
+
+# Set in .env.cosmos-emulator
+STORAGE_MODE=cosmos
+GRAPHRAG_SETTINGS_FILE=settings.cosmos-emulator.yaml
+COSMOS_ENDPOINT=https://localhost:8081
+COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+ZLw==
+COSMOS_DATABASE=gtog
+COSMOS_CONTAINER=graphrag
+
+# Run with cosmos env file
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env.cosmos-emulator
+```
+
+### Running with Docker Compose
+
+Use the root `docker-compose.dev.yaml` for full-stack development:
+
+```bash
+# Full stack (Cosmos emulator + backend + frontend)
+docker compose -f docker-compose.dev.yaml up --build
+
+# Cosmos emulator only (for external backend)
+docker compose -f docker-compose.dev.yaml up -d cosmos-emulator
+```
+
 The API will be available at:
 - **API**: http://localhost:8000
 - **Interactive Docs**: http://localhost:8000/docs
