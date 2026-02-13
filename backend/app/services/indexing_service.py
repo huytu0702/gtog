@@ -11,6 +11,7 @@ from graphrag.callbacks.noop_workflow_callbacks import NoopWorkflowCallbacks
 from ..config import settings
 from ..models import IndexStatus, IndexStatusResponse
 from ..utils import load_graphrag_config
+from ..utils.arrow_fix import apply_arrow_fix, remove_arrow_fix
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +57,14 @@ class IndexingService:
     async def _run_indexing_task(self, collection_id: str):
         """
         Internal task for running the indexing process.
-        
+
         Args:
             collection_id: The collection identifier
         """
         try:
+            # Apply ArrowStringArray fix before indexing
+            apply_arrow_fix()
+
             logger.info(f"Starting indexing for collection: {collection_id}")
             
             # Update status
@@ -108,7 +112,10 @@ class IndexingService:
             self.indexing_tasks[collection_id].status = IndexStatus.FAILED
             self.indexing_tasks[collection_id].error = str(e)
             self.indexing_tasks[collection_id].message = "Indexing failed with error"
-    
+        finally:
+            # Always remove the patch after indexing
+            remove_arrow_fix()
+
     def get_index_status(self, collection_id: str) -> Optional[IndexStatusResponse]:
         """
         Get the current indexing status for a collection.

@@ -7,31 +7,29 @@
 models:
   default_chat_model:
     type: chat
-    model_provider: openai
-    auth_type: api_key # or azure_managed_identity
-    api_key: ${GRAPHRAG_API_KEY} # set this in the generated .env file, or remove if managed identity
-    model: gpt-4o-mini
-    # api_base: https://<instance>.openai.azure.com
-    # api_version: 2024-05-01-preview
-    model_supports_json: true # recommended if this is available for your model.
-    concurrent_requests: 25
-    async_mode: threaded # or asyncio
+    model_provider: gemini
+    auth_type: api_key
+    api_key: ${GRAPHRAG_API_KEY}
+    model: gemini-2.5-flash
+    model_supports_json: true
+    concurrent_requests: 5
+    async_mode: threaded
     retry_strategy: exponential_backoff
-    max_retries: 10
+    max_retries: 3
+    max_retry_wait: 10.0
     tokens_per_minute: null
     requests_per_minute: null
   default_embedding_model:
     type: embedding
-    model_provider: openai
+    model_provider: gemini
     auth_type: api_key
     api_key: ${GRAPHRAG_API_KEY}
-    model: text-embedding-3-small
-    # api_base: https://<instance>.openai.azure.com
-    # api_version: 2024-05-01-preview
-    concurrent_requests: 25
-    async_mode: threaded # or asyncio
+    model: gemini-embedding-001
+    concurrent_requests: 5
+    async_mode: threaded
     retry_strategy: exponential_backoff
-    max_retries: 10
+    max_retries: 3
+    max_retry_wait: 10.0
     tokens_per_minute: null
     requests_per_minute: null
 
@@ -69,6 +67,8 @@ vector_store:
     type: lancedb
     db_uri: output\lancedb
     container_name: default
+    index_schma:
+      vector_size: 1536
 
 ### Workflow settings ###
 
@@ -139,6 +139,7 @@ drift_search:
   embedding_model_id: default_embedding_model
   prompt: "prompts/drift_search_system_prompt.txt"
   reduce_prompt: "prompts/drift_search_reduce_prompt.txt"
+  primer_folds: 1
 
 basic_search:
   chat_model_id: default_chat_model

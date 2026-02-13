@@ -6,7 +6,7 @@ import { searchApi, Collection, SearchResult } from '@/lib/api';
 import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { NBInput } from '@/components/ui/NBInput';
-import { Send, Bot, User, Settings, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Settings, Loader2, Globe, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CollectionChatProps {
@@ -20,14 +20,15 @@ type Message = {
     method?: string;
 };
 
-type SearchMethod = 'global' | 'local' | 'tog' | 'drift';
+type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent' | 'web';
 
 export function CollectionChat({ collection }: CollectionChatProps) {
     const [messages, setMessages] = React.useState<Message[]>([
         { role: 'bot', content: `Hello! I'm ready to answer questions about "${collection.name}".` },
     ]);
     const [input, setInput] = React.useState('');
-    const [method, setMethod] = React.useState<SearchMethod>('global');
+    const [method, setMethod] = React.useState<SearchMethod>('agent');
+    const [isStreaming, setIsStreaming] = React.useState(false);
     const scrollRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -43,13 +44,24 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                 case 'local': return searchApi.local(collection.id, query);
                 case 'tog': return searchApi.tog(collection.id, query);
                 case 'drift': return searchApi.drift(collection.id, query);
-                default: return searchApi.global(collection.id, query);
+                case 'agent': return searchApi.agent(collection.id, query);
+                case 'web': return searchApi.web(collection.id, query);
+                default: return searchApi.agent(collection.id, query);
             }
         },
-        onSuccess: (data: SearchResult) => {
+        onSuccess: (data: SearchResult | any) => {
+            const methodUsed = data.method_used || data.method;
+            const reasoning = data.router_reasoning;
+            let content = data.response;
+            
+            // Add reasoning for agent search
+            if (reasoning) {
+                content = `[${methodUsed.toUpperCase()} search selected: ${reasoning}]\n\n${content}`;
+            }
+            
             setMessages((prev) => [
                 ...prev,
-                { role: 'bot', content: data.response, context: data.context_data, method: data.method },
+                { role: 'bot', content, context: data.context_data, method: methodUsed },
             ]);
         },
         onError: (error: Error) => {
@@ -107,11 +119,13 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                         <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
                                     </div>
 
-                                    {msg.context && (
-                                        <div className="text-xs text-gray-500 font-bold">
-                                            Used {msg.method} search
-                                        </div>
-                                    )}
+                        {msg.method && (
+                            <div className="text-xs text-gray-500 font-bold flex items-center gap-1">
+                                {msg.method === 'web' && <Globe className="w-3 h-3" />}
+                                {msg.method === 'agent' && <Sparkles className="w-3 h-3" />}
+                                Used {msg.method} search
+                            </div>
+                        )}
                                 </div>
                             </div>
                         ))}
@@ -159,18 +173,26 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                         <div>
                             <label className="block font-bold mb-2">Search Method</label>
                             <div className="space-y-2">
-                                {(['global', 'local', 'tog', 'drift'] as const).map((m) => (
+                                {([
+                                    { id: 'agent', label: 'Auto (Agent)', icon: Sparkles },
+                                    { id: 'global', label: 'Global', icon: null },
+                                    { id: 'local', label: 'Local', icon: null },
+                                    { id: 'tog', label: 'ToG', icon: null },
+                                    { id: 'drift', label: 'DRIFT', icon: null },
+                                    { id: 'web', label: 'Web Search', icon: Globe },
+                                ] as const).map((m) => (
                                     <button
-                                        key={m}
-                                        onClick={() => setMethod(m)}
+                                        key={m.id}
+                                        onClick={() => setMethod(m.id)}
                                         className={cn(
-                                            'w-full text-left px-4 py-3 border-2 border-black font-bold transition-all uppercase',
-                                            method === m
+                                            'w-full text-left px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center gap-2',
+                                            method === m.id
                                                 ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
                                                 : 'bg-white hover:bg-gray-100'
                                         )}
                                     >
-                                        {m} Search
+                                        {m.icon && <m.icon className="w-4 h-4" />}
+                                        {m.label}
                                     </button>
                                 ))}
                             </div>
@@ -178,10 +200,12 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
                         <div className="p-4 bg-yellow-100 border-2 border-black text-sm">
                             <p className="font-bold mb-1">Tip:</p>
+                            {method === 'agent' && 'Automatically selects the best search method for your query.'}
                             {method === 'global' && 'Best for overview questions about the entire collection.'}
                             {method === 'local' && 'Best for specific questions about entities and their relationships.'}
                             {method === 'tog' && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
                             {method === 'drift' && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
+                            {method === 'web' && 'Search the web for current information not in your collection.'}
                         </div>
                     </div>
                 </NBCard>

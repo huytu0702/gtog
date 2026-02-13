@@ -43,6 +43,29 @@ export interface SearchResult {
     method: string;
 }
 
+export interface AgentSearchResult {
+    method_used: string;
+    router_reasoning: string;
+    response: string;
+    sources: Array<{
+        id: number;
+        title: string;
+        url?: string;
+        text_unit_id?: string;
+    }>;
+}
+
+export interface WebSearchResult {
+    query: string;
+    response: string;
+    sources: Array<{
+        id: number;
+        title: string;
+        url?: string;
+    }>;
+    method: string;
+}
+
 // API Methods
 
 export const collectionsApi = {
@@ -121,5 +144,37 @@ export const searchApi = {
             response_type: 'Multiple Paragraphs',
         });
         return response.data;
+    },
+    agent: async (collectionId: string, query: string) => {
+        const response = await api.post<AgentSearchResult>(`/collections/${collectionId}/search/agent`, {
+            query,
+            stream: false,
+        });
+        return response.data;
+    },
+    web: async (collectionId: string, query: string) => {
+        const response = await api.post<WebSearchResult>(`/collections/${collectionId}/search/web`, {
+            query,
+            stream: false,
+        });
+        return response.data;
+    },
+    agentStream: (collectionId: string, query: string, onMessage: (data: any) => void) => {
+        const eventSource = new EventSource(
+            `${API_BASE_URL}/collections/${collectionId}/search/agent/stream`,
+            { withCredentials: false }
+        );
+        
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            onMessage(data);
+        };
+        
+        eventSource.onerror = (error) => {
+            console.error('SSE error:', error);
+            eventSource.close();
+        };
+        
+        return eventSource;
     },
 };
