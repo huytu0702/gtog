@@ -1,0 +1,58 @@
+services:
+  cosmos-emulator:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: gtog-cosmos-emulator
+    ports:
+      - "8081:8081"
+      - "10251:10251"
+      - "10252:10252"
+      - "10253:10253"
+      - "10254:10254"
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: ${COSMOS_PARTITION_COUNT:-5}
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: ${COSMOS_ENABLE_PERSISTENCE:-true}
+    volumes:
+      - cosmos_emulator_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:8081/_explorer/index.html"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: gtog-backend
+    env_file:
+      - .env
+      - .env.cosmos-emulator
+    environment:
+      STORAGE_MODE: cosmos
+      GRAPHRAG_SETTINGS_FILE: /app/backend/settings.cosmos-emulator.yaml
+      STORAGE_ROOT_DIR: /app/backend/storage
+    volumes:
+      - ./:/app
+    working_dir: /app/backend
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      cosmos-emulator:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gtog-frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  cosmos_emulator_data:
