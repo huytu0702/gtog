@@ -175,6 +175,43 @@ After reset, restart with:
 python scripts/cosmos/bootstrap.py
 ```
 
+## Cosmos Local Validation Suite
+
+Run the complete verification suite to ensure Cosmos DB emulator integration is working correctly:
+
+```bash
+# 1. Bootstrap the environment
+python scripts/cosmos/bootstrap.py
+
+# 2. Run smoke test
+python scripts/cosmos/smoke_api.py --cleanup
+
+# 3. Run integration tests
+pytest backend/tests/integration/test_collections_documents_cosmos.py -v
+pytest backend/tests/integration/test_indexing_cosmos_profile.py -v
+pytest backend/tests/integration/test_cosmos_persistence_restart.py -v
+pytest backend/tests/integration/test_cosmos_failure_modes.py -v
+```
+
+### Troubleshooting Guide
+
+**Certificate/Connectivity Errors:**
+- Ensure Docker Desktop is running
+- Check that ports 8081, 10251-10254 are not in use
+- Wait for emulator to fully start (can take 1-2 minutes)
+
+**Emulator Warmup Delay:**
+- The Cosmos emulator needs time to initialize on first run
+- Use `--health-timeout 180` with bootstrap script for extended timeout
+- Check emulator status: `docker compose -f docker-compose.dev.yaml ps`
+
+**Reset Command:**
+If you encounter persistent issues:
+```bash
+python scripts/cosmos/reset.py --yes
+python scripts/cosmos/bootstrap.py
+```
+
 ## API Usage
 
 ### 1. Create a Collection
