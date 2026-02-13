@@ -1,6 +1,10 @@
 """Application configuration using Pydantic Settings."""
 
+import os
 from pathlib import Path
+from typing import Optional
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +18,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _load_graphrag_settings_file(cls, values):
+        graphrag_settings = os.getenv("GRAPHRAG_SETTINGS_FILE")
+        if graphrag_settings:
+            values["settings_file"] = graphrag_settings
+        return values
+
     # API Configuration
     graphrag_api_key: str = ""
     openai_api_key: str = ""
@@ -22,6 +34,10 @@ class Settings(BaseSettings):
 
     # Storage Configuration
     storage_root_dir: str = "./storage"
+    storage_mode: str = "file"
+
+    # GraphRAG Settings
+    settings_file: str = "settings.yaml"
 
     # Model Configuration
     default_chat_model: str = "gpt-4o-mini"
@@ -38,8 +54,11 @@ class Settings(BaseSettings):
 
     @property
     def settings_yaml_path(self) -> Path:
-        """Get the shared settings.yaml path."""
-        return Path(__file__).parent.parent / "settings.yaml"
+        """Get the settings.yaml path based on settings_file."""
+        path = Path(self.settings_file)
+        if path.is_absolute():
+            return path
+        return Path(__file__).parent.parent / path
 
 
 # Global settings instance
