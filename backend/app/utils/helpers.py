@@ -12,6 +12,11 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 
+def _is_cosmos_mode() -> bool:
+    """Check if storage mode is set to cosmos."""
+    return (settings.storage_mode or "file").strip().lower() == "cosmos"
+
+
 def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
     """
     Normalize model/provider pairs to avoid LiteLLM provider parsing failures.
@@ -72,19 +77,26 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
     collection_dir = storage_root / collection_id
     collection_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load the shared settings.yaml with collection-specific overrides
-    config = load_config(
-        root_dir=str(collection_dir),
-        config_filepath=settings.settings_yaml_path,
-        cli_overrides={
+    # Build CLI overrides - only apply file overrides when NOT in cosmos mode
+    cli_overrides = {
+        "input.storage.base_dir": str(collection_dir / "input"),
+        "input.file_pattern": ".*\\.(txt|md)$",
+    }
+
+    if not _is_cosmos_mode():
+        cli_overrides.update({
             "input.storage.type": "file",
-            "input.storage.base_dir": str(collection_dir / "input"),
-            "input.file_pattern": ".*\\.(txt|md)$",
             "output.type": "file",
             "output.base_dir": str(collection_dir / "output"),
             "cache.type": "file",
             "cache.base_dir": str(collection_dir / "cache"),
-        },
+        })
+
+    # Load the shared settings.yaml with collection-specific overrides
+    config = load_config(
+        root_dir=str(collection_dir),
+        config_filepath=settings.settings_yaml_path,
+        cli_overrides=cli_overrides,
     )
 
     _normalize_litellm_model_config(config)
