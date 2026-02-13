@@ -12,9 +12,14 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 
-def _is_cosmos_mode() -> bool:
+def is_cosmos_mode() -> bool:
     """Check if storage mode is set to cosmos."""
     return (settings.storage_mode or "file").strip().lower() == "cosmos"
+
+
+def _is_cosmos_mode() -> bool:
+    """Check if storage mode is set to cosmos (internal use, deprecated)."""
+    return is_cosmos_mode()
 
 
 def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
@@ -104,7 +109,7 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
     return config
 
 
-def validate_collection_indexed(
+async def validate_collection_indexed(
     collection_id: str, method: Optional[str] = None
 ) -> Tuple[bool, Optional[str]]:
     """
@@ -117,22 +122,48 @@ def validate_collection_indexed(
     Returns:
         Tuple of (is_indexed, error_message)
     """
+    # Determine required tables
+    required_tables = [
+        "entities",
+        "communities",
+        "community_reports",
+    ]
+
+    # Method-specific requirements
+    if method in ["local", "drift", "tog"]:
+        required_tables.extend(["text_units", "relationships"])
+
+    # Cosmos mode: use storage abstraction
+    if is_cosmos_mode():
+        from graphrag.utils.api import create_storage_from_config
+        
+        try:
+            config = load_graphrag_config(collection_id)
+            storage = create_storage_from_config(config.output)
+            
+            missing_tables = []
+            for table in required_tables:
+                # Check with and without .parquet extension
+                has_table = await storage.has(f"{table}.parquet") or await storage.has(table)
+                if not has_table:
+                    missing_tables.append(table)
+            
+            if missing_tables:
+                return False, f"Missing indexed tables: {', '.join(missing_tables)}"
+            
+            return True, None
+        except Exception as e:
+            return False, f"Error checking indexed state: {str(e)}"
+    
+    # File mode: use file existence checks
     collection_dir = settings.collections_dir / collection_id
     output_dir = collection_dir / "output"
 
     if not output_dir.exists():
         return False, "Collection has not been indexed yet"
 
-    # Base required files for all methods
-    required_files = [
-        "entities.parquet",
-        "communities.parquet",
-        "community_reports.parquet",
-    ]
-
-    # Method-specific requirements
-    if method in ["local", "drift", "tog"]:
-        required_files.extend(["text_units.parquet", "relationships.parquet"])
+    # Convert table names to file names
+    required_files = [f"{table}.parquet" for table in required_tables]
 
     # ToG has strict requirements
     if method == "tog":

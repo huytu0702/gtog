@@ -1,10 +1,12 @@
 """Query service for GraphRAG search operations."""
 
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 import graphrag.api as api
+from graphrag.utils.api import create_storage_from_config
+from graphrag.utils.storage import load_table_from_storage
 
 from ..config import settings
 from ..models import SearchMethod, SearchResponse
@@ -13,6 +15,40 @@ from ..utils import (
     validate_collection_indexed,
     get_search_data_paths,
 )
+
+
+def _is_cosmos_mode() -> bool:
+    """Check if storage mode is set to cosmos."""
+    return (settings.storage_mode or "file").strip().lower() == "cosmos"
+
+logger = logging.getLogger(__name__)
+
+
+def _get_required_tables(method: str) -> list[str]:
+    """Get list of required table names for a search method."""
+    base_tables = ["entities", "communities", "community_reports"]
+    
+    if method in ["local", "drift", "tog"]:
+        base_tables.extend(["text_units", "relationships"])
+    
+    return base_tables
+
+
+async def _load_tables_from_storage(config, tables: list[str]) -> Dict[str, pd.DataFrame]:
+    """Load tables from storage using GraphRAG storage abstraction."""
+    storage = create_storage_from_config(config.output)
+    loaded_tables = {}
+    
+    for table_name in tables:
+        try:
+            df = await load_table_from_storage(table_name, storage)
+            loaded_tables[table_name] = df
+            logger.debug(f"Loaded {table_name} table from storage")
+        except Exception as e:
+            logger.warning(f"Could not load {table_name} from storage: {e}")
+            loaded_tables[table_name] = pd.DataFrame()
+    
+    return loaded_tables
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +82,26 @@ class QueryService:
             SearchResponse with results
         """
         # Validate collection is indexed for global search
-        is_indexed, error = validate_collection_indexed(collection_id, method="global")
+        is_indexed, error = await validate_collection_indexed(collection_id, method="global")
         if not is_indexed:
             raise ValueError(error)
 
         # Load config and data
         config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "global")
-
-        # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        communities = pd.read_parquet(data_paths["communities"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
+        
+        # Use storage abstraction in cosmos mode, file paths otherwise
+        if _is_cosmos_mode():
+            tables = await _load_tables_from_storage(
+                config, ["entities", "communities", "community_reports"]
+            )
+            entities = tables["entities"]
+            communities = tables["communities"]
+            community_reports = tables["community_reports"]
+        else:
+            data_paths = get_search_data_paths(collection_id, "global")
+            entities = pd.read_parquet(data_paths["entities"])
+            communities = pd.read_parquet(data_paths["communities"])
+            community_reports = pd.read_parquet(data_paths["community_reports"])
 
         logger.info(f"Global search for collection {collection_id}: {query}")
 
@@ -100,25 +144,36 @@ class QueryService:
             SearchResponse with results
         """
         # Validate collection is indexed for local search
-        is_indexed, error = validate_collection_indexed(collection_id, method="local")
+        is_indexed, error = await validate_collection_indexed(collection_id, method="local")
         if not is_indexed:
             raise ValueError(error)
 
         # Load config and data
         config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "local")
+        
+        # Use storage abstraction in cosmos mode, file paths otherwise
+        if _is_cosmos_mode():
+            tables = await _load_tables_from_storage(
+                config, ["entities", "communities", "community_reports", "text_units", "relationships"]
+            )
+            entities = tables["entities"]
+            communities = tables["communities"]
+            community_reports = tables["community_reports"]
+            text_units = tables["text_units"]
+            relationships = tables["relationships"]
+            covariates = None
+        else:
+            data_paths = get_search_data_paths(collection_id, "local")
+            entities = pd.read_parquet(data_paths["entities"])
+            communities = pd.read_parquet(data_paths["communities"])
+            community_reports = pd.read_parquet(data_paths["community_reports"])
+            text_units = pd.read_parquet(data_paths["text_units"])
+            relationships = pd.read_parquet(data_paths["relationships"])
 
-        # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        communities = pd.read_parquet(data_paths["communities"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
-        text_units = pd.read_parquet(data_paths["text_units"])
-        relationships = pd.read_parquet(data_paths["relationships"])
-
-        # Load covariates if available
-        covariates = None
-        if "covariates" in data_paths:
-            covariates = pd.read_parquet(data_paths["covariates"])
+            # Load covariates if available
+            covariates = None
+            if "covariates" in data_paths:
+                covariates = pd.read_parquet(data_paths["covariates"])
 
         logger.info(f"Local search for collection {collection_id}: {query}")
 
@@ -159,17 +214,24 @@ class QueryService:
             SearchResponse with results
         """
         # Validate collection is indexed for ToG
-        is_indexed, error = validate_collection_indexed(collection_id, method="tog")
+        is_indexed, error = await validate_collection_indexed(collection_id, method="tog")
         if not is_indexed:
             raise ValueError(error)
 
         # Load config and data
         config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "tog")
-
-        # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        relationships = pd.read_parquet(data_paths["relationships"])
+        
+        # Use storage abstraction in cosmos mode, file paths otherwise
+        if _is_cosmos_mode():
+            tables = await _load_tables_from_storage(
+                config, ["entities", "relationships"]
+            )
+            entities = tables["entities"]
+            relationships = tables["relationships"]
+        else:
+            data_paths = get_search_data_paths(collection_id, "tog")
+            entities = pd.read_parquet(data_paths["entities"])
+            relationships = pd.read_parquet(data_paths["relationships"])
 
         logger.info(f"ToG search for collection {collection_id}: {query}")
         logger.info(
@@ -218,20 +280,30 @@ class QueryService:
             SearchResponse with results
         """
         # Validate collection is indexed for drift search
-        is_indexed, error = validate_collection_indexed(collection_id, method="drift")
+        is_indexed, error = await validate_collection_indexed(collection_id, method="drift")
         if not is_indexed:
             raise ValueError(error)
 
         # Load config and data
         config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "drift")
-
-        # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        communities = pd.read_parquet(data_paths["communities"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
-        text_units = pd.read_parquet(data_paths["text_units"])
-        relationships = pd.read_parquet(data_paths["relationships"])
+        
+        # Use storage abstraction in cosmos mode, file paths otherwise
+        if _is_cosmos_mode():
+            tables = await _load_tables_from_storage(
+                config, ["entities", "communities", "community_reports", "text_units", "relationships"]
+            )
+            entities = tables["entities"]
+            communities = tables["communities"]
+            community_reports = tables["community_reports"]
+            text_units = tables["text_units"]
+            relationships = tables["relationships"]
+        else:
+            data_paths = get_search_data_paths(collection_id, "drift")
+            entities = pd.read_parquet(data_paths["entities"])
+            communities = pd.read_parquet(data_paths["communities"])
+            community_reports = pd.read_parquet(data_paths["community_reports"])
+            text_units = pd.read_parquet(data_paths["text_units"])
+            relationships = pd.read_parquet(data_paths["relationships"])
 
         logger.info(f"DRIFT search for collection {collection_id}: {query}")
 
