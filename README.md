@@ -29,6 +29,28 @@ To learn more about GraphRAG and how it can be used to enhance your LLM's abilit
 
 To get started with the GraphRAG system we recommend trying the [command line quickstart](https://microsoft.github.io/graphrag/get_started/).
 
+### Cosmos DB Emulator Quick Start
+
+For local development with Azure Cosmos DB Emulator:
+
+```bash
+# 1. Bootstrap the environment
+python scripts/cosmos/bootstrap.py
+
+# 2. Run smoke test
+python scripts/cosmos/smoke_api.py --cleanup
+
+# 3. Access services
+# - Frontend: http://localhost:3000
+# - Backend API: http://localhost:8000
+# - Cosmos Explorer: https://localhost:8081/explorer.html
+
+# To reset everything:
+python scripts/cosmos/reset.py --yes
+```
+
+See [backend/README.md](backend/README.md) for detailed Cosmos setup instructions.
+
 ## Repository Guidance
 
 This repository presents a methodology for using knowledge graph memory structures to enhance LLM outputs. Please note that the provided code serves as a demonstration and is not an officially supported Microsoft offering.
