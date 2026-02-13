@@ -259,6 +259,21 @@ If search returns errors:
 - For large collections, consider adjusting chunk size in `settings.yaml`
 - Search performance varies by method (ToG is slower but more thorough)
 
+## Cosmos Profile Verification
+
+To verify the Cosmos profile configuration is working correctly, run the following tests:
+
+```bash
+# Unit tests for config loading and validation
+pytest backend/tests/unit/test_helpers_config_overrides.py -v
+pytest backend/tests/unit/test_indexing_service_config_mode.py -v
+pytest backend/tests/unit/test_cosmos_profile_load.py -v
+pytest backend/tests/unit/test_startup_cosmos_validation.py -v
+
+# Integration tests for cosmos profile indexing
+pytest backend/tests/integration/test_indexing_cosmos_profile.py -v
+```
+
 ## License
 
 MIT License - see the main project LICENSE file.

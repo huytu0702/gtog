@@ -25,6 +25,8 @@ Use haiku model to exploration task.
 
 Don't include Co-author in commit message.
 
+Use .venv_new for virtual environment.
+
 ## Common Development Tasks
 
 ### Core Commands
