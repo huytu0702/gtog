@@ -32,15 +32,17 @@ services:
       STORAGE_MODE: cosmos
       GRAPHRAG_SETTINGS_FILE: /app/backend/settings.cosmos-emulator.yaml
       STORAGE_ROOT_DIR: /app/backend/storage
+      PYTHONPATH: /app
     volumes:
-      - ./:/app
+      - ./backend:/app/backend
+      - ./graphrag:/app/graphrag
+      - ./pyproject.toml:/app/pyproject.toml
     working_dir: /app/backend
     command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "8000:8000"
     depends_on:
-      cosmos-emulator:
-        condition: service_healthy
+      - cosmos-emulator
 
   frontend:
     build:

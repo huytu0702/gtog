@@ -30,14 +30,35 @@ class StorageService:
     def _init_cosmos_repositories(self):
         """Initialize Cosmos DB repositories."""
         try:
-            from azure.cosmos import CosmosClient
+            from azure.cosmos import CosmosClient, PartitionKey
 
             self._cosmos_client = CosmosClient(
                 url=settings.cosmos_endpoint,
                 credential=settings.cosmos_key,
+                connection_verify=False,
             )
-            database = self._cosmos_client.get_database_client(settings.cosmos_database)
-            container = database.get_container_client(settings.cosmos_container)
+
+            # Create database if it doesn't exist
+            try:
+                database = self._cosmos_client.create_database_if_not_exists(
+                    id=settings.cosmos_database
+                )
+            except Exception as db_err:
+                import logging
+                logging.warning(f"Database may already exist or error creating: {db_err}")
+                database = self._cosmos_client.get_database_client(settings.cosmos_database)
+
+            # Create container if it doesn't exist
+            try:
+                container = database.create_container_if_not_exists(
+                    id=settings.cosmos_container,
+                    partition_key=PartitionKey(path="/id"),
+                    offer_throughput=400
+                )
+            except Exception as container_err:
+                import logging
+                logging.warning(f"Container may already exist or error creating: {container_err}")
+                container = database.get_container_client(settings.cosmos_container)
 
             from ..repositories.cosmos_collections import CosmosCollectionRepository
             from ..repositories.cosmos_documents import CosmosDocumentRepository
