@@ -1,7 +1,11 @@
 """Pytest configuration for backend tests."""
 
+import os
 import pytest
 from unittest.mock import patch, MagicMock
+
+
+os.environ.setdefault("TAVILY_API_KEY", "test-tavily-key")
 
 
 @pytest.fixture(autouse=True)

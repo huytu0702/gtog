@@ -1,124 +1,92 @@
 import sys
+import asyncio
+from datetime import datetime
+from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from fastapi import UploadFile
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import pytest
+
+def _fake_cosmos_repo_init(self):
+    self._collection_repo = MagicMock()
+    self._collection_repo.get.return_value = None
+    self._collection_repo.create.side_effect = lambda collection_id, description=None: SimpleNamespace(
+        id=collection_id,
+        name=collection_id,
+        description=description,
+        created_at=datetime.now(),
+    )
+    self._document_repo = MagicMock()
+    self._document_repo.put.side_effect = lambda collection_id, filename, content_bytes: SimpleNamespace(
+        collection_id=collection_id,
+        name=filename,
+        size=len(content_bytes),
+        uploaded_at=datetime.now(),
+    )
+    self._prompt_repo = MagicMock()
 
 
-@pytest.fixture
-def mock_cosmos_container():
-    """Mock Cosmos DB container."""
-    container = MagicMock()
-    container.upsert_item = MagicMock(return_value={})
-    container.read_item = MagicMock(side_effect=Exception("Not found"))
-    container.query_items = MagicMock(return_value=[])
-    container.delete_item = MagicMock(return_value=True)
-    return container
-
-
-def test_create_collection_cosmos_mode(mock_cosmos_container):
-    """Test that creating a collection in cosmos mode works."""
-    # Mock settings to return cosmos mode with valid endpoint
+def test_create_collection_cosmos_mode_does_not_create_local_workspace(tmp_path):
+    """Cosmos mode collection creation should not materialize local input/output/cache directories."""
     with patch("app.services.storage_service.settings") as mock_settings:
         mock_settings.storage_mode = "cosmos"
         mock_settings.is_cosmos_mode = True
-        mock_settings.cosmos_endpoint = "https://localhost:8081"
-        mock_settings.cosmos_key = "test-key"
-        mock_settings.cosmos_database = "test-db"
-        mock_settings.cosmos_container = "test-container"
-        mock_settings.collections_dir = Path("./test_collections")
-        
-        # Mock CosmosClient
-        with patch("azure.cosmos.CosmosClient") as mock_client_class:
-            mock_client = MagicMock()
-            mock_database = MagicMock()
-            mock_client.get_database_client.return_value = mock_database
-            mock_database.get_container_client.return_value = mock_cosmos_container
-            mock_client_class.return_value = mock_client
-            
-            # Import and create service after mocks are set up
+        mock_settings.collections_dir = tmp_path
+
+        with patch(
+            "app.services.storage_service.StorageService._init_cosmos_repositories",
+            new=_fake_cosmos_repo_init,
+        ):
             from app.services.storage_service import StorageService
+
             svc = StorageService()
-            result = svc.create_collection("demo")
-            assert result.id == "demo"
-            # Verify cosmos upsert was called (1 for collection + 16 for prompts)
-            assert mock_cosmos_container.upsert_item.call_count >= 1
+            svc.create_collection("demo")
+
+            assert not (tmp_path / "demo" / "input").exists()
+            assert not (tmp_path / "demo" / "output").exists()
+            assert not (tmp_path / "demo" / "cache").exists()
 
 
-def test_list_collections_cosmos_mode(mock_cosmos_container):
-    """Test listing collections in cosmos mode."""
-    with patch("app.services.storage_service.settings") as mock_settings:
-        mock_settings.storage_mode = "cosmos"
-        mock_settings.is_cosmos_mode = True
-        mock_settings.cosmos_endpoint = "https://localhost:8081"
-        mock_settings.cosmos_key = "test-key"
-        mock_settings.cosmos_database = "test-db"
-        mock_settings.cosmos_container = "test-container"
-        mock_settings.collections_dir = Path("./test_collections")
-        
-        with patch("azure.cosmos.CosmosClient") as mock_client_class:
-            mock_client = MagicMock()
-            mock_database = MagicMock()
-            mock_client.get_database_client.return_value = mock_database
-            mock_database.get_container_client.return_value = mock_cosmos_container
-            mock_client_class.return_value = mock_client
-            
-            # Set up collections query
-            mock_cosmos_container.query_items.side_effect = [
-                # First call: collections
-                [
-                    {"collection_id": "col1", "name": "col1", "description": "desc1", "created_at": "2024-01-01T00:00:00"},
-                    {"collection_id": "col2", "name": "col2", "description": "desc2", "created_at": "2024-01-01T00:00:00"},
-                ],
-                # Second call: documents for col1
-                [],
-                # Third call: documents for col2
-                [],
-            ]
-            
-            from app.services.storage_service import StorageService
-            svc = StorageService()
-            collections = svc.list_collections()
-            assert len(collections) == 2
+def test_upload_document_cosmos_mode_writes_to_input_storage(tmp_path):
+    """Cosmos mode upload should write document bytes into GraphRAG input storage."""
+    async def run_test():
+        with patch("app.services.storage_service.settings") as mock_settings:
+            mock_settings.storage_mode = "cosmos"
+            mock_settings.is_cosmos_mode = True
+            mock_settings.collections_dir = tmp_path
 
+            with patch(
+                "app.services.storage_service.StorageService._init_cosmos_repositories",
+                new=_fake_cosmos_repo_init,
+            ):
+                from app.services.storage_service import StorageService
 
-def test_list_documents_cosmos_mode(mock_cosmos_container):
-    """Test listing documents in cosmos mode."""
-    with patch("app.services.storage_service.settings") as mock_settings:
-        mock_settings.storage_mode = "cosmos"
-        mock_settings.is_cosmos_mode = True
-        mock_settings.cosmos_endpoint = "https://localhost:8081"
-        mock_settings.cosmos_key = "test-key"
-        mock_settings.cosmos_database = "test-db"
-        mock_settings.cosmos_container = "test-container"
-        mock_settings.collections_dir = Path("./test_collections")
-        
-        with patch("azure.cosmos.CosmosClient") as mock_client_class:
-            mock_client = MagicMock()
-            mock_database = MagicMock()
-            mock_client.get_database_client.return_value = mock_database
-            mock_database.get_container_client.return_value = mock_cosmos_container
-            mock_client_class.return_value = mock_client
-            
-            # Set up collection exists check
-            mock_cosmos_container.read_item.side_effect = None
-            mock_cosmos_container.read_item.return_value = {
-                "collection_id": "demo",
-                "name": "demo",
-                "description": None,
-                "created_at": "2024-01-01T00:00:00",
-            }
-            
-            # Set up documents query
-            mock_cosmos_container.query_items.return_value = [
-                {"collection_id": "demo", "name": "a.txt", "size": 5, "uploaded_at": "2024-01-01T00:00:00"},
-            ]
-            
-            from app.services.storage_service import StorageService
-            svc = StorageService()
-            
-            docs = svc.list_documents("demo")
-            assert len(docs) == 1
-            assert docs[0].name == "a.txt"
+                svc = StorageService()
+                svc._collection_repo.get.return_value = SimpleNamespace(id="demo")
+
+                mock_cfg = MagicMock()
+                mock_cfg.input = MagicMock()
+                mock_storage = MagicMock()
+                mock_storage.set = AsyncMock()
+
+                upload = UploadFile(filename="note.txt", file=BytesIO(b"hello cosmos"))
+
+                with patch(
+                    "app.services.storage_service.load_graphrag_config",
+                    return_value=mock_cfg,
+                    create=True,
+                ):
+                    with patch(
+                        "app.services.storage_service.create_storage_from_config",
+                        return_value=mock_storage,
+                        create=True,
+                    ):
+                        await svc.upload_document("demo", upload)
+
+                mock_storage.set.assert_awaited_once_with("note.txt", b"hello cosmos")
+
+    asyncio.run(run_test())

@@ -42,12 +42,33 @@ def finalize_entities(
     )
     final_entities = final_entities.loc[entities["title"].notna()].reset_index()
     # disconnected nodes and those with no community even at level 0 can be missing degree
-    final_entities["degree"] = final_entities["degree"].fillna(0).astype(int)
+    if "degree" not in final_entities.columns:
+        final_entities["degree"] = 0
+    else:
+        final_entities["degree"] = final_entities["degree"].fillna(0).astype(int)
     final_entities.reset_index(inplace=True)
     final_entities["human_readable_id"] = final_entities.index
     final_entities["id"] = final_entities["human_readable_id"].apply(
         lambda _x: str(uuid4())
     )
+
+    column_defaults: dict[str, object] = {
+        "type": "",
+        "description": "",
+        "frequency": 0,
+        "degree": 0,
+        "x": 0.0,
+        "y": 0.0,
+    }
+    for column_name, default_value in column_defaults.items():
+        if column_name not in final_entities.columns:
+            final_entities[column_name] = default_value
+
+    if "text_unit_ids" not in final_entities.columns:
+        final_entities["text_unit_ids"] = [
+            [] for _ in range(len(final_entities))
+        ]
+
     return final_entities.loc[
         :,
         ENTITIES_FINAL_COLUMNS,

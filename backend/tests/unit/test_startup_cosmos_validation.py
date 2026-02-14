@@ -111,9 +111,18 @@ def test_cosmos_mode_passes_with_all_required_vars(tmp_path):
         mock_settings.cosmos_database = "gtog"
         mock_settings.cosmos_container = "graphrag"
         mock_settings.settings_yaml_path = settings_file
-        
-        # Should not raise any exception
-        _validate_startup_configuration()
+
+        mock_cfg = MagicMock()
+        mock_cfg.input.storage.type = "cosmosdb"
+        mock_cfg.output.type = "cosmosdb"
+        mock_cfg.cache.type = "cosmosdb"
+        mock_vector_store = MagicMock()
+        mock_vector_store.type = "cosmosdb"
+        mock_cfg.vector_store = {"default_vector_store": mock_vector_store}
+
+        with patch("app.main.load_config", return_value=mock_cfg, create=True):
+            # Should not raise any exception
+            _validate_startup_configuration()
 
 
 def test_file_mode_skips_cosmos_validation():
@@ -123,3 +132,32 @@ def test_file_mode_skips_cosmos_validation():
         
         # Should not raise any exception
         _validate_startup_configuration()
+
+
+def test_cosmos_mode_rejects_mixed_file_profile(tmp_path):
+    """Cosmos mode should fail fast when GraphRAG profile still points to file/lancedb storage."""
+    settings_file = tmp_path / "settings.cosmos-emulator.yaml"
+    settings_file.write_text("# mock config")
+
+    with patch("app.main.settings") as mock_settings:
+        mock_settings.is_cosmos_mode = True
+        mock_settings.cosmos_endpoint = "https://localhost:8081"
+        mock_settings.cosmos_key = "test-key"
+        mock_settings.cosmos_database = "gtog"
+        mock_settings.cosmos_container = "graphrag"
+        mock_settings.settings_yaml_path = settings_file
+
+        mock_cfg = MagicMock()
+        mock_cfg.input.storage.type = "file"
+        mock_cfg.output.type = "file"
+        mock_cfg.cache.type = "file"
+        mock_vector_store = MagicMock()
+        mock_vector_store.type = "lancedb"
+        mock_cfg.vector_store = {"default_vector_store": mock_vector_store}
+
+        with patch("app.main.load_config", return_value=mock_cfg, create=True):
+            with pytest.raises(ValueError) as exc_info:
+                _validate_startup_configuration()
+
+        assert "cosmos" in str(exc_info.value).lower()
+        assert "file" in str(exc_info.value).lower() or "lancedb" in str(exc_info.value).lower()

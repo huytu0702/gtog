@@ -3,6 +3,7 @@
 
 """Azure CosmosDB Storage implementation of PipelineStorage."""
 
+import base64
 import json
 import logging
 import re
@@ -24,6 +25,26 @@ from graphrag.storage.pipeline_storage import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_local_emulator_endpoint(endpoint: str | None) -> bool:
+    if not endpoint:
+        return False
+    endpoint_lower = endpoint.lower()
+    return (
+        "localhost" in endpoint_lower
+        or "127.0.0.1" in endpoint_lower
+        or "cosmos-emulator" in endpoint_lower
+    )
+
+
+def _extract_account_endpoint(connection_string: str | None) -> str | None:
+    if not connection_string:
+        return None
+    for segment in connection_string.split(";"):
+        if segment.lower().startswith("accountendpoint="):
+            return segment.split("=", 1)[1]
+    return None
 
 
 class CosmosDBPipelineStorage(PipelineStorage):
@@ -54,7 +75,11 @@ class CosmosDBPipelineStorage(PipelineStorage):
             raise ValueError(msg)
 
         if connection_string:
-            self._cosmos_client = CosmosClient.from_connection_string(connection_string)
+            endpoint = _extract_account_endpoint(connection_string)
+            self._cosmos_client = CosmosClient.from_connection_string(
+                connection_string,
+                connection_verify=not _is_local_emulator_endpoint(endpoint),
+            )
         else:
             if cosmosdb_account_url is None:
                 msg = (
@@ -209,7 +234,7 @@ class CosmosDBPipelineStorage(PipelineStorage):
         try:
             if not self._database_client or not self._container_client:
                 return None
-            if as_bytes:
+            if as_bytes and key.endswith(".parquet"):
                 prefix = self._get_prefix(key)
                 query = f"SELECT * FROM c WHERE STARTSWITH(c.id, '{prefix}')"  # noqa: S608
                 queried_items = self._container_client.query_items(
@@ -217,7 +242,9 @@ class CosmosDBPipelineStorage(PipelineStorage):
                 )
                 items_list = list(queried_items)
                 for item in items_list:
-                    item["id"] = item["id"].split(":")[1]
+                    item_id = item.get("id", "")
+                    if ":" in item_id:
+                        item["id"] = item_id.split(":", 1)[1]
 
                 items_json_str = json.dumps(items_list)
 
@@ -225,17 +252,32 @@ class CosmosDBPipelineStorage(PipelineStorage):
                     StringIO(items_json_str), orient="records", lines=False
                 )
 
-                # Drop the "id" column if the original dataframe does not include it
-                # TODO: Figure out optimal way to handle missing id keys in input dataframes
-                if prefix in self._no_id_prefixes:
-                    items_df.drop(columns=["id"], axis=1, inplace=True)
-
                 return items_df.to_parquet()
+
             item = self._container_client.read_item(item=key, partition_key=key)
+
+            if as_bytes:
+                if "body_b64" in item:
+                    return base64.b64decode(item["body_b64"])
+                if "body_text" in item:
+                    coding = encoding or item.get("encoding") or self._encoding
+                    return str(item["body_text"]).encode(coding)
+                item_body = item.get("body")
+                if item_body is None:
+                    return None
+                return json.dumps(item_body).encode(self._encoding)
+
+            if "body_text" in item:
+                return item["body_text"]
+
+            if "body_b64" in item:
+                coding = encoding or item.get("encoding") or self._encoding
+                return base64.b64decode(item["body_b64"]).decode(coding)
+
             item_body = item.get("body")
             return json.dumps(item_body)
-        except Exception:  # noqa: BLE001
-            logger.warning("Error reading item %s", key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Error reading item %s: %s", key, e)
             return None
 
     async def set(self, key: str, value: Any, encoding: str | None = None) -> None:
@@ -247,8 +289,8 @@ class CosmosDBPipelineStorage(PipelineStorage):
             if not self._database_client or not self._container_client:
                 msg = "Database or container not initialized"
                 raise ValueError(msg)  # noqa: TRY301
-            # value represents a parquet file
-            if isinstance(value, bytes):
+            # Bytes payload for parquet outputs.
+            if isinstance(value, bytes) and key.endswith(".parquet"):
                 prefix = self._get_prefix(key)
                 value_df = pd.read_parquet(BytesIO(value))
                 value_json = value_df.to_json(
@@ -268,11 +310,35 @@ class CosmosDBPipelineStorage(PipelineStorage):
                             prefixed_id = f"{prefix}:{cosmosdb_item['id']}"
                         cosmosdb_item["id"] = prefixed_id
                         self._container_client.upsert_item(body=cosmosdb_item)
-            # value represents a cache output or stats.json
-            else:
+            # Raw bytes payload (e.g., input text files) stored as base64 blob.
+            elif isinstance(value, bytes):
                 cosmosdb_item = {
                     "id": key,
-                    "body": json.loads(value),
+                    "body_b64": base64.b64encode(value).decode("ascii"),
+                    "encoding": encoding or self._encoding,
+                }
+                self._container_client.upsert_item(body=cosmosdb_item)
+            # Text/JSON payload (e.g., cache output, stats.json)
+            else:
+                parsed_body = None
+                if isinstance(value, str):
+                    try:
+                        parsed_body = json.loads(value)
+                    except json.JSONDecodeError:
+                        parsed_body = None
+
+                if parsed_body is None:
+                    cosmosdb_item = {
+                        "id": key,
+                        "body_text": str(value),
+                        "encoding": encoding or self._encoding,
+                    }
+                    self._container_client.upsert_item(body=cosmosdb_item)
+                    return
+
+                cosmosdb_item = {
+                    "id": key,
+                    "body": parsed_body,
                 }
                 self._container_client.upsert_item(body=cosmosdb_item)
         except Exception:

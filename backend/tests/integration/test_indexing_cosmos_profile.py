@@ -80,8 +80,10 @@ models:
 
 input:
   storage:
-    type: file
-    base_dir: "input"
+    type: cosmosdb
+    base_dir: test-db
+    connection_string: "AccountEndpoint=https://localhost:8081;AccountKey=test-key;"
+    container_name: test-input-container
 
 output:
   type: cosmosdb
@@ -118,32 +120,50 @@ vector_store:
         mock_settings.default_chat_model = "gpt-4o-mini"
         mock_settings.google_api_key = ""
         mock_settings.tavily_api_key = "test-tavily-key"
-        
-        with patch("azure.cosmos.CosmosClient") as mock_client_class:
-            mock_client = MagicMock()
-            mock_database = MagicMock()
-            mock_client.get_database_client.return_value = mock_database
-            mock_database.get_container_client.return_value = mock_cosmos_container
-            mock_client_class.return_value = mock_client
-            
-            # Mock GraphRAG indexing to avoid actual LLM calls
-            with patch("app.services.indexing_service.api.build_index", new_callable=AsyncMock) as mock_build:
-                mock_build.return_value = [MagicMock(errors=[])]
-                
-                # Clear any cached storage service instance
-                import app.services.storage_service as storage_module
-                storage_module._storage_service_instance = None
-                
-                # Import and create app after all mocks are set up
-                from app.main import app
-                
-                with TestClient(app) as client:
-                    yield client, mock_cosmos_container
+
+        with patch("app.services.storage_service.settings", mock_settings), patch(
+            "app.services.indexing_service.settings", mock_settings
+        ), patch("app.utils.helpers.settings", mock_settings), patch(
+            "app.main.settings", mock_settings
+        ):
+            with patch("azure.cosmos.CosmosClient") as mock_client_class:
+                mock_client = MagicMock()
+                mock_database = MagicMock()
+                mock_client.create_database_if_not_exists.return_value = mock_database
+                mock_client.get_database_client.return_value = mock_database
+                mock_database.create_container_if_not_exists.return_value = mock_cosmos_container
+                mock_database.get_container_client.return_value = mock_cosmos_container
+                mock_client_class.return_value = mock_client
+
+                # Mock GraphRAG indexing to avoid actual LLM calls
+                with patch(
+                    "app.services.indexing_service.api.build_index",
+                    new_callable=AsyncMock,
+                ) as mock_build:
+                    mock_build.return_value = [MagicMock(errors=[])]
+
+                    with patch(
+                        "app.services.storage_service.create_storage_from_config"
+                    ) as mock_create_storage:
+                        mock_input_storage = MagicMock()
+                        mock_input_storage.set = AsyncMock()
+                        mock_create_storage.return_value = mock_input_storage
+
+                        # Clear any cached storage service instance
+                        import app.services.storage_service as storage_module
+
+                        storage_module._storage_service_instance = None
+
+                        # Import and create app after all mocks are set up
+                        from app.main import app
+
+                        with TestClient(app) as client:
+                            yield client, mock_cosmos_container, tmp_path
 
 
 def test_indexing_startup_with_cosmos_profile(test_client_cosmos_indexing):
     """Test indexing startup path under cosmos profile returns 202 without config errors."""
-    client, container = test_client_cosmos_indexing
+    client, container, tmp_path = test_client_cosmos_indexing
     
     # 1. Create collection (using /api prefix, with correct field name 'name')
     response = client.post("/api/collections", json={
@@ -173,10 +193,12 @@ def test_indexing_startup_with_cosmos_profile(test_client_cosmos_indexing):
     # Should not have any config-related errors
     assert "error" not in data or data.get("error") is None, f"Indexing error: {data.get('error')}"
 
+    assert not (tmp_path / "collections" / "index-test" / "input").exists()
+
 
 def test_indexing_config_uses_cosmos_output(test_client_cosmos_indexing):
     """Test that indexing uses cosmos output configuration from profile."""
-    client, container = test_client_cosmos_indexing
+    client, container, _ = test_client_cosmos_indexing
     
     # Setup collection and document (using correct field name 'name')
     client.post("/api/collections", json={"name": "config-test"})

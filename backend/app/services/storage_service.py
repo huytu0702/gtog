@@ -7,9 +7,11 @@ from typing import Dict, List, Optional
 
 import aiofiles
 from fastapi import UploadFile
+from graphrag.utils.api import create_storage_from_config
 
 from ..config import settings
 from ..models import CollectionResponse, DocumentResponse
+from ..utils.helpers import load_graphrag_config
 
 
 class StorageService:
@@ -82,6 +84,19 @@ class StorageService:
         for prompt_name, content in default_prompts.items():
             (prompts_dir / prompt_name).write_text(content, encoding="utf-8")
 
+    def _ensure_local_collection_layout(self, collection_id: str) -> None:
+        """Ensure local prompt directory exists for GraphRAG prompt file resolution."""
+        collection_dir = self.collections_dir / collection_id
+        self._seed_default_prompts_file(collection_dir / "prompts")
+
+    async def _write_document_to_input_storage(
+        self, collection_id: str, filename: str, content: bytes
+    ) -> None:
+        """Write uploaded document content to GraphRAG input storage for cosmos mode."""
+        config = load_graphrag_config(collection_id)
+        input_storage = create_storage_from_config(config.input.storage)
+        await input_storage.set(filename, content)
+
     def create_collection(
         self, collection_id: str, description: Optional[str] = None
     ) -> CollectionResponse:
@@ -108,6 +123,9 @@ class StorageService:
 
             # Seed default prompts
             self._prompt_repo.seed_defaults(collection_id)
+
+            # Keep only local prompt files for prompt path resolution.
+            self._ensure_local_collection_layout(collection_id)
 
             return CollectionResponse(
                 id=record.id,
@@ -173,6 +191,11 @@ class StorageService:
 
             # Delete the collection
             self._collection_repo.delete(collection_id)
+
+            # Remove local mirror directory if present
+            local_collection_dir = self.collections_dir / collection_id
+            if local_collection_dir.exists():
+                shutil.rmtree(local_collection_dir)
             return True
         else:
             # File mode: delete local directory
@@ -320,6 +343,7 @@ class StorageService:
 
             # Store in Cosmos
             record = self._document_repo.put(collection_id, filename, content)
+            await self._write_document_to_input_storage(collection_id, filename, content)
 
             return DocumentResponse(
                 name=record.name,

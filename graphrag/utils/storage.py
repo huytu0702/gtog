@@ -3,6 +3,7 @@
 
 """Storage functions for the GraphRAG run module."""
 
+import asyncio
 import logging
 from io import BytesIO
 
@@ -19,12 +20,28 @@ async def load_table_from_storage(name: str, storage: PipelineStorage) -> pd.Dat
     if not await storage.has(filename):
         msg = f"Could not find {filename} in storage!"
         raise ValueError(msg)
-    try:
-        logger.info("reading table from storage: %s", filename)
-        return pd.read_parquet(BytesIO(await storage.get(filename, as_bytes=True)))
-    except Exception:
-        logger.exception("error loading table from storage: %s", filename)
-        raise
+
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            logger.info("reading table from storage: %s", filename)
+            payload = await storage.get(filename, as_bytes=True)
+            if not payload:
+                raise ValueError(f"Storage returned empty payload for {filename}")
+            return pd.read_parquet(BytesIO(payload))
+        except Exception:
+            if attempt < max_attempts:
+                logger.warning(
+                    "retrying table read from storage: %s (attempt %d/%d)",
+                    filename,
+                    attempt,
+                    max_attempts,
+                )
+                await asyncio.sleep(1)
+                continue
+
+            logger.exception("error loading table from storage: %s", filename)
+            raise
 
 
 async def write_table_to_storage(

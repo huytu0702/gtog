@@ -58,12 +58,14 @@ def test_client_cosmos(mock_cosmos_container, tmp_path):
         mock_settings.openai_api_key = "test-key"
         mock_settings.default_chat_model = "gpt-4o-mini"
         mock_settings.google_api_key = ""
-        mock_settings.tavily_api_key = ""
+        mock_settings.tavily_api_key = "test-tavily-key"
         
         with patch("azure.cosmos.CosmosClient") as mock_client_class:
             mock_client = MagicMock()
             mock_database = MagicMock()
+            mock_client.create_database_if_not_exists.return_value = mock_database
             mock_client.get_database_client.return_value = mock_database
+            mock_database.create_container_if_not_exists.return_value = mock_cosmos_container
             mock_database.get_container_client.return_value = mock_cosmos_container
             mock_client_class.return_value = mock_client
             

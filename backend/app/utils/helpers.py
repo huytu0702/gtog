@@ -1,6 +1,8 @@
 """Utility helper functions."""
 
+import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -10,6 +12,46 @@ from graphrag.config.models.graph_rag_config import GraphRagConfig
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_container_component(value: str) -> str:
+    """Normalize a container name component to CosmosDB-compatible format."""
+    sanitized = re.sub(r"[^a-z0-9-]", "-", value.lower())
+    sanitized = re.sub(r"-+", "-", sanitized).strip("-")
+    return sanitized or "collection"
+
+
+def _collection_container_name(collection_id: str, purpose: str) -> str:
+    """Build a deterministic per-collection container name for a specific purpose."""
+    base_prefix = _sanitize_container_component(settings.cosmos_container or "graphrag")
+    purpose_token_map = {
+        "input": "in",
+        "output": "out",
+        "cache": "cache",
+        "vector": "vec",
+    }
+    purpose_token = purpose_token_map[purpose]
+    suffix = hashlib.sha1(collection_id.encode("utf-8")).hexdigest()[:8]
+    collection_token = _sanitize_container_component(collection_id)
+
+    # Cosmos container name max length is 63 chars.
+    reserved = len(base_prefix) + len(purpose_token) + len(suffix) + 3
+    max_collection_len = max(3, 63 - reserved)
+    collection_token = collection_token[:max_collection_len].strip("-") or "collection"
+
+    container_name = f"{base_prefix}-{purpose_token}-{collection_token}-{suffix}".strip("-")
+    if len(container_name) < 3:
+        container_name = f"{container_name}xxx"[:3]
+    return container_name
+
+
+def _cosmos_connection_string() -> str | None:
+    """Build cosmos connection string from configured endpoint and key."""
+    endpoint = (settings.cosmos_endpoint or "").strip()
+    key = (settings.cosmos_key or "").strip()
+    if not endpoint or not key:
+        return None
+    return f"AccountEndpoint={endpoint};AccountKey={key};"
 
 
 def is_cosmos_mode() -> bool:
@@ -80,22 +122,59 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
     # Get absolute paths
     storage_root = settings.collections_dir.resolve()
     collection_dir = storage_root / collection_id
-    collection_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build CLI overrides - only apply file overrides when NOT in cosmos mode
+    # Build CLI overrides
     cli_overrides = {
-        "input.storage.base_dir": str(collection_dir / "input"),
         "input.file_pattern": ".*\\.(txt|md)$",
     }
 
-    if not _is_cosmos_mode():
-        cli_overrides.update({
-            "input.storage.type": "file",
-            "output.type": "file",
-            "output.base_dir": str(collection_dir / "output"),
-            "cache.type": "file",
-            "cache.base_dir": str(collection_dir / "cache"),
-        })
+    if _is_cosmos_mode():
+        cosmos_database = (settings.cosmos_database or "").strip()
+        cosmos_endpoint = (settings.cosmos_endpoint or "").strip()
+        connection_string = _cosmos_connection_string()
+
+        cli_overrides.update(
+            {
+                "input.storage.type": "cosmosdb",
+                "input.storage.base_dir": cosmos_database,
+                "input.storage.container_name": _collection_container_name(
+                    collection_id, "input"
+                ),
+                "output.type": "cosmosdb",
+                "output.base_dir": cosmos_database,
+                "output.container_name": _collection_container_name(
+                    collection_id, "output"
+                ),
+                "cache.type": "cosmosdb",
+                "cache.base_dir": cosmos_database,
+                "cache.container_name": _collection_container_name(
+                    collection_id, "cache"
+                ),
+                "vector_store.default_vector_store.type": "cosmosdb",
+                "vector_store.default_vector_store.url": cosmos_endpoint,
+                "vector_store.default_vector_store.api_key": settings.cosmos_key,
+                "vector_store.default_vector_store.database_name": cosmos_database,
+                "vector_store.default_vector_store.container_name": _collection_container_name(
+                    collection_id, "vector"
+                ),
+            }
+        )
+        if connection_string:
+            cli_overrides["input.storage.connection_string"] = connection_string
+            cli_overrides["output.connection_string"] = connection_string
+            cli_overrides["cache.connection_string"] = connection_string
+    else:
+        collection_dir.mkdir(parents=True, exist_ok=True)
+        cli_overrides.update(
+            {
+                "input.storage.type": "file",
+                "input.storage.base_dir": str(collection_dir / "input"),
+                "output.type": "file",
+                "output.base_dir": str(collection_dir / "output"),
+                "cache.type": "file",
+                "cache.base_dir": str(collection_dir / "cache"),
+            }
+        )
 
     # Load the shared settings.yaml with collection-specific overrides
     config = load_config(

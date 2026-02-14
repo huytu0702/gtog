@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock, PropertyMock
@@ -33,6 +34,10 @@ def test_load_graphrag_config_cosmos_mode_does_not_force_file_overrides(monkeypa
     mock_settings.collections_dir = Path("storage/collections")
     mock_settings.settings_yaml_path = Path("settings.yaml")
     mock_settings.storage_mode = "cosmos"
+    mock_settings.cosmos_endpoint = "https://localhost:8081"
+    mock_settings.cosmos_key = "test-key"
+    mock_settings.cosmos_database = "gtog"
+    mock_settings.cosmos_container = "graphrag"
     
     with patch.object(app.utils.helpers, "settings", mock_settings):
         with patch("app.utils.helpers.load_config") as mock_load_config:
@@ -64,6 +69,10 @@ def test_cosmos_mode_preserves_profile_output_cache_vector(monkeypatch, tmp_path
     mock_settings.collections_dir = tmp_path / "collections"
     mock_settings.settings_yaml_path = tmp_path / "settings.cosmos-emulator.yaml"
     mock_settings.storage_mode = "cosmos"
+    mock_settings.cosmos_endpoint = "https://localhost:8081"
+    mock_settings.cosmos_key = "test-key"
+    mock_settings.cosmos_database = "gtog"
+    mock_settings.cosmos_container = "graphrag"
     type(mock_settings).is_cosmos_mode = PropertyMock(return_value=True)
     
     with patch.object(app.utils.helpers, "settings", mock_settings):
@@ -101,3 +110,43 @@ def test_file_mode_still_uses_file_overrides(monkeypatch, tmp_path):
                 
                 assert cfg.output.type == "file"
                 assert cfg.cache.type == "file"
+
+
+def test_load_graphrag_config_cosmos_mode_applies_collection_scoped_cosmos_overrides(tmp_path):
+    """Cosmos mode should use collection-scoped container overrides for input/output/cache/vector."""
+    mock_settings = MagicMock()
+    mock_settings.collections_dir = tmp_path / "collections"
+    mock_settings.settings_yaml_path = tmp_path / "settings.cosmos-emulator.yaml"
+    mock_settings.storage_mode = "cosmos"
+    mock_settings.cosmos_endpoint = "https://localhost:8081"
+    mock_settings.cosmos_key = "test-key"
+    mock_settings.cosmos_database = "gtog"
+    mock_settings.cosmos_container = "graphrag"
+    type(mock_settings).is_cosmos_mode = PropertyMock(return_value=True)
+
+    with patch.object(app.utils.helpers, "settings", mock_settings):
+        with patch("app.utils.helpers.load_config") as mock_load_config:
+            mock_load_config.return_value = MagicMock()
+
+            app.utils.helpers.load_graphrag_config("Demo_Collection")
+
+            cli_overrides = mock_load_config.call_args.kwargs.get("cli_overrides", {})
+
+            assert cli_overrides["input.storage.type"] == "cosmosdb"
+            assert cli_overrides["output.type"] == "cosmosdb"
+            assert cli_overrides["cache.type"] == "cosmosdb"
+            assert cli_overrides["vector_store.default_vector_store.type"] == "cosmosdb"
+            assert cli_overrides["vector_store.default_vector_store.url"] == "https://localhost:8081"
+            assert cli_overrides["vector_store.default_vector_store.database_name"] == "gtog"
+
+            container_names = [
+                cli_overrides["input.storage.container_name"],
+                cli_overrides["output.container_name"],
+                cli_overrides["cache.container_name"],
+                cli_overrides["vector_store.default_vector_store.container_name"],
+            ]
+
+            assert len(set(container_names)) == 4
+            for container_name in container_names:
+                assert len(container_name) <= 63
+                assert re.fullmatch(r"[a-z0-9-]+", container_name)

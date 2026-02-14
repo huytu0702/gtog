@@ -27,6 +27,26 @@ class CosmosDBVectorStore(BaseVectorStore):
     _database_client: DatabaseProxy
     _container_client: ContainerProxy
 
+    @staticmethod
+    def _is_local_emulator_endpoint(endpoint: str | None) -> bool:
+        if not endpoint:
+            return False
+        endpoint_lower = endpoint.lower()
+        return (
+            "localhost" in endpoint_lower
+            or "127.0.0.1" in endpoint_lower
+            or "cosmos-emulator" in endpoint_lower
+        )
+
+    @staticmethod
+    def _extract_account_endpoint(connection_string: str | None) -> str | None:
+        if not connection_string:
+            return None
+        for segment in connection_string.split(";"):
+            if segment.lower().startswith("accountendpoint="):
+                return segment.split("=", 1)[1]
+        return None
+
     def __init__(
         self, vector_store_schema_config: VectorStoreSchemaConfig, **kwargs: Any
     ) -> None:
@@ -38,14 +58,23 @@ class CosmosDBVectorStore(BaseVectorStore):
         """Connect to CosmosDB vector storage."""
         connection_string = kwargs.get("connection_string")
         if connection_string:
-            self._cosmos_client = CosmosClient.from_connection_string(connection_string)
+            endpoint = self._extract_account_endpoint(connection_string)
+            self._cosmos_client = CosmosClient.from_connection_string(
+                connection_string,
+                connection_verify=not self._is_local_emulator_endpoint(endpoint),
+            )
         else:
             url = kwargs.get("url")
             if not url:
                 msg = "Either connection_string or url must be provided."
                 raise ValueError(msg)
+
+            api_key = kwargs.get("api_key")
+            credential = api_key if api_key else DefaultAzureCredential()
             self._cosmos_client = CosmosClient(
-                url=url, credential=DefaultAzureCredential()
+                url=url,
+                credential=credential,
+                connection_verify=not self._is_local_emulator_endpoint(url),
             )
 
         database_name = kwargs.get("database_name")

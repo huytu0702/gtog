@@ -37,8 +37,10 @@ models:
 
 input:
   storage:
-    type: file # or blob
-    base_dir: "input"
+    type: cosmosdb
+    base_dir: ${COSMOS_DATABASE}
+    connection_string: "AccountEndpoint=${COSMOS_ENDPOINT};AccountKey=${COSMOS_KEY};"
+    container_name: ${COSMOS_CONTAINER}
   file_type: text # [csv, text, json]
 
 chunks:
@@ -70,6 +72,7 @@ vector_store:
   default_vector_store:
     type: cosmosdb
     url: ${COSMOS_ENDPOINT}
+    api_key: ${COSMOS_KEY}
     database_name: ${COSMOS_DATABASE}
     container_name: ${COSMOS_CONTAINER}
     overwrite: true

@@ -85,7 +85,7 @@ cp .env.cosmos-emulator.example .env.cosmos-emulator
 STORAGE_MODE=cosmos
 GRAPHRAG_SETTINGS_FILE=settings.cosmos-emulator.yaml
 COSMOS_ENDPOINT=https://localhost:8081
-COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+ZLw==
+COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==
 COSMOS_DATABASE=gtog
 COSMOS_CONTAINER=graphrag
 

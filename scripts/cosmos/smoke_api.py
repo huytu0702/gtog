@@ -3,6 +3,7 @@
 
 import argparse
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,9 @@ def create_collection(api_base_url: str, collection_name: str) -> bool:
             print(f"    Created successfully")
             return True
         elif response.status_code == 409:
+            print(f"    Collection already exists (OK)")
+            return True
+        elif response.status_code == 422 and "already exists" in response.text.lower():
             print(f"    Collection already exists (OK)")
             return True
         else:
@@ -81,7 +85,7 @@ def wait_for_indexing(
     interval: int = 5,
 ) -> bool:
     """Poll indexing status until completed or timeout."""
-    url = f"{api_base_url}/api/collections/{collection_name}/status"
+    url = f"{api_base_url}/api/collections/{collection_name}/index"
     start_time = time.time()
     
     print(f"  Waiting for indexing to complete (timeout: {timeout}s)...")
@@ -93,10 +97,10 @@ def wait_for_indexing(
                 data = response.json()
                 status = data.get("status")
                 
-                if status == "indexed":
+                if status == "completed":
                     print(f"    Indexing completed successfully")
                     return True
-                elif status == "error":
+                elif status == "failed":
                     print(f"    Indexing failed with error")
                     return False
                 else:
@@ -120,12 +124,8 @@ def execute_query(
     method: str = "local",
 ) -> bool:
     """Execute a query against a collection."""
-    url = f"{api_base_url}/api/search"
-    payload = {
-        "query": query,
-        "collection_name": collection_name,
-        "method": method,
-    }
+    url = f"{api_base_url}/api/collections/{collection_name}/search/{method}"
+    payload = {"query": query}
     
     print(f"  Executing {method} query...")
     try:
@@ -163,7 +163,8 @@ def delete_collection(api_base_url: str, collection_name: str) -> bool:
 
 def create_sample_document() -> Path:
     """Create a sample document for testing."""
-    sample_text = """
+    sample_text = """# GraphRAG Smoke Test Document
+
 GraphRAG is a research project from Microsoft that enables knowledge graph-based
 retrieval-augmented generation. It combines graph databases with large language
 models to provide more accurate and contextual answers.
@@ -171,15 +172,16 @@ models to provide more accurate and contextual answers.
 The system extracts entities and relationships from documents, builds a knowledge
 graph, and uses graph traversal algorithms to find relevant information for queries.
 
-Key features include:
+## Key features
+
 - Entity extraction from unstructured text
 - Relationship building between entities
 - Community detection using graph algorithms
 - Multiple search methods (global, local, ToG, DRIFT)
 """
-    
-    doc_path = Path("/tmp/smoke_test_sample.txt")
-    doc_path.write_text(sample_text)
+
+    doc_path = Path(tempfile.gettempdir()) / "smoke_test_sample.md"
+    doc_path.write_text(sample_text, encoding="utf-8")
     return doc_path
 
 
@@ -262,6 +264,11 @@ def run_smoke_test(
         print("Cleanup: Delete Collection")
         delete_collection(api_base_url, collection_name)
         print()
+
+    try:
+        doc_path.unlink(missing_ok=True)
+    except Exception:
+        pass
     
     return results
 

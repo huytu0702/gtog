@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Optional
 
 import graphrag.api as api
@@ -23,64 +22,6 @@ class IndexingService:
     def __init__(self):
         """Initialize the indexing service."""
         self.indexing_tasks: Dict[str, IndexStatusResponse] = {}
-        self._document_repo: Optional[object] = None
-    
-    def _get_document_repo(self) -> Optional[object]:
-        """Get the document repository from storage service if in cosmos mode."""
-        if not settings.is_cosmos_mode:
-            return None
-        
-        if self._document_repo is None:
-            # Import here to avoid circular dependency
-            from .storage_service import get_storage_service
-            storage_svc = get_storage_service()
-            if hasattr(storage_svc, '_document_repo'):
-                self._document_repo = storage_svc._document_repo
-        
-        return self._document_repo
-    
-    def _sync_cosmos_documents_to_input(self, collection_id: str, input_dir: Path) -> None:
-        """
-        Sync documents from Cosmos DB to local input directory for GraphRAG indexing.
-        
-        This is needed because GraphRAG indexing reads from local filesystem.
-        Operation is idempotent - overwrites existing files each run.
-        
-        Args:
-            collection_id: The collection identifier
-            input_dir: Path to the input directory
-        """
-        doc_repo = self._get_document_repo()
-        if doc_repo is None:
-            logger.debug("Not in cosmos mode, skipping document sync")
-            return
-        
-        logger.info(f"Syncing cosmos documents to input dir for collection: {collection_id}")
-        
-        # Ensure input directory exists
-        input_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Get all documents for this collection
-        documents = doc_repo.list(collection_id)
-        
-        synced_count = 0
-        for doc in documents:
-            try:
-                # Get document content from Cosmos
-                content = doc_repo.get_content(collection_id, doc.name)
-                if content is None:
-                    logger.warning(f"Could not retrieve content for document: {doc.name}")
-                    continue
-                
-                # Write to local input directory (overwrite if exists)
-                file_path = input_dir / doc.name
-                file_path.write_bytes(content)
-                synced_count += 1
-                logger.debug(f"Synced document: {doc.name}")
-            except Exception as e:
-                logger.error(f"Failed to sync document {doc.name}: {e}")
-        
-        logger.info(f"Synced {synced_count} documents to input directory")
     
     async def start_indexing(self, collection_id: str) -> IndexStatusResponse:
         """
@@ -127,14 +68,9 @@ class IndexingService:
             logger.info(f"Starting indexing for collection: {collection_id}")
             
             # Update status
-            self.indexing_tasks[collection_id].message = "Preparing input files..."
+            self.indexing_tasks[collection_id].message = "Preparing indexing context..."
             self.indexing_tasks[collection_id].progress = 5.0
-            
-            # If in cosmos mode, sync documents to local input directory
-            if settings.is_cosmos_mode:
-                input_dir = settings.collections_dir / collection_id / "input"
-                self._sync_cosmos_documents_to_input(collection_id, input_dir)
-            
+
             # Update status
             self.indexing_tasks[collection_id].message = "Loading configuration..."
             self.indexing_tasks[collection_id].progress = 10.0
