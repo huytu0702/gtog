@@ -220,27 +220,7 @@ Your `qa_eval.json` should follow this format:
 
 ### Step 1: Create eval_config.yaml
 
-```yaml
-dataset:
-  path: "eval/qa_eval.json"
-
-indexes:
-  tt0097576: "tt0097576"
-  tt0102798: "tt0102798"
-  tt2278388: "tt2278388"
-
-methods:
-  - tog
-  - local
-  - basic
-
-output:
-  dir: "eval/results"
-
-judge:
-  model: gpt-4o-mini
-  temperature: 0.0
-```
+Copy from graphrag folder
 
 ### Step 2: Run Evaluation
 

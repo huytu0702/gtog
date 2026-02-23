@@ -73,7 +73,7 @@ output:
   base_dir: "output"
     
 cache:
-  type: file # [file, memory, none]
+  type: json # [json, memory, none] - JSON performs better than file
   base_dir: "cache"
 
 reporting:

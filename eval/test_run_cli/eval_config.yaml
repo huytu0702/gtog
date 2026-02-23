@@ -1,0 +1,17 @@
+dataset:
+  path: "test.json"
+
+indexes:
+  default: "F:/KL/gtog/eval/test_run_cli"
+
+methods:
+  - tog
+  - local
+
+output:
+  dir: "eval_results"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0

@@ -9,4 +9,11 @@
 |----|------|---|-------|------|
 | #1070 | 11:16 AM | ✅ | Design document created for Cosmos DB emulator integration | ~433 |
 | #1066 | 10:42 AM | 🔵 | Existing Azure Cosmos DB integration found in GraphRAG codebase | ~352 |
+
+### Feb 22, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1521 | 11:15 PM | 🔵 | GraphRAG cache system supports five storage types | ~230 |
+| #1237 | 2:14 AM | 🔵 | Examined GraphRAG configuration model structure | ~422 |
 </claude-mem-context>

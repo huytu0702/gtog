@@ -7,6 +7,8 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #1522 | 11:15 PM | 🔵 | GraphRAG vector store configured with LanceDB | ~189 |
+| #1508 | 11:11 PM | ✅ | User updated settings.yaml configuration | ~143 |
 | #1488 | 10:52 PM | ✅ | Updated rate limits to match Google Gemini API specifications | ~338 |
 | #1487 | 10:51 PM | ✅ | Increased API rate limits for higher throughput capacity | ~322 |
 | #1486 | " | 🔵 | Reviewed complete settings.yaml configuration after dual-model implementation | ~319 |

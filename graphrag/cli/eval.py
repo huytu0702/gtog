@@ -177,16 +177,19 @@ async def run_evaluation(
     for r in all_results:
         if isinstance(r, dict):
             # Handle both simple results (no evaluation) and full results
-            if "scores" in r and "efficiency" in r:
+            if "scores" in r and r["scores"] is not None:
                 scores = MetricScores(
                     correctness=JudgeResult(r["scores"]["correctness"], ""),
                     faithfulness=JudgeResult(r["scores"]["faithfulness"], ""),
                     relevance=JudgeResult(r["scores"]["relevance"], ""),
                     completeness=JudgeResult(r["scores"]["completeness"], ""),
                 )
-                efficiency = EfficiencyMetrics(**r["efficiency"])
             else:
                 scores = None
+
+            if "efficiency" in r and r["efficiency"] is not None:
+                efficiency = EfficiencyMetrics(**r["efficiency"])
+            else:
                 efficiency = None
             qr = QueryResult(
                 question=r["question"],
