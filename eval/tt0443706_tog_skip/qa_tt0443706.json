@@ -1,0 +1,252 @@
+[
+    {
+        "question": "After killing the cab driver, what does the Zodiac send to the Chronicle?",
+        "ground_truth": "The driver's blood stained shirt and a letter",
+        "context": "SF CHRONICLE, SAN FRAN, CALIF.. PLEASE RUSH TO EDITOR... To prove this, here is a blood stained piece of his shirt... [1], [2]"
+    },
+    {
+        "question": "Who are Dave Toschi and Bill Armstrong?",
+        "ground_truth": "San Francisco police detectives",
+        "context": "INSPECTOR DAVE TOSCHI. Handsome, Italian-American... This is BILL ARMSTRONG... The partners split up... Homicide INSPECTOR WALTER KRACKE approaches... [3], [4], [5], [6]"
+    },
+    {
+        "question": "Who is killed in the third attack?",
+        "ground_truth": "Paul Stine",
+        "context": "Victim's name is Paul Stine... Suspect fired one shot, back of the head... [5]"
+    },
+    {
+        "question": "What does the police discover while interviewing Allen?",
+        "ground_truth": "That he wears a Zodiac brand watch with the same logo used by the killer",
+        "context": "TOSCHI That's a nice watch. LEIGH ALLEN Thank you. TOSCHI Can I see it? Allen holds it up for them. It's the Zodiac Watch. [7]"
+    },
+    {
+        "question": "What does the handwriting expert claim about Allen?",
+        "ground_truth": "That Allen did not write the Zodiac letters",
+        "context": "MORRILL This suspect is not your Zodiac... Did these samples match his checks stubs and application? MORRILL Perfectly... I'm sorry, but this just won't work. [8]"
+    },
+    {
+        "question": "What is the \"Dirty Harry\"?",
+        "ground_truth": "A movie",
+        "context": "Hundreds of San Francisco's elite sit in their finery watching a police screening of Dirty Harry unspool in front of them. [9]"
+    },
+    {
+        "question": "Who is Arthur Leigh Allen?",
+        "ground_truth": "A suspect in the Vallejo murder case",
+        "context": "ARMSTRONG Mr. Allen... we're investigating the Zodiac murders in San Francisco and Vallejo... The door opens... and ARTHUR LEIGH ALLEN fills it. [10]"
+    },
+    {
+        "question": "Who writes a book on the Zodiac case?",
+        "ground_truth": "Graysmith",
+        "context": "Based on the books \"Zodiac\" and \"Zodiac Unmasked\" by Robert Graysmith [11]. Paperbacks of Robert Graysmith’s “Zodiac” on display. [12]"
+    },
+    {
+        "question": "Why does Graysmith's wife leave him?",
+        "ground_truth": "Because he is too immersed in the Zodiac case",
+        "context": "MELANIE What's it going to take for you to be done with this, Robert?... And that's more important than your family's safety... Took the kids to Mom's. Don't call. [13], [223C]"
+    },
+    {
+        "question": "What does Graysmith discover through the evidence about Allen?",
+        "ground_truth": "That the physical evidence does not implicate Allen as the killer",
+        "context": "TOSCHI It's all circumstantial. Stine's shirt, his wallet, his keys - we should have found one of those things in that trailer. We didn't. [14]. Ballistics - no match, prints - no match, writing - no match. [15]"
+    },
+    {
+        "question": "Where does Avery move to from the Crhonicle in 1978?",
+        "ground_truth": "The Sacramento Bee",
+        "context": "JENNINGS I mean, it's an honor to leave the Chronicle and go work for the Sacramento Bee. [16]"
+    },
+    {
+        "question": "Who survives the attack in Vallejo, California?",
+        "ground_truth": "Mike",
+        "context": "The driver HONKS. MIKE MAGEAU races out... The Man FIRES TWO MORE SHOTS into Mike... The line goes dead... Michael... He lived. She didn't. [17], [18], [19], [20]"
+    },
+    {
+        "question": "Where are Ferrin and Mageau attacked?",
+        "ground_truth": "At a lovers' lane in Vallejo, California",
+        "context": "July 4th, 1969 - Summer of Love. Vallejo, California... EXT. BLUE ROCK SPRINGS -- PARKING LOT -- NIGHT... Make out point. [17], [21], [22]"
+    },
+    {
+        "question": "Who attacks Darlene Ferrin and Mike Mageau?",
+        "ground_truth": "An unknown male assailant",
+        "context": "The door opens and THE COP inside gets out... The Man lowers the gun... The Man turns away. [23], [18]"
+    },
+    {
+        "question": "Who identifies Allen as the killer to the police?",
+        "ground_truth": "Mike",
+        "context": "MIKE That's him. Mike stabs his finger down at a picture. A YOUNG ARTHUR LEIGH ALLEN... I'm very sure that's the man who shot me. [24]"
+    },
+    {
+        "question": "Where does Allen work?",
+        "ground_truth": "At an Ace Hardware store",
+        "context": "EXT. ACE HARDWARE -- PARKING LOT -- MORNING... INT. ACE HARDWARE -- MORNING... The clerk turns and flashes a smile. His nameplate reads \"LEE\". [25], [26]"
+    },
+    {
+        "question": "Who survives the attack at Lake Berryessa?",
+        "ground_truth": "Brian",
+        "context": "BRYAN HARTNELL, the survivor from Berryessa. [27]"
+    },
+    {
+        "question": "Who does the killer send his letters to?",
+        "ground_truth": "The San Francisco Chronicle",
+        "context": "SF CHRONICLE, SAN FRAN, CALIF.. PLEASE RUSH TO EDITOR... DEAR EDITOR, THIS IS THE ZODIAC SPEAKING... [1], [28]"
+    },
+    {
+        "question": "How much time has passed from the first murder until the discovery of encrypted letters?",
+        "ground_truth": "One month",
+        "context": "July 4th, 1969... EXT. SAN FRANCISCO SKYLINE -- MORNING... August 1, 1969... Carol slices open the Rush To Editor letter... I want you to print this cipher on the front page of your paper. [17], [29], [30], [31]"
+    },
+    {
+        "question": "What is the profession of Robert Graysmith?",
+        "ground_truth": "He's a political cartoonist",
+        "context": "GRAYSMITH I'm a cartoonist. [32]. Robert Graysmith... Don't you have a cartoon to finish? [33]"
+    },
+    {
+        "question": "Where are Bryan Hartnell and Cecelia Shepard attacked?",
+        "ground_truth": "At Lake Berryessa in Napa",
+        "context": "LAKE BERRYESSA... Napa County, California... Bryan and Cecelia lie side by side, on a peninsula. [34], [35]"
+    },
+    {
+        "question": "How does the killer call himself?",
+        "ground_truth": "The Zodiac",
+        "context": "DEAR EDITOR, THIS IS THE ZODIAC SPEAKING... [28]"
+    },
+    {
+        "question": "What is the gender of Darlene and Mike's attacker?",
+        "ground_truth": "He is male",
+        "context": "A MAN (O.S.) I want to a report a double murder... The Man FIRES TWO MORE SHOTS into Mike... [18], [19]"
+    },
+    {
+        "question": "Where have Darlene and Mike been attacked?",
+        "ground_truth": "At lover's lane in Vallejo in California",
+        "context": "July 4th, 1969 - Summer of Love. Vallejo, California... EXT. BLUE ROCK SPRINGS -- PARKING LOT -- NIGHT... Make out point. [17], [21], [22]"
+    },
+    {
+        "question": "What happens to Mike and Darlene when after they are attacked?",
+        "ground_truth": "Mike survives but Darlene dies",
+        "context": "Mike is shot in the face, the neck, and the arm. Darlene is shot twice in each arm, and three times in the back... He lived. She didn't."
+    },
+    {
+        "question": "What kind of weapon was Darlene and Mike's attacker carrying?",
+        "ground_truth": "A handgun",
+        "context": "A MAN (O.S.) (CONT'D) They were shot with a nine millimeter Luger. I also killed those kids last year."
+    },
+    {
+        "question": "What is Allen's job at the time Robert finds him?",
+        "ground_truth": "He is a sales clerk",
+        "context": "EXT. ACE HARDWARE -- PARKING LOT -- MORNING... INT. ACE HARDWARE -- MORNING... A HEAVY BALD CLERK, stocking... The clerk turns and flashes a smile. His nameplate reads \"LEE\"."
+    },
+    {
+        "question": "Where does Allen work in 1983?",
+        "ground_truth": "In Vallejo Ace Hardware store",
+        "context": "EXT. ACE HARDWARE -- PARKING LOT -- MORNING... INT. ACE HARDWARE -- MORNING... Graysmith enters the store. Looking for someone."
+    },
+    {
+        "question": "When does Robert track down Allen?",
+        "ground_truth": "December 1983",
+        "context": "They stand three feet apart. Graysmith stares at him. Looking him in the eye... Allen's smile fades... Graysmith turns and walks out of the store."
+    },
+    {
+        "question": "Who does the San Francisco police assign to the Paul Stine case?",
+        "ground_truth": "Detectives Dave Toschi and Bill Armstrong",
+        "context": "Victim's name is Paul Stine... TOSCHI... ARMSTRONG... The partners split up. A well practiced ritual."
+    },
+    {
+        "question": "Where is the taxi driver, Paul Stine, killed?",
+        "ground_truth": "In the Presidio Heights district of San Francisco",
+        "context": "EXT. PACIFIC HEIGHTS... Pulling to halt at the corner of Washington and Cherry... Cabbie's been shot three blocks from the Presidio."
+    },
+    {
+        "question": "How does the killer find Paul?",
+        "ground_truth": "Paul gives the Zodiac killer a ride in his cab",
+        "context": "The Cabbie's HEAD SNAPS FORWARD. Shot by his PASSENGER, who we don't see."
+    },
+    {
+        "question": "What happens between Avery and Graysmith?",
+        "ground_truth": "They eventually form an alliance and start working together on the case",
+        "context": "INT. MORTI'S -- NIGHT... Graysmith sits with Avery. Finally allowed in to the inner circle... GRAYSMITH AND AVERY - Later. Now both have huge blue drinks. Both buzzed now, the new code in front of them."
+    },
+    {
+        "question": "How does the killer continue to taunt the authorities?",
+        "ground_truth": "By sending more letters",
+        "context": "TOSCHI (V.O.) This is the Zodiac speaking... By the way have you cracked the last cipher I sent you?... ARMSTRONG (V.O.) This is the Zodiac speaking... AVERY (V.O.) This is the Zodiac speaking... GRAYSMITH (V.O.) This is the Zodiac speaking..."
+    },
+    {
+        "question": "What does the Zodiac killer send to the newspaper after he kills Paul Stine?",
+        "ground_truth": "Pieces of Paul's blood stained shirt",
+        "context": "AVERY (V.O.) To prove this, here is a blood stained piece of his shirt... A 3 by 5 PIECE of grey and white SHIRT CLOTH, SOAKED IN BLOOD. Neatly torn, not cut."
+    },
+    {
+        "question": "Who do Detectives Toschi and Armstrong work with on the Stine case?",
+        "ground_truth": "Detective Ken Narlow and Sgt. Jack Mulanax",
+        "context": "ARMSTRONG... Who should I talk to in Napa so we can coordinate? MULANAX Ken Narlow... INT. NAPA POLICE HEADQUARTERS -- DAY... KEN NARLOW, now on the phone with Armstrong."
+    },
+    {
+        "question": "When did Allen die according to the end credits?",
+        "ground_truth": "1992",
+        "context": "Police were scheduled to meet on August 27, 1992 to discuss arresting him for the murders. Allen suffered a fatal heart attack one day before this meeting took place."
+    },
+    {
+        "question": "Who does Mike identify at his attacker from a police mugshot eight years later?",
+        "ground_truth": "Arthur Allen",
+        "context": "Mike stabs his finger down at a picture. A YOUNG ARTHUR LEIGH ALLEN... I'm very sure that's the man who shot me."
+    },
+    {
+        "question": "What did the results of the DNA test conducted on Allen's DNA and the DNA from the Zodiac letter show?",
+        "ground_truth": "The DNA sample taken from the postage stamp on one of the Zodiac letters did not match Allan's DNA",
+        "context": "In 2001 DNA tests were run on several of the Zodiac envelopes. The San Francisco lab claimed DNA found under the stamps did not match Arthur Leigh Allen's."
+    },
+    {
+        "question": "What is seen in the scene where the authorities are walking by an airport book store?",
+        "ground_truth": "Copies of Graysmith's book Zodiac",
+        "context": "Passing an in-terminal BARNES AND NOBLE. Paperbacks of Robert Graysmith’s “Zodiac” on display."
+    },
+    {
+        "question": "When was Allen's DNA tested against the DNA sample from one of the Zodiac letters?",
+        "ground_truth": "2002",
+        "context": "In 2001 DNA tests were run on several of the Zodiac envelopes."
+    },
+    {
+        "question": "Who is excluded from the initial details about the killings despite his interest in the case?",
+        "ground_truth": "Political cartoonist Robert Graysmith",
+        "context": "HYMAN Don't you have a cartoon to finish? Graysmith takes the hint. Puts down the code and leaves."
+    },
+    {
+        "question": "What name does the killer give himself?",
+        "ground_truth": "The Zodiac",
+        "context": "DEAR EDITOR, THIS IS THE ZODIAC SPEAKING..."
+    },
+    {
+        "question": "Where are Cecilia and Bryan attacked?",
+        "ground_truth": "Lake Berryessa in Napa County",
+        "context": "EXT. LAKE BERRYESSA -- TWILIGHT... Bryan and Cecelia lie side by side, on a peninsula."
+    },
+    {
+        "question": "Who does the Zodiac killer attack next?",
+        "ground_truth": "Bryan Hartnell and Cecelia Shepard",
+        "context": "Two college kids, BRYAN HARTNELL at the wheel, CECELIA SHEPHARD next to him... Lake Berryessa... The Man FIRES TWO MORE SHOTS into Mike... (wait, wrong attack)... Bryan and Cecelia lie side by side... The Man pulls the knife from the scabbard and STABS BRYAN IN THE BACK... He turns and STABS CECELIA."
+    },
+    {
+        "question": "Which newspaper receives letters from the killer?",
+        "ground_truth": "The San Francisco Chronicle",
+        "context": "INT. SAN FRANCISCO CHRONICLE -- LOBBY... Carol slices open the Rush To Editor letter... DEAR EDITOR, THIS IS THE ZODIAC SPEAKING..."
+    },
+    {
+        "question": "Who is the newspaper's political cartoonist?",
+        "ground_truth": "Robert Graysmith",
+        "context": "GRAYSMITH I'm a cartoonist.. Robert Graysmith... Don't you have a cartoon to finish?"
+    },
+    {
+        "question": "Who is able to interpret one of the letters?",
+        "ground_truth": "Graysmith",
+        "context": "In the decade since the Zodiac's second cipher was received... where those agencies had failed, a cartoonist has succeeded... How'd you do it? GRAYSMITH Ummm... A lot of books from the library..."
+    },
+    {
+        "question": "How does Avery treat Robert before they discuss the letters?",
+        "ground_truth": "Avery makes fun of Graysmith",
+        "context": "AVERY It's Zodiac at the lake. (re: Graysmith) What's his story, anyway? He seems a little farther out than far out... GRAYSMITH You wouldn't make fun of my drink if you tried it."
+    },
+    {
+        "question": "What happens when the newspaper publishes the killer's letters?",
+        "ground_truth": "A married couple deciphers one",
+        "context": "SUPERIMPOSE - RESIDENCE OF DONALD HARDEN... DONALD Hey, take a gander at this code thingy... AVERY A history teacher and his wife in Salinas."
+    }
+]

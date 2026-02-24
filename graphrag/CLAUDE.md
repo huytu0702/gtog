@@ -33,4 +33,15 @@
 | #1466 | 10:39 PM | ✅ | Optimized GraphRAG settings.yaml configuration based on Microsoft best practices | ~623 |
 | #1464 | 10:38 PM | 🔵 | Read existing GraphRAG settings configuration | ~254 |
 | #1463 | 10:36 PM | 🔵 | GraphRAG Configuration Examined | ~403 |
+
+### Feb 23, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1662 | 11:47 AM | 🔵 | GraphRAG settings configuration details extracted | ~257 |
+| #1639 | 11:38 AM | 🔵 | Confirmed unique GraphRAG settings file location | ~132 |
+| #1637 | " | 🔵 | Located GraphRAG settings configuration file | ~145 |
+| #1630 | 11:35 AM | ✅ | GraphRAG configuration copied to alternate eval directory | ~157 |
+| #1628 | 11:32 AM | ✅ | GraphRAG prompt templates copied to eval project | ~220 |
+| #1614 | 9:16 AM | ✅ | Configuration setup for ToG evaluation | ~209 |
 </claude-mem-context>
