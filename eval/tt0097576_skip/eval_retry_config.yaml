@@ -1,0 +1,16 @@
+dataset:
+  path: "qa_failed_retry.json"
+
+indexes:
+  tt0097576: "F:/KL/gtog/eval/tt0097576_skip"
+
+methods:
+  - tog
+
+output:
+  dir: "F:/KL/gtog/eval/tt0097576_skip/eval_results_retry"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0

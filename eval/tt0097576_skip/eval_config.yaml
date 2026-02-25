@@ -1,0 +1,16 @@
+dataset:
+  path: "tt0097576.json"
+
+indexes:
+  tt0097576: "F:/KL/gtog/eval/tt0097576_skip"
+
+methods:
+  - tog
+
+output:
+  dir: "eval_results"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0

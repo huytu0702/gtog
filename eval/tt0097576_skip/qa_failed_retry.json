@@ -1,0 +1,132 @@
+[
+  {
+    "question": "What phobia does Indy acquire while being chased by the grave robbers?",
+    "ground_truth": "He becomes afraid of snakes",
+    "context": "Indy jumps back in horror... only to land with a SQUISH into the SNAKE VAT.\nINDY\nOh... Oh...\nHundreds of slippery, squirming snakes. Indy sinks into them. They cover him. Engulf him. Almost smother him. [7]"
+  },
+  {
+    "question": "Where are Indy and the Boy Scout troop riding in the beginning of the movie?",
+    "ground_truth": "In Moab, Utah",
+    "context": "EXT. DESERT OF THE AMERICAN SOUTHWEST - DAY\nA mountain peak dominates the landscape.\nTITLES BEGIN\nRiders on horseback cross the desert. [3]"
+  },
+  {
+    "question": "What do the grave robbers do after Indy steals the crucifix from them?",
+    "ground_truth": "They chase Indy",
+    "context": "ROSCOE\nHe's got our thing!\nHALFBREED\nGet 'im!\nThe three Robbers are so eager to get their hands on Indy [12]\nFEDORA\nThere he is!\nMEN\n(ad-libs)\nLet's go! Let's get him! Let's go! [13]"
+  },
+  {
+    "question": "How old is Indiana Jones at the beginning of this film?",
+    "ground_truth": "13 years old",
+    "context": "RIDERS climb down from their mounts... and only now do we realize that this is a TROOP OF BOY SCOUTS, all of them about thirteen years of age. [4]"
+  },
+  {
+    "question": "How does Indy get the cut on his chin?",
+    "ground_truth": "He gets it while trying to escape from the grave robbers",
+    "context": "Indy swallows hard and gives the whip a try. It unravels awkwardly, its TIP flying back and HITTING Indy IN THE FACE...\nCUTTING his chin. [10]"
+  },
+  {
+    "question": "What does Indy do with the crucifix after escaping from the grave robbers?",
+    "ground_truth": "He returns it",
+    "context": "SHERIFF\nI'm glad to see that... because the rightful owner of this Cross won't press charges, if you give it back.\n...\nThe Sheriff hands the Cross to Fedora. [5], [6]"
+  },
+  {
+    "question": "What type of car does the Sultan of Hatay get from the Nazis?",
+    "ground_truth": "A Rolls-Royce Phantom II",
+    "context": "SULTAN\nRolls-Royce Phantom Two. 4.3 litre, 30 horsepower, six cylinder engine, with Stromberg Downdraft carburetor... DONOVAN (after a beat) The keys are in the ignition, Your Highness. [7]"
+  },
+  {
+    "question": "What does Elsa do with the Grail after Henry is healed?",
+    "ground_truth": "Elsa takes the Grail past the great seal",
+    "context": "ELSA We have got it. Come on. Elsa steps onto the edge of the Great Seal. INDY Elsa! Elsa, don't move! ... INDY Elsa, don't cross the Seal. The Knight warned us not to take the Grail from here. [12]"
+  },
+  {
+    "question": "Where is the Grail kept?",
+    "ground_truth": "It is hidden in the temple among dozens of fake Holy Grails",
+    "context": "A vast array of chalices is displayed on the altar of this small Temple. Perhaps a hundred or more. Many sizes, many shapes, some gold, some silver, but they all glitter and shine. [14]"
+  },
+  {
+    "question": "What happens to Elsa when the temple collapses?",
+    "ground_truth": "She falls into an abyss",
+    "context": "Elsa slips into the crevasse. She screams. Elsa is hanging perilously in the abyss, with the Grail almost within her reach... Elsa loses her grip and falls screaming to her death. [17], [18]"
+  },
+  {
+    "question": "What is the origin of Indy's nickname according to Henry?",
+    "ground_truth": "Indiana was the name of the Jones' family dog",
+    "context": "SALLAH Please... What does it always mean, this... this \"Junior?\" HENRY That's his name. Henry Jones, Junior. INDY I like Indiana. HENRY We named the dog Indiana. [1]"
+  },
+  {
+    "question": "Where do Indy and his group find the remaining Nazis that had been working with Vogel?",
+    "ground_truth": "At the temple where the Holy Grail is being kept",
+    "context": "FULL SHOT - INSIDE THE MOUNTAIN TEMPLE... The SOUND OF RIFLE BOLTS being cocked. Everyone turns to discover Indy and his party surrounded by NAZI SOLDIERS. [3], [4]"
+  },
+  {
+    "question": "Who is Indy's father?",
+    "ground_truth": "Henry Jones, Sr.",
+    "context": "PROFESSOR Henry JONES, steps out of the shadows. HENRY Junior? ... HENRY That's his name. Henry Jones, Junior. [15], [1]"
+  },
+  {
+    "question": "Does Indy want to find the Holy Grail?",
+    "ground_truth": "No",
+    "context": "INDY I didn't come for the Cup of Christ. I came to find my father. [16]"
+  },
+  {
+    "question": "What do Indy and Elsa find in the tomb of the First Crusade knight?",
+    "ground_truth": "An inscription revealing the location of the Holy Grail",
+    "context": "INDY This is it! We found it! Look -- the engraving on the shield. It's the same as on the Grail Tablets. The shield is the second marker! [27]"
+  },
+  {
+    "question": "What does Indy tell Kazim after he and Elsa capture him?",
+    "ground_truth": "He does not want the Grail, he just wants to find his father",
+    "context": "KAZIM Ask yourself, why do you seek the Cup of Christ? Is it for His glory, or for yours? INDY I didn't come for the Cup of Christ. I came to find my father. [16]"
+  },
+  {
+    "question": "What does Indy do after receiving his father's diary?",
+    "ground_truth": "Travels to Venice",
+    "context": "INDY Call Donovan, Marcus. Tell him I'll take that ticket to Venice now. [29]"
+  },
+  {
+    "question": "What does Indy receive from his father?",
+    "ground_truth": "His diary",
+    "context": "Indy uncovers a small book. It looks like a JOURNAL or DIARY. ... INDY It's Dad's Grail Diary. ... Why would he have sent this to me?"
+  },
+  {
+    "question": "Who do Indy and Elsa capture?",
+    "ground_truth": "Kazim",
+    "context": "Indy grabs Kazim just in time and jumps... into the motorboat... INDY Who are you? KAZIM My name is Kazim."
+  },
+  {
+    "question": "Where was Henry last seen?",
+    "ground_truth": "At a library",
+    "context": "ELSA The last time I saw your father we were in the library. He was very close to tracking down the Knight's Tomb."
+  },
+  {
+    "question": "Who is Marcus with in Turkey when he is captured?",
+    "ground_truth": "Sallah",
+    "context": "Sallah shoulders his way through the mob toward Brody. ... Sallah and Brody begin to run. ... Sallah runs after the Truck until he reaches a wall... as the Truck drives away with Brody inside."
+  },
+  {
+    "question": "Why are Elsa and Walter helping Indy?",
+    "ground_truth": "using him to find the Grail for them",
+    "context": "DONOVAN Step back now, Doctor Schneider. Give Doctor Jones some room. He's going to recover the Grail for us. ... The Grail is mine, and you're going to get it for me."
+  },
+  {
+    "question": "How do Indy and Henry escape from Germany?",
+    "ground_truth": "They board a Zeppelin to leave Germany",
+    "context": "INDY I don't know. The first available flight out of Germany. ... MOORED ZEPPELIN Ten stories tall... Indy and Henry show their papers to the Boarding Guards, then join the line of passengers"
+  },
+  {
+    "question": "Who autographs Henry's diary?",
+    "ground_truth": "Adolf Hitler",
+    "context": "Hitler breaks the spell by taking the Grail Diary from him, opens it to the first page and signs his autograph. He hands it back and moves on."
+  },
+  {
+    "question": "What do Indy and Henry do after the aircraft they are travelling in turn around?",
+    "ground_truth": "Joneses escape in a parasite biplane and Henry redeems himself on the ground.",
+    "context": "INDY They're turning around. They're taking us back to Germany... We also see a small BI-PLANE... Indy climbs into the cockpit of the Biplane as Henry takes the tail gunner's seat."
+  },
+  {
+    "question": "How do Henry and Indy get away from the airforce?",
+    "ground_truth": "By alarming a flock of birds to take flight in front of the Luftwaffe fighter causing the pilot to crash.",
+    "context": "Henry suddenly spins around and runs screaming and shouting into A FLOCK OF SEA GULLS... The SEA GULLS take to the wing in flight... THE MESSERSCHMIDT AND THE SEA GULLS Meet in midair... Sea gulls are shredded... CLOGS THE ENGINE... The Messerschmidt falls from the skies and EXPLODES"
+  }
+]

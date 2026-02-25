@@ -14,7 +14,9 @@
       "Bash(git commit:*)",
       "Bash(git -C \"F:\\\\KL\\\\gtog\" log --oneline -8)",
       "WebFetch(domain:microsoft.github.io)",
-      "Bash(.venv/Scripts/python:*)"
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \"F:/KL/gtog/.venv/Scripts/python.exe\":*)",
+      "Bash(\"F:/KL/gtog/.venv/Scripts/python.exe\":*)"
     ],
     "deny": [],
     "ask": []

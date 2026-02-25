@@ -1,0 +1,512 @@
+[
+    {
+        "question": "Who does the golden crucifix the grave robbers had belong to?",
+        "ground_truth": "To Coronado",
+        "context": "INDY\n(hushed; urgent)\nIt's the Cross of Coronado! Cortes gave it to him in 1521. [1]\nINDY\nIt belongs to Coronado. [2]"
+    },
+    {
+        "question": "What is Indy doing with his Boy Scout troop in the beginning of the movie?",
+        "ground_truth": "He is horseback riding",
+        "context": "Riders on horseback cross the desert. From this distance they appear to be a company of Army Cavalry Soldiers. [3]\nRIDERS climb down from their mounts... and only now do we realize that this is a TROOP OF BOY SCOUTS [4]"
+    },
+    {
+        "question": "Who makes Indy return the crucifix after escaping from the grave robbers?",
+        "ground_truth": "Local Sheriff",
+        "context": "SHERIFF\nI'm glad to see that... because the rightful owner of this Cross won't press charges, if you give it back.\nFedora enters the house... The Sheriff hands the Cross to Fedora. [5], [6]"
+    },
+    {
+        "question": "What phobia does Indy acquire while being chased by the grave robbers?",
+        "ground_truth": "He becomes afraid of snakes",
+        "context": "Indy jumps back in horror... only to land with a SQUISH into the SNAKE VAT.\nINDY\nOh... Oh...\nHundreds of slippery, squirming snakes. Indy sinks into them. They cover him. Engulf him. Almost smother him. [7]"
+    },
+    {
+        "question": "Where are Indy and the Boy Scout troop riding in the beginning of the movie?",
+        "ground_truth": "In Moab, Utah",
+        "context": "EXT. DESERT OF THE AMERICAN SOUTHWEST - DAY\nA mountain peak dominates the landscape.\nTITLES BEGIN\nRiders on horseback cross the desert. [3]"
+    },
+    {
+        "question": "Who does Indy encounter when he is scouting caves with this Boy Scout troop?",
+        "ground_truth": "A group of grave robbers",
+        "context": "This is what they see:\nFOUR MEN digging with shovels and pick-axes. They have broken into one of the pueblo's SECRET CHAMBERS... called \"Kivas.\"\nThe men are ROUGH RIDER... ROSCOE... and HALFBREED [8], [9]"
+    },
+    {
+        "question": "What happens to Indy while being chased by the grave  robbers?",
+        "ground_truth": "He gets a bloody cut across his chin but manages to escape",
+        "context": "Indy swallows hard and gives the whip a try. It unravels awkwardly, its TIP flying back and HITTING Indy IN THE FACE...\nCUTTING his chin. [10]"
+    },
+    {
+        "question": "What does the leader of the grave robbers give to Indy?",
+        "ground_truth": "His fedora",
+        "context": "Then, Fedora takes off his hat and takes a step towards Indy.\nHe holds the hat by the crown, and puts it on Indy's head, a show of respect and admiration for the boy. [11]"
+    },
+    {
+        "question": "What do the grave robbers do after Indy steals the crucifix from them?",
+        "ground_truth": "They chase Indy",
+        "context": "ROSCOE\nHe's got our thing!\nHALFBREED\nGet 'im!\nThe three Robbers are so eager to get their hands on Indy [12]\nFEDORA\nThere he is!\nMEN\n(ad-libs)\nLet's go! Let's get him! Let's go! [13]"
+    },
+    {
+        "question": "What does Indy intend to do with the golden crucifix that he gets from the robbers?",
+        "ground_truth": "He wants to donate it to a museum",
+        "context": "INDY\nThat Cross is an important artifact. It belongs in a museum. [14]"
+    },
+    {
+        "question": "What have the grave robbers that the young Indiana meets stolen?",
+        "ground_truth": "A golden crucifix",
+        "context": "Fedora takes a BEJEWELED CROSS from the box and holds it aloft. [15]\nINDY\n(hushed; urgent)\nIt's the Cross of Coronado! [1]"
+    },
+    {
+        "question": "How old is Indiana Jones at the beginning of this film?",
+        "ground_truth": "13 years old",
+        "context": "RIDERS climb down from their mounts... and only now do we realize that this is a TROOP OF BOY SCOUTS, all of them about thirteen years of age. [4]"
+    },
+    {
+        "question": "How does Indy get the cut on his chin?",
+        "ground_truth": "He gets it while trying to escape from the grave robbers",
+        "context": "Indy swallows hard and gives the whip a try. It unravels awkwardly, its TIP flying back and HITTING Indy IN THE FACE...\nCUTTING his chin. [10]"
+    },
+    {
+        "question": "What does Indy do with the crucifix after escaping from the grave robbers?",
+        "ground_truth": "He returns it",
+        "context": "SHERIFF\nI'm glad to see that... because the rightful owner of this Cross won't press charges, if you give it back.\n...\nThe Sheriff hands the Cross to Fedora. [5], [6]"
+    },
+    {
+        "question": "What does Indy do to the grave robbers in the beginning of the movie?",
+        "ground_truth": "He steals their golden crucifix",
+        "context": "Indy picks up the Cross.\n...\nIndy puts the Cross in his pants and begins to pull himself up a rope hanging nearby. [12]"
+    },
+    {
+        "question": "How does the leader of the grave robbers react to Indy's actions?",
+        "ground_truth": "He is impressed with Indy's brave actions and gives him his fedore",
+        "context": "FEDORA\nYou've got heart, kid. [2]\nHe holds the hat by the crown, and puts it on Indy's head, a show of respect and admiration for the boy. [11]"
+    },
+    {
+        "question": "What does the Sultan of Hatay get in exchange for giving the expedition equipment to the Nazis?",
+        "ground_truth": "A Rolls-Royce Phantom II",
+        "context": "SULTAN\nRolls-Royce Phantom Two. 4.3 litre, 30 horsepower, six cylinder engine, with Stromberg Downdraft carburetor.\n...\nDONOVAN\n(after a beat)\nThe keys are in the ignition, Your Highness. [16]"
+    },
+    {
+        "question": "What does Sallah tell Indy and Henry about Marcus?",
+        "ground_truth": "Marcus was abducted",
+        "context": "SALLAH\nAh, they set out across the desert this afternoon. I believe they took Mister Brody with them. [17]"
+    },
+    {
+        "question": "What happens to the other members of the Brotherhood?",
+        "ground_truth": "They are killed",
+        "context": "TWO NAZI SOLDIERS throw HAND GRENADES into the cliffs. They EXPLODE, killing one of Kazim's Brethren. [18]"
+    },
+    {
+        "question": "What happens to Kazim during the fight with the Nazis?",
+        "ground_truth": "He is killed",
+        "context": "DONOVAN\n(re: Kazim)\nWho is he?\nKAZIM\nA messenger from God. For the unrighteous, the Cup of Life holds everlasting damnation.\nKazim dies. [19]"
+    },
+    {
+        "question": "What happens after Indy rescues Marcus and Henry?",
+        "ground_truth": "Indy gets caught up in a fight with Vogel",
+        "context": "Indy finally manages to pull himself atop the tank once more where he punches Vogel over the side [20]\nNow Indy and Vogel struggle with one another, the chain still wrapped around Indy's neck. [21]"
+    },
+    {
+        "question": "What are the Nazis using Marcus' map for?",
+        "ground_truth": "To find the Holy Grail",
+        "context": "DONOVAN\nThese pages are taken from Professor Jones' diary, Your Highness. And they include a map that pinpoints the exact location of the Grail. [22]"
+    },
+    {
+        "question": "What are the Nazis using to guide them to the Grail's location?",
+        "ground_truth": "Marcus's map",
+        "context": "DONOVAN\nWell, we have Marcus Brody. But more important, we have the map. [23]\nDONOVAN\nThese pages are taken from Professor Jones' diary, Your Highness. And they include a map that pinpoints the exact location of the Grail. [22]"
+    },
+    {
+        "question": "What is the name of the Nazi officer who captures Henry during the fight?",
+        "ground_truth": "Vogel",
+        "context": "Indy and Henry rush back into the room where Elsa had been left, only to find: A NAZI COLONEL HOLDING ELSA HOSTAGE.\nHis name is Vogel: a vicious-looking, lantern jawed brute. [24]"
+    },
+    {
+        "question": "Who helps Indy in rescuing Henry and Marcus?",
+        "ground_truth": "Sallah",
+        "context": "Sallah draws his horse next to the treads. He tips his fez to Henry.\nSALLAH\nFather of Indy -- give me your hand! [25], [26]"
+    },
+    {
+        "question": "What happens to Henry during the battle between the Nazis and the Brotherhood?",
+        "ground_truth": "He is captured by Vogel",
+        "context": "As Henry starts to climb out of the tank, TWO NAZI SOLDIERS DROP DOWN from above, their Lugers drawn. They are followed by Vogel. [1]"
+    },
+    {
+        "question": "Who ambushes the Nazi expedition?",
+        "ground_truth": "The Brotherhood of the Cruciform Sword",
+        "context": "KAZIM'S MEN, BRETHREN OF THE CRUCIFORM SWORD, continue to FIRE. Elsa and Donovan take cover beside the parked car. [2]"
+    },
+    {
+        "question": "What happens during the fight between Jones and Vogel?",
+        "ground_truth": "The tank goes over a cliff and Vogel dies",
+        "context": "The tank trundles over the cliff and PLUMMETS TO THE BOTTOM. EXT. CLIFF EDGE - DAY... We HEAR the TANK EXPLODING. [3]"
+    },
+    {
+        "question": "Where do the Nazis get equipment for the expedition to the Grail's location from?",
+        "ground_truth": "The Sultan of Hatay",
+        "context": "SULTAN\nYou shall have camels, horses, an armed escort, provisions, desert vehicles -- and tanks! [4]"
+    },
+    {
+        "question": "Who do Henry and Indy meet in Turkey?",
+        "ground_truth": "Sallah",
+        "context": "EXT. ISKENDERUN STREET - DAY\nSallah drives his car through the crowded streets, Indy beside him and Henry in the back seat. [4]"
+    },
+    {
+        "question": "What is Henry doing when he is captured by Vogel?",
+        "ground_truth": "Trying to rescue Marcus from the tank",
+        "context": "Henry climbs down into the tank and taps Brody on the shoulder... HENRY It's a rescue, old boy. Come on. As Henry starts to climb out of the tank, TWO NAZI SOLDIERS DROP DOWN from above... followed by Vogel. [5], [1]"
+    },
+    {
+        "question": "How does Indy catch up with the Nazi tank?",
+        "ground_truth": "By riding on horseback",
+        "context": "Indy rides his horse alongside the tank. [6]"
+    },
+    {
+        "question": "What type of car does the Sultan of Hatay get from the Nazis?",
+        "ground_truth": "A Rolls-Royce Phantom II",
+        "context": "SULTAN\nRolls-Royce Phantom Two. 4.3 litre, 30 horsepower, six cylinder engine, with Stromberg Downdraft carburetor... DONOVAN (after a beat) The keys are in the ignition, Your Highness. [7]"
+    },
+    {
+        "question": "What does Indy do when he catches up with the Nazi tank?",
+        "ground_truth": "Saves Henry and Marcus",
+        "context": "Indy pulls Henry and Brody from the tank. [8]"
+    },
+    {
+        "question": "Why does Donovan shoot Henry?",
+        "ground_truth": "To force Indy to get past the booby traps and find the Grail to save Henry",
+        "context": "Then Donovan shifts his aim, just a bit, and SHOOTS Henry... DONOVAN The healing power of the Grail is the only thing that can save your father now. It's time to ask yourself what you believe. [9], [10]"
+    },
+    {
+        "question": "What happens at the end of the movie?",
+        "ground_truth": "They all ride off into the sunset",
+        "context": "EXT. ENTRANCE TO CANYON - SUNSET\nAs Brody, Indy, Henry and Sallah ride from the canyon toward the SETTING SUN. [11]"
+    },
+    {
+        "question": "What does Elsa do with the Grail after Henry is healed?",
+        "ground_truth": "Elsa takes the Grail past the great seal",
+        "context": "ELSA We have got it. Come on. Elsa steps onto the edge of the Great Seal. INDY Elsa! Elsa, don't move! ... INDY Elsa, don't cross the Seal. The Knight warned us not to take the Grail from here. [12]"
+    },
+    {
+        "question": "Who is leading the group of the Nazis at the temple?",
+        "ground_truth": "Elsa and Donovan",
+        "context": "Elsa and Donovan's party... Elsa, Donovan and Vogel travel in the open car. [13]"
+    },
+    {
+        "question": "Where is the Grail kept?",
+        "ground_truth": "It is hidden in the temple among dozens of fake Holy Grails",
+        "context": "A vast array of chalices is displayed on the altar of this small Temple. Perhaps a hundred or more. Many sizes, many shapes, some gold, some silver, but they all glitter and shine. [14]"
+    },
+    {
+        "question": "What does Henry reveal to the group after they escape from the temple?",
+        "ground_truth": "The origins of Indy's nickname",
+        "context": "SALLAH Please... What does it always mean, this... this \"Junior?\" HENRY That's his name. Henry Jones, Junior. INDY I like Indiana. HENRY We named the dog Indiana. [15]"
+    },
+    {
+        "question": "How has the guard managed to stay alive for 700 years?",
+        "ground_truth": "Because of the power of the Grail",
+        "context": "KNIGHT You must choose. (beat) But choose wisely. For as the True Grail will bring you life -- the False Grail will take it from you. [16]"
+    },
+    {
+        "question": "What happens to Elsa when the temple collapses?",
+        "ground_truth": "She falls into an abyss",
+        "context": "Elsa slips into the crevasse. She screams. Elsa is hanging perilously in the abyss, with the Grail almost within her reach... Elsa loses her grip and falls screaming to her death. [17], [18]"
+    },
+    {
+        "question": "What does the knight warn Indy not to do?",
+        "ground_truth": "The Holy Grail can't be taken beyond the temple's entrance",
+        "context": "KNIGHT You have chosen wisely. But the Grail cannot pass beyond the Great Seal. That is the boundary and the price of immortality. [19]"
+    },
+    {
+        "question": "Why didn't the Nazis take the Grail after the finding the temple?",
+        "ground_truth": "They were unable to get past the booby traps to get to the Grail",
+        "context": "THE TURK Takes one more step -- a fatal step, it turns out. We hear a ROAR -- A WHOOSH of air -- but we SEE NOTHING -- except THE TURK'S HEAD FLY OFF... DONOVAN Impossible? What do you say, Jones?... The Grail is mine, and you're going to get it for me. [20], [21], [9]"
+    },
+    {
+        "question": "How many booby traps are at the temple?",
+        "ground_truth": "Three",
+        "context": "HENRY Look, we have work to do. When we get to Alexandretta we will face three challenges. [22]"
+    },
+    {
+        "question": "Who survives the temple collapsing?",
+        "ground_truth": "Indy, Henry, Marcus, and Sallah",
+        "context": "EXT. ENTRANCE TO MOUNTAIN TEMPLE - AFTERNOON\nIndy, Henry, Sallah and Brody emerge from the Mountain Temple through the Grecian Facade. [23]"
+    },
+    {
+        "question": "Who guards the chamber where the Grail is stored?",
+        "ground_truth": "A knight",
+        "context": "And then he realizes that a man is praying at the altar! He has his back turned to Indy... but he is dressed as what he is! A GRAIL KNIGHT. [24]"
+    },
+    {
+        "question": "What does the true Grail look like?",
+        "ground_truth": "A carpenter's cup",
+        "context": "Indy picks up another cup, a simple earthenware jug. INDY That's the cup of a carpenter. [25], [19]"
+    },
+    {
+        "question": "Does Indy manage to overcome the booby traps?",
+        "ground_truth": "Yes, he gets past the booby traps safely",
+        "context": "Indy crawls through a small opening in the side of the cliff and enters a Temple. [14]"
+    },
+    {
+        "question": "How is Henry healed?",
+        "ground_truth": "Indy has Henry drink holy water from the Grail and pours the rest of the water over Henry's wounds",
+        "context": "Henry swallows some of the water... Finally Indy pours the water over the wound and everyone watches in astonishment as the wound and the blood stain disappear before their eyes. [26], [27]"
+    },
+    {
+        "question": "What is the origin of Indy's nickname according to Henry?",
+        "ground_truth": "Indiana was the name of the Jones' family dog",
+        "context": "SALLAH Please... What does it always mean, this... this \"Junior?\" HENRY That's his name. Henry Jones, Junior. INDY I like Indiana. HENRY We named the dog Indiana. [1]"
+    },
+    {
+        "question": "Who shoots Henry?",
+        "ground_truth": "Donovan",
+        "context": "Then Donovan shifts his aim, just a bit, and SHOOTS Henry. The bullet enters his side below the ribs. [2]"
+    },
+    {
+        "question": "Where do Indy and his group find the remaining Nazis that had been working with Vogel?",
+        "ground_truth": "At the temple where the Holy Grail is being kept",
+        "context": "FULL SHOT - INSIDE THE MOUNTAIN TEMPLE... The SOUND OF RIFLE BOLTS being cocked. Everyone turns to discover Indy and his party surrounded by NAZI SOLDIERS. [3], [4]"
+    },
+    {
+        "question": "What happens when Elsa takes the Grail past the temple entrance?",
+        "ground_truth": "The temple begins to collapse and Elsa falls into an abyss",
+        "context": "Elsa steps onto the edge of the Great Seal... A RUMBLING SOUND IS HEARD and the ground roars and shifts... Elsa slips into the crevasse. [5], [6]"
+    },
+    {
+        "question": "How old is the knight guarding the Grail?",
+        "ground_truth": "Over 700 years old",
+        "context": "KNIGHT The last of three brothers who swore an oath to find the Grail and to guard it. INDY That was seven hundred years ago. KNIGHT A long time to wait. [7], [8]"
+    },
+    {
+        "question": "How long does Henry's wound take to heal?",
+        "ground_truth": "It heals instantly",
+        "context": "Finally Indy pours the water over the wound and everyone watches in astonishment as the wound and the blood stain disappear before their eyes. [9]"
+    },
+    {
+        "question": "What happens to Indy as he tries to save Elsa from falling?",
+        "ground_truth": "He almost falls in the abyss along with her",
+        "context": "As her hands lose their grip, Indy just manages to grab one of them, he himself sliding forward across the slanted floor. [6]"
+    },
+    {
+        "question": "What does Elsa give to Donovan?",
+        "ground_truth": "A golden chalice which is not the real Holy Grail",
+        "context": "Elsa chooses a cup -- a solid gold, emerald encrusted goblet. Donovan instantly takes it from her. [10]"
+    },
+    {
+        "question": "Why would Indy risk his life to get through the booby traps to get the Grail?",
+        "ground_truth": "To save Henry with the Grail",
+        "context": "DONOVAN The healing power of the Grail is the only thing that can save your father now. It's time to ask yourself what you believe. Indy takes in the situation... Indy proceeds forward. [11], [12]"
+    },
+    {
+        "question": "Wat happens to Donovan when he drinks from the Golden chalice given to him by Elsa?",
+        "ground_truth": "He starts to decay and eventually crumbles to dust",
+        "context": "Donovan drinks from the goblet... He starts to age -- fast!... His skin turns brown and leathery... BODY BREAKS INTO FLAMES, then SHATTERS AGAINST THE WALL. [13], [14]"
+    },
+    {
+        "question": "Who is Indy's father?",
+        "ground_truth": "Henry Jones, Sr.",
+        "context": "PROFESSOR Henry JONES, steps out of the shadows. HENRY Junior? ... HENRY That's his name. Henry Jones, Junior. [15], [1]"
+    },
+    {
+        "question": "Where is the Castle Brunwald located?",
+        "ground_truth": "On the Austrian-German border",
+        "context": "KAZIM Your father is being held in the Castle of Brunwald on the Austrian-German border. [16]"
+    },
+    {
+        "question": "Who sets the catacombs on fire?",
+        "ground_truth": "The Brotherhood of the Cruciform Sword",
+        "context": "PULL BACK TO REVEAL KAZIM Dropping the lighted match into the oil-slick water... This is followed by THOUSANDS OF RATS FLEEING... HUGE ORANGE BALL OF FIRE [17], [18]"
+    },
+    {
+        "question": "Where does Indy recover the crucifix from?",
+        "ground_truth": "The coast of Portugal",
+        "context": "FADE IN TITLE: \"PORTUGUESE COAST - 1938\"... Indy takes the cross back from Panama Hat. [19], [20]"
+    },
+    {
+        "question": "Who do Indy and Marcus meet when they arrive in Venice?",
+        "ground_truth": "Dr. Elsa Schneider",
+        "context": "EXT. VENICE - BOAT LANDING - DAY... Suddenly a WOMAN comes up to him... ELSA (introducing herself) Doctor Elsa Schneider. [21], [22], [23]"
+    },
+    {
+        "question": "Does Indy want to find the Holy Grail?",
+        "ground_truth": "No",
+        "context": "INDY I didn't come for the Cup of Christ. I came to find my father. [16]"
+    },
+    {
+        "question": "With whom does Indy travel to Venice?",
+        "ground_truth": "Marcus",
+        "context": "EXT. VENICE - BOAT LANDING - DAY Indy and Brody disembark from the Water Bus onto the Boat Landing [21]"
+    },
+    {
+        "question": "According to Henry's map, where does the route to the Grail start?",
+        "ground_truth": "Alexandretta",
+        "context": "INDY Alexandretta. (beat)... HENRY Alexandretta... of course... on the pilgrim trail from the Eastern Empire... INDY The Knights of the First Crusade laid siege to the city of Alexandretta [24], [25]"
+    },
+    {
+        "question": "Who are the Brotherhood of the Cruciform Sword?",
+        "ground_truth": "A secret society that protects the Holy Grail from people with evil intentions",
+        "context": "KAZIM The secret of the Grail has been safe for a thousand years. And for all that time the Brotherhood of the Cruciform Sword has been prepared to do anything to keep it safe. [26]"
+    },
+    {
+        "question": "What do Indy and Elsa find in the tomb of the First Crusade knight?",
+        "ground_truth": "An inscription revealing the location of the Holy Grail",
+        "context": "INDY This is it! We found it! Look -- the engraving on the shield. It's the same as on the Grail Tablets. The shield is the second marker! [27]"
+    },
+    {
+        "question": "What does Indy do with the crucifix when he recovers it?",
+        "ground_truth": "Donates it",
+        "context": "INDY You know how long I've been looking for that?! ... BRODY This will find a place of honor in our Spanish collection. [28]"
+    },
+    {
+        "question": "Which museum does Indy donate the crucifix to?",
+        "ground_truth": "Marcus Brody's museum",
+        "context": "BRODY Well done, Indy... This will find a place of honor in our Spanish collection. [28]"
+    },
+    {
+        "question": "What does Indy tell Kazim after he and Elsa capture him?",
+        "ground_truth": "He does not want the Grail, he just wants to find his father",
+        "context": "KAZIM Ask yourself, why do you seek the Cup of Christ? Is it for His glory, or for yours? INDY I didn't come for the Cup of Christ. I came to find my father. [16]"
+    },
+    {
+        "question": "What does Indy do after receiving his father's diary?",
+        "ground_truth": "Travels to Venice",
+        "context": "INDY Call Donovan, Marcus. Tell him I'll take that ticket to Venice now. [29]"
+    },
+    {
+        "question": "What do Indy and Elsa find beneath the library?",
+        "ground_truth": "A tomb",
+        "context": "INDY Don't you get it? The Tomb is somewhere in the library! ... Finally Indy breaks the tile... A TWO-FOOT SQUARE HOLE IS REVEALED. [30], [31]"
+    },
+    {
+        "question": "Where was Henry's diary sent from?",
+        "ground_truth": "Venice",
+        "context": "Indy immediately empties his pockets of his own mail taken earlier in the day from his college office and finds the envelope with the Venice postmark. INDY (as he tears it open) Venice, Italy!"
+    },
+    {
+        "question": "What does Marcus show to the group?",
+        "ground_truth": "A map that shows how to get to the Grail",
+        "context": "BRODY Your father would know. Your father did know. Look. He made a map. Brody picks up the Grail Diary... INSERT: A PENCIL-DRAWN MAP... BRODY Now, he knew there was a city with an oasis due east... Straight to the canyon."
+    },
+    {
+        "question": "What does Indy receive from his father?",
+        "ground_truth": "His diary",
+        "context": "Indy uncovers a small book. It looks like a JOURNAL or DIARY. ... INDY It's Dad's Grail Diary. ... Why would he have sent this to me?"
+    },
+    {
+        "question": "What message does the inscription Indy and Elsa find in the tomb contain?",
+        "ground_truth": "The location of the Holy Grail",
+        "context": "INDY This is it! We found it! Look -- the engraving on the shield. It's the same as on the Grail Tablets. The shield is the second marker! ... BRODY It's the name of a city. \"Alexandretta?\""
+    },
+    {
+        "question": "What does Kazim tell Indy about the whereabouts of his father?",
+        "ground_truth": "Indy's father is being held in Castle Brunwald",
+        "context": "KAZIM In that case, God be with you in your quest. Your father is being held in the Castle of Brunwald on the Austrian-German border."
+    },
+    {
+        "question": "Who informs Indy of his father's disappearance?",
+        "ground_truth": "Walter Donovan",
+        "context": "DONOVAN Our project leader has vanished. ... INDY You've got the wrong Jones, Mister Donovan. Why don't you try my father? DONOVAN (after a pause) We already have. Your father is the man who's disappeared."
+    },
+    {
+        "question": "When does Indy recover the crucifix?",
+        "ground_truth": "1938",
+        "context": "FADE IN TITLE: \"PORTUGUESE COAST - 1938\" ... Indy takes the cross back from Panama Hat."
+    },
+    {
+        "question": "What do Indy and Elsa do after the catacombs are set on fire?",
+        "ground_truth": "They escape the catacombs",
+        "context": "Indy pops back up through the water. INDY I think I've found a way out. Deep breath. Elsa groans. They take a deep breath and both dive under the water... Indy and Elsa climb out of the sewer"
+    },
+    {
+        "question": "Why does Indy travel to Venice after receiving his father's diary?",
+        "ground_truth": "He is worried his father is in trouble",
+        "context": "BRODY I've never seen you this concerned about him before. ... INDY I don't know. But whatever it is, he's in over his head! ... INDY Call Donovan, Marcus. Tell him I'll take that ticket to Venice now."
+    },
+    {
+        "question": "What happens after Indy and Elsa find the inscription in the tomb?",
+        "ground_truth": "The catacombs are set on fire",
+        "context": "INDY This is it! We found it! Look -- the engraving on the shield. ... PULL BACK TO REVEAL KAZIM Dropping the lighted match into the oil-slick water... HUGE ORANGE BALL OF FIRE"
+    },
+    {
+        "question": "Who do Indy and Elsa capture?",
+        "ground_truth": "Kazim",
+        "context": "Indy grabs Kazim just in time and jumps... into the motorboat... INDY Who are you? KAZIM My name is Kazim."
+    },
+    {
+        "question": "Who is Dr. Schneider?",
+        "ground_truth": "A colleague of Henry's",
+        "context": "DONOVAN Uh, we received a cable from his colleague, Doctor Schneider... ELSA (introducing herself) Doctor Elsa Schneider."
+    },
+    {
+        "question": "What was Indy's father doing when he disappeared?",
+        "ground_truth": "Searching for the Holy Grail",
+        "context": "DONOVAN ...We're about to complete a great quest that began almost two thousand years ago. ... Your father is the man who's disappeared. ... INDY It's Dad's Grail Diary... A complete record of his search for the Holy Grail."
+    },
+    {
+        "question": "Where was Henry last seen?",
+        "ground_truth": "At a library",
+        "context": "ELSA The last time I saw your father we were in the library. He was very close to tracking down the Knight's Tomb."
+    },
+    {
+        "question": "Who is Marcus with in Turkey when he is captured?",
+        "ground_truth": "Sallah",
+        "context": "Sallah shoulders his way through the mob toward Brody. ... Sallah and Brody begin to run. ... Sallah runs after the Truck until he reaches a wall... as the Truck drives away with Brody inside."
+    },
+    {
+        "question": "What does Indy discover about Elsa and Walter?",
+        "ground_truth": "The both are actually working with the Nazis",
+        "context": "INT. FIRST CASTLE ROOM - DAY ... only to find: A NAZI COLONEL HOLDING ELSA HOSTAGE. ... Her hand slips into his coat pocket and removes the Grail Diary. ... MAN IN CHAIR ...revealing himself to be... Walter Donovan. ... DONOVAN (reading) \"By the personal command of the Fuhrer...\""
+    },
+    {
+        "question": "Why is the airforce attacking Indy and Henry?",
+        "ground_truth": "Henry's accidentally shooting the plane's tail off",
+        "context": "Henry swings the gun around, inadvertently CUTTING HIS OWN REAR STABILIZER IN HALF. INDY Dad, are we hit?! HENRY More or less. (pause) Son, I'm sorry. They got us. The plane begins to go down."
+    },
+    {
+        "question": "What happen after Indy and Henry board the biplane?",
+        "ground_truth": "They crash while engaging in a dogfight with the Luftwaffe",
+        "context": "TWO MESSERSCHMIDT FIGHTER BOMBERS streak out of the clouds and race across the sky. ... The wheels of the plane touch down. OUT OF CONTROL, the PLANE SKIDS and CRASHES"
+    },
+    {
+        "question": "Why are Elsa and Walter helping Indy?",
+        "ground_truth": "using him to find the Grail for them",
+        "context": "DONOVAN Step back now, Doctor Schneider. Give Doctor Jones some room. He's going to recover the Grail for us. ... The Grail is mine, and you're going to get it for me."
+    },
+    {
+        "question": "What happens to Marcus in Turkey?",
+        "ground_truth": "Marcus is captured in Hatay, Turkey",
+        "context": "SALLAH (to Brody; pointing) Okay, okay, quick, quick, quick! Hide in that door! ... Then -- METAL DOORS ARE SLAMMED behind Brody and we realize that he has actually run into the back of a Nazi TROOP TRUCK."
+    },
+    {
+        "question": "How do Indy and Henry escape from Germany?",
+        "ground_truth": "They board a Zeppelin to leave Germany",
+        "context": "INDY I don't know. The first available flight out of Germany. ... MOORED ZEPPELIN Ten stories tall... Indy and Henry show their papers to the Boarding Guards, then join the line of passengers"
+    },
+    {
+        "question": "Do Indy and Henry meet Hitler?",
+        "ground_truth": "Yes, they met an accidental face to face encounter with Adolf Hitler",
+        "context": "They move off and almost run headlong into Hitler and his entire entourage coming down from the Podium. ... Hitler looks Indy's way. They make eye contact."
+    },
+    {
+        "question": "Who autographs Henry's diary?",
+        "ground_truth": "Adolf Hitler",
+        "context": "Hitler breaks the spell by taking the Grail Diary from him, opens it to the first page and signs his autograph. He hands it back and moves on."
+    },
+    {
+        "question": "What is Marcus doing in Turkey when he is captured?",
+        "ground_truth": "Marcus is captured in Turkey while waiting with Sallah for the Joneses",
+        "context": "SALLAH Marcus Brody, sir. And where is Indy? ... Sallah shoulders his way through the mob toward Brody... SALLAH (to Brody; pointing) Okay, okay, quick, quick, quick! Hide in that door! ... METAL DOORS ARE SLAMMED behind Brody and we realize that he has actually run into the back of a Nazi TROOP TRUCK."
+    },
+    {
+        "question": "What happens at Castle Brunwald?",
+        "ground_truth": "Indy rescues Henry",
+        "context": "Indy CRASHES THROUGH SHUTTERS AND GLASS into the room... and Indy's father, PROFESSOR Henry JONES, steps out of the shadows... INDY I came to get you! What do you think?"
+    },
+    {
+        "question": "What do Indy and Henry do after the aircraft they are travelling in turn around?",
+        "ground_truth": "Joneses escape in a parasite biplane and Henry redeems himself on the ground.",
+        "context": "INDY They're turning around. They're taking us back to Germany... We also see a small BI-PLANE... Indy climbs into the cockpit of the Biplane as Henry takes the tail gunner's seat."
+    },
+    {
+        "question": "How do Henry and Indy get away from the airforce?",
+        "ground_truth": "By alarming a flock of birds to take flight in front of the Luftwaffe fighter causing the pilot to crash.",
+        "context": "Henry suddenly spins around and runs screaming and shouting into A FLOCK OF SEA GULLS... The SEA GULLS take to the wing in flight... THE MESSERSCHMIDT AND THE SEA GULLS Meet in midair... Sea gulls are shredded... CLOGS THE ENGINE... The Messerschmidt falls from the skies and EXPLODES"
+    }
+]
