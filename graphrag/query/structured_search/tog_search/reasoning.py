@@ -31,6 +31,7 @@ class ToGReasoning:
         self,
         query: str,
         exploration_paths: List[ExplorationNode],
+        conversation_history_context: str = "",
     ) -> Tuple[str, List[str], ReasoningMetrics]:
         """
         Generate final answer from exploration paths.
@@ -57,11 +58,12 @@ class ToGReasoning:
             else:
                 prompt_template = self.reasoning_prompt
 
-            prompt = prompt_template.format(query=query, exploration_paths=paths_text)
+            history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
+            prompt = history_prefix + prompt_template.format(query=query, exploration_paths=paths_text)
         except KeyError as e:
             # Fallback if prompt has different placeholders
-            prompt = f"""
-You are an expert at synthesizing information from knowledge graph exploration to answer questions.
+            history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
+            prompt = f"""{history_prefix}You are an expert at synthesizing information from knowledge graph exploration to answer questions.
 
 Question: {query}
 
@@ -232,6 +234,7 @@ Structure your response as:
         self,
         query: str,
         current_nodes: List[ExplorationNode],
+        conversation_history_context: str = "",
     ) -> Tuple[bool, str | None, ReasoningMetrics]:
         """
         Check if exploration can terminate early with an answer.
@@ -241,7 +244,8 @@ Structure your response as:
 
         paths_text = self._format_paths(current_nodes[:3])  # Check top 3 paths
 
-        prompt = f"""Question: {query}
+        history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
+        prompt = f"""{history_prefix}Question: {query}
 
 Current exploration paths:
 {paths_text}
