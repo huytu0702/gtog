@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from .enums import IndexStatus, SearchMethod
@@ -133,11 +133,36 @@ class SearchResponse(BaseModel):
     method: SearchMethod
 
 
+class ConversationTurn(BaseModel):
+    """A single turn in a conversation."""
+
+    role: Literal["user", "assistant"]
+    content: str
+    rewritten_query: str | None = None  # user turns only
+    method_used: str | None = None      # user turns only
+
+
+class SummarizeRequest(BaseModel):
+    """Request model for conversation summarization."""
+
+    conversation_history: list[ConversationTurn]
+    existing_summary: str | None = None
+
+
+class SummarizeResponse(BaseModel):
+    """Response model for conversation summarization."""
+
+    summary: str
+    trimmed_history: list[ConversationTurn]
+
+
 class AgentSearchRequest(BaseModel):
     """Request model for agent-routed search."""
 
     query: str = Field(..., min_length=1, max_length=1000)
     stream: bool = True
+    conversation_history: list[ConversationTurn] = Field(default_factory=list)
+    conversation_summary: str | None = None
 
 
 class WebSearchRequest(BaseModel):
@@ -152,6 +177,7 @@ class AgentSearchResponse(BaseModel):
 
     method_used: str
     router_reasoning: str
+    rewritten_query: str | None = None
     response: str
     sources: list = Field(default_factory=list)
 
