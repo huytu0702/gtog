@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -11,10 +11,13 @@ from litellm import acompletion
 from litellm.exceptions import RateLimitError
 
 from ..config import settings
+from ..models.schemas import ConversationTurn
 
 logger = logging.getLogger(__name__)
 
 SearchMethodType = Literal["local", "global", "tog", "drift", "web"]
+
+RECENT_TURNS_IN_PROMPT = 3   # user turns to include in prompt (after summary)
 
 
 @dataclass
@@ -24,6 +27,7 @@ class RouteDecision:
     method: SearchMethodType
     confidence: float
     reasoning: str
+    rewritten_query: str = field(default="")
 
 
 class RouterAgent:
@@ -44,10 +48,62 @@ class RouterAgent:
 
     def _default_prompt(self) -> str:
         """Return default prompt if file not found."""
-        return """Analyze the query and return JSON with method, confidence, reasoning.
+        return """Analyze the query and return JSON with rewritten_query, method, confidence, reasoning.
 Methods: local, global, tog, drift, web
 Query: {query}
-Collection: {collection_context}"""
+Collection: {collection_context}
+{conversation_history_block}"""
+
+    def _format_history_block(
+        self,
+        conversation_history: list[ConversationTurn],
+        conversation_summary: str | None,
+    ) -> str:
+        """Format summary + recent turns into a single prompt block."""
+        if not conversation_history and not conversation_summary:
+            return ""
+
+        sections = []
+
+        if conversation_summary:
+            sections.append(
+                f"Past conversation summary:\n{conversation_summary}"
+            )
+
+        if conversation_history:
+            # Keep last RECENT_TURNS_IN_PROMPT user turns + their assistant pairs
+            user_count = 0
+            cutoff = 0
+            for i in range(len(conversation_history) - 1, -1, -1):
+                if conversation_history[i].role == "user":
+                    user_count += 1
+                    if user_count == RECENT_TURNS_IN_PROMPT:
+                        cutoff = i
+                        break
+
+            recent = conversation_history[cutoff:]
+            label = "Recent conversation (most recent last):" if conversation_summary else "Conversation history (most recent last):"
+            lines = [label]
+
+            for turn in recent:
+                try:
+                    if turn.role == "user":
+                        meta = ""
+                        if turn.rewritten_query:
+                            meta += f'  →  rewritten: "{turn.rewritten_query}"'
+                        if turn.method_used:
+                            meta += f"  →  method: {turn.method_used}"
+                        lines.append(f"[User] {turn.content}{meta}")
+                    else:
+                        content = turn.content[:300] + "..." if len(turn.content) > 300 else turn.content
+                        lines.append(f"[Assistant] {content}")
+                except Exception:
+                    logger.warning("Skipping malformed conversation turn")
+                    continue
+
+            sections.append("\n".join(lines))
+
+        return "\n\n".join(sections)
 
     async def _call_llm(self, prompt: str):
         """Call LLM API using litellm with exponential backoff on rate limits."""
@@ -89,20 +145,34 @@ Collection: {collection_context}"""
                     )
                 raise
 
-    async def route(self, query: str, collection_context: str = "") -> RouteDecision:
+    async def route(
+        self,
+        query: str,
+        collection_context: str = "",
+        conversation_history: list[ConversationTurn] | None = None,
+        conversation_summary: str | None = None,
+    ) -> RouteDecision:
         """
         Analyze query and determine optimal search method.
 
         Args:
             query: The user's search query
             collection_context: Description of the collection's content
+            conversation_history: Recent conversation turns
+            conversation_summary: Compressed summary of earlier turns
 
         Returns:
-            RouteDecision with method, confidence, and reasoning
+            RouteDecision with method, confidence, reasoning, and rewritten_query
         """
+        history_block = self._format_history_block(
+            conversation_history or [],
+            conversation_summary,
+        )
+
         prompt = self.prompt_template.format(
             query=query,
             collection_context=collection_context or "No collection context available",
+            conversation_history_block=history_block,
         )
 
         try:
@@ -118,6 +188,7 @@ Collection: {collection_context}"""
                     method="local",
                     confidence=0.3,
                     reasoning="Default to LOCAL - empty LLM response",
+                    rewritten_query=query,
                 )
 
             # Try to extract JSON if wrapped in markdown code blocks
@@ -136,10 +207,13 @@ Collection: {collection_context}"""
                 logger.warning(f"Invalid method '{method}' returned, defaulting to 'local'")
                 method = "local"
 
+            rewritten_query = decision.get("rewritten_query") or query
+
             return RouteDecision(
                 method=method,
                 confidence=float(decision.get("confidence", 0.5)),
                 reasoning=decision.get("reasoning", "No reasoning provided"),
+                rewritten_query=rewritten_query,
             )
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -148,6 +222,7 @@ Collection: {collection_context}"""
                 method="local",
                 confidence=0.5,
                 reasoning=f"Default to LOCAL due to parse error: {e}",
+                rewritten_query=query,
             )
         except Exception as e:
             logger.error(f"Router agent error: {e}", exc_info=True)
@@ -155,6 +230,7 @@ Collection: {collection_context}"""
                 method="local",
                 confidence=0.3,
                 reasoning=f"Default to LOCAL due to error: {e}",
+                rewritten_query=query,
             )
 
 

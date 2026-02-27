@@ -10,19 +10,24 @@ Available search methods:
 Collection context:
 {collection_context}
 
-User query: {query}
+{conversation_history_block}
+
+Current query: {query}
 
 YOU MUST respond with ONLY a valid JSON object (no markdown, no code blocks, no explanations):
 {{
+  "rewritten_query": "Standalone version of the query with all pronouns and implicit references resolved. If the query is already standalone, repeat it unchanged.",
   "method": "local|global|tog|drift|web",
   "confidence": 0.0-1.0,
   "reasoning": "Brief explanation of why this method was chosen"
 }}
 
-Important:
+Rules:
+- If history or summary is present, resolve pronouns and implicit references in rewritten_query (e.g. "it", "he", "she", "they", "that film", "his work").
 - If the query asks about current events, news, or real-time information, choose WEB.
 - If the query asks about relationships or connections between concepts, choose TOG.
 - If the query asks for broad overviews or trends across many topics, choose GLOBAL.
 - If the query asks about specific entities or focused topics, choose LOCAL.
 - Use DRIFT only when LOCAL might miss important related context.
 - Default to LOCAL if uncertain between LOCAL and other methods.
+- Consider method_used values in history — prefer consistency unless the query type clearly differs.
