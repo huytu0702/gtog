@@ -14,8 +14,10 @@ from ..models import (
     AgentSearchRequest,
     AgentSearchResponse,
     WebSearchRequest,
+    SummarizeRequest,
+    SummarizeResponse,
 )
-from ..services import query_service, router_agent, web_search_service
+from ..services import query_service, router_agent, web_search_service, summarization_service
 
 logger = logging.getLogger(__name__)
 
@@ -146,60 +148,86 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         )
 
 
+@router.post("/agent/summarize", response_model=SummarizeResponse)
+async def summarize_conversation(collection_id: str, request: SummarizeRequest):
+    """
+    Compress conversation history into a summary.
+
+    Call this when conversation_history exceeds your threshold (e.g. 6 turns).
+    Returns a new summary and trimmed recent history to carry forward.
+    """
+    try:
+        summary = await summarization_service.summarize(
+            conversation_history=request.conversation_history,
+            existing_summary=request.existing_summary,
+        )
+        trimmed = summarization_service.get_trimmed_history(request.conversation_history)
+        return SummarizeResponse(summary=summary, trimmed_history=trimmed)
+    except Exception as e:
+        logger.exception("Error summarizing conversation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
 @router.post("/agent", response_model=AgentSearchResponse)
 async def agent_search(collection_id: str, request: AgentSearchRequest):
     """
     Perform an agent-routed search.
 
-    The router agent analyzes the query and selects the optimal search method.
+    Supports multi-turn conversations via conversation_history and conversation_summary.
+    The router rewrites the query and selects the search method in a single LLM call.
     """
     try:
-        # Get collection context (simplified - just use collection_id for now)
         collection_context = f"Collection: {collection_id}"
 
-        # Route the query
-        route_decision = await router_agent.route(request.query, collection_context)
+        route_decision = await router_agent.route(
+            request.query,
+            collection_context,
+            conversation_history=request.conversation_history or None,
+            conversation_summary=request.conversation_summary,
+        )
         logger.info(
-            f"Router decision: {route_decision.method} (confidence: {route_decision.confidence})"
+            f"Router decision: {route_decision.method} "
+            f"(confidence: {route_decision.confidence}) "
+            f"rewritten: '{route_decision.rewritten_query}'"
         )
 
-        # Execute the appropriate search
+        search_query = route_decision.rewritten_query or request.query
+
         if route_decision.method == "web":
             from ..services import web_search_service
 
-            result = await web_search_service.search(request.query)
+            result = await web_search_service.search(search_query)
             return AgentSearchResponse(
                 method_used="web",
                 router_reasoning=route_decision.reasoning,
+                rewritten_query=route_decision.rewritten_query,
                 response=result.response,
                 sources=[s.model_dump() for s in result.sources],
             )
 
-        # For GraphRAG methods, call the appropriate service
         if route_decision.method == "global":
             result = await query_service.global_search(
-                collection_id=collection_id,
-                query=request.query,
+                collection_id=collection_id, query=search_query
             )
         elif route_decision.method == "tog":
             result = await query_service.tog_search(
-                collection_id=collection_id,
-                query=request.query,
+                collection_id=collection_id, query=search_query
             )
         elif route_decision.method == "drift":
             result = await query_service.drift_search(
-                collection_id=collection_id,
-                query=request.query,
+                collection_id=collection_id, query=search_query
             )
-        else:  # default to local
+        else:
             result = await query_service.local_search(
-                collection_id=collection_id,
-                query=request.query,
+                collection_id=collection_id, query=search_query
             )
 
         return AgentSearchResponse(
             method_used=route_decision.method,
             router_reasoning=route_decision.reasoning,
+            rewritten_query=route_decision.rewritten_query,
             response=result.response,
             sources=[],
         )
@@ -260,7 +288,12 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
 
             # Route the query
             collection_context = f"Collection: {collection_id}"
-            route_decision = await router_agent.route(request.query, collection_context)
+            route_decision = await router_agent.route(
+                request.query,
+                collection_context,
+                conversation_history=request.conversation_history or None,
+                conversation_summary=request.conversation_summary,
+            )
 
             # Send routed status
             yield {
@@ -268,6 +301,7 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
                 "data": json.dumps({
                     "step": "routed",
                     "method": route_decision.method,
+                    "rewritten_query": route_decision.rewritten_query,
                     "message": f"Using {route_decision.method.upper()} search",
                 }),
             }
@@ -278,28 +312,30 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
                 "data": json.dumps({"step": "searching", "message": "Searching..."}),
             }
 
+            search_query = route_decision.rewritten_query or request.query
+
             # Execute search
             if route_decision.method == "web":
-                async for chunk in web_search_service.search_streaming(request.query):
+                async for chunk in web_search_service.search_streaming(search_query):
                     yield {"event": "content", "data": json.dumps({"delta": chunk})}
                 sources = []
             else:
                 # For GraphRAG methods, get full response (non-streaming for now)
                 if route_decision.method == "global":
                     result = await query_service.global_search(
-                        collection_id, request.query
+                        collection_id, search_query
                     )
                 elif route_decision.method == "tog":
                     result = await query_service.tog_search(
-                        collection_id, request.query
+                        collection_id, search_query
                     )
                 elif route_decision.method == "drift":
                     result = await query_service.drift_search(
-                        collection_id, request.query
+                        collection_id, search_query
                     )
                 else:
                     result = await query_service.local_search(
-                        collection_id, request.query
+                        collection_id, search_query
                     )
 
                 # Stream the response in chunks
@@ -318,6 +354,7 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
                 "event": "done",
                 "data": json.dumps({
                     "method_used": route_decision.method,
+                    "rewritten_query": route_decision.rewritten_query,
                     "sources": sources,
                     "router_reasoning": route_decision.reasoning,
                 }),
