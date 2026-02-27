@@ -66,7 +66,7 @@ async def test_tog_search_returns_search_result():
 
     # Mock the explorer methods
     search.explorer.find_starting_entities = MagicMock(return_value=["e1"])
-    search.explorer.get_entity_info = MagicMock(return_value=("Entity1", "Description1"))
+    search.explorer.get_full_entity_info = MagicMock(return_value=("e1", "Entity1", "Description1"))
     search.explorer.get_relations = MagicMock(return_value=[
         ("relates to", "e2", "OUTGOING", 1.0)
     ])
