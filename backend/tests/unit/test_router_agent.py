@@ -28,7 +28,7 @@ class TestRouterAgent:
         mock_response.choices = [MagicMock()]
         mock_response.choices[
             0
-        ].message.content = '{"method": "local", "confidence": 0.85, "reasoning": "Query asks about specific entity"}'
+        ].message.content = '{"rewritten_query": "What is chamomile used for?", "method": "local", "confidence": 0.85, "reasoning": "Query asks about specific entity"}'
 
         with patch.object(
             router_agent, "_call_llm", new_callable=AsyncMock
@@ -71,7 +71,7 @@ class TestRouterAgent:
         mock_response.choices = [MagicMock()]
         mock_response.choices[
             0
-        ].message.content = '{"method": "web", "confidence": 0.92, "reasoning": "Query asks about current FDA regulations"}'
+        ].message.content = '{"rewritten_query": "What are the latest FDA regulations?", "method": "web", "confidence": 0.92, "reasoning": "Query asks about current FDA regulations"}'
 
         with patch.object(
             router_agent, "_call_llm", new_callable=AsyncMock

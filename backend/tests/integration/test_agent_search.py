@@ -24,6 +24,7 @@ class TestAgentSearchIntegration:
         mock_route.method = "web"
         mock_route.confidence = 0.9
         mock_route.reasoning = "External information needed"
+        mock_route.rewritten_query = "What are the latest FDA regulations?"
 
         mock_web_result = MagicMock()
         mock_web_result.response = "The FDA regulations..."
