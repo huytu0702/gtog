@@ -20,11 +20,12 @@ def _blob_client():
     if not conn_str:
         return None
     from azure.storage.blob import BlobServiceClient
+
     return BlobServiceClient.from_connection_string(conn_str)
 
 
 def _collection_container(collection_id: str) -> str:
-    """Azure Blob container name for a collection's output."""
+    """Azure Blob container name for a collection's data."""
     return f"col-{collection_id}"
 
 
@@ -33,8 +34,7 @@ def _ensure_blob_container(collection_id: str) -> None:
     client = _blob_client()
     if client is None:
         return
-    container_name = _collection_container(collection_id)
-    container = client.get_container_client(container_name)
+    container = client.get_container_client(_collection_container(collection_id))
     if not container.exists():
         container.create_container()
 
@@ -45,8 +45,7 @@ def _blob_file_exists(collection_id: str, blob_path: str) -> bool:
     if client is None:
         return False
     container = client.get_container_client(_collection_container(collection_id))
-    blob = container.get_blob_client(blob_path)
-    return blob.exists()
+    return container.get_blob_client(blob_path).exists()
 
 
 def read_parquet_from_blob(collection_id: str, blob_path: str) -> pd.DataFrame:
@@ -57,6 +56,55 @@ def read_parquet_from_blob(collection_id: str, blob_path: str) -> pd.DataFrame:
     container = client.get_container_client(_collection_container(collection_id))
     data = container.get_blob_client(blob_path).download_blob().readall()
     return pd.read_parquet(io.BytesIO(data))
+
+
+def _ensure_shared_prompt_files(prompt_dir: Path) -> None:
+    """Ensure one shared GraphRAG prompt folder exists in backend/prompts."""
+    from graphrag.prompts.index.community_report import COMMUNITY_REPORT_PROMPT
+    from graphrag.prompts.index.community_report_text_units import COMMUNITY_REPORT_TEXT_PROMPT
+    from graphrag.prompts.index.extract_claims import EXTRACT_CLAIMS_PROMPT
+    from graphrag.prompts.index.extract_graph import GRAPH_EXTRACTION_PROMPT
+    from graphrag.prompts.index.summarize_descriptions import SUMMARIZE_PROMPT
+    from graphrag.prompts.query.basic_search_system_prompt import BASIC_SEARCH_SYSTEM_PROMPT
+    from graphrag.prompts.query.drift_search_system_prompt import (
+        DRIFT_LOCAL_SYSTEM_PROMPT,
+        DRIFT_REDUCE_PROMPT,
+    )
+    from graphrag.prompts.query.global_search_knowledge_system_prompt import (
+        GENERAL_KNOWLEDGE_INSTRUCTION,
+    )
+    from graphrag.prompts.query.global_search_map_system_prompt import MAP_SYSTEM_PROMPT
+    from graphrag.prompts.query.global_search_reduce_system_prompt import REDUCE_SYSTEM_PROMPT
+    from graphrag.prompts.query.local_search_system_prompt import LOCAL_SEARCH_SYSTEM_PROMPT
+    from graphrag.prompts.query.question_gen_system_prompt import QUESTION_SYSTEM_PROMPT
+    from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
+    from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
+    from graphrag.prompts.query.tog_relation_scoring_prompt import TOG_RELATION_SCORING_PROMPT
+
+    defaults = {
+        "extract_graph.txt": GRAPH_EXTRACTION_PROMPT,
+        "summarize_descriptions.txt": SUMMARIZE_PROMPT,
+        "extract_claims.txt": EXTRACT_CLAIMS_PROMPT,
+        "community_report_graph.txt": COMMUNITY_REPORT_PROMPT,
+        "community_report_text.txt": COMMUNITY_REPORT_TEXT_PROMPT,
+        "local_search_system_prompt.txt": LOCAL_SEARCH_SYSTEM_PROMPT,
+        "global_search_map_system_prompt.txt": MAP_SYSTEM_PROMPT,
+        "global_search_reduce_system_prompt.txt": REDUCE_SYSTEM_PROMPT,
+        "global_search_knowledge_system_prompt.txt": GENERAL_KNOWLEDGE_INSTRUCTION,
+        "drift_search_system_prompt.txt": DRIFT_LOCAL_SYSTEM_PROMPT,
+        "drift_search_reduce_prompt.txt": DRIFT_REDUCE_PROMPT,
+        "basic_search_system_prompt.txt": BASIC_SEARCH_SYSTEM_PROMPT,
+        "question_gen_system_prompt.txt": QUESTION_SYSTEM_PROMPT,
+        "tog_relation_scoring_prompt.txt": TOG_RELATION_SCORING_PROMPT,
+        "tog_entity_scoring_prompt.txt": TOG_ENTITY_SCORING_PROMPT,
+        "tog_reasoning_prompt.txt": TOG_REASONING_PROMPT,
+    }
+
+    prompt_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in defaults.items():
+        file_path = prompt_dir / filename
+        if not file_path.exists():
+            file_path.write_text(content, encoding="utf-8")
 
 
 def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
@@ -75,7 +123,6 @@ def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
         raw_model = (model_cfg.model or "").strip()
         raw_provider = (model_cfg.model_provider or "").strip()
 
-        # Provider aliases to canonical provider names.
         if raw_provider in provider_aliases:
             canonical_provider = provider_aliases[raw_provider]
             model_cfg.model_provider = canonical_provider
@@ -86,7 +133,6 @@ def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
                 canonical_provider,
             )
 
-        # Split provider-prefixed model names into separate provider/model fields.
         if "/" in raw_model:
             prefix, normalized_model = raw_model.split("/", 1)
             prefix = prefix.strip()
@@ -106,26 +152,17 @@ def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
 
 def load_graphrag_config(collection_id: str) -> GraphRagConfig:
     """
-    Load shared GraphRAG configuration and override collection-specific paths.
-
-    Args:
-        collection_id: The collection identifier
-
-    Returns:
-        GraphRagConfig with collection-specific path overrides
+    Load shared GraphRAG configuration with collection-specific storage overrides.
+    All collections use one shared prompt folder at backend/prompts.
     """
     use_blob = bool(settings.azure_storage_connection_string)
+    shared_root = settings.settings_yaml_path.parent.resolve()
+    _ensure_shared_prompt_files(shared_root / "prompts")
 
     if use_blob:
         _ensure_blob_container(collection_id)
         container_name = _collection_container(collection_id)
         conn_str = settings.azure_storage_connection_string
-        # Use a temp local dir as graphrag root (for prompts/settings resolution only)
-        storage_root = settings.collections_dir.resolve()
-        collection_dir = storage_root / collection_id
-        collection_dir.mkdir(parents=True, exist_ok=True)
-        (collection_dir / "input").mkdir(exist_ok=True)
-
         cli_overrides = {
             "input.storage.type": "blob",
             "input.storage.connection_string": conn_str,
@@ -150,6 +187,9 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
         storage_root = settings.collections_dir.resolve()
         collection_dir = storage_root / collection_id
         collection_dir.mkdir(parents=True, exist_ok=True)
+        (collection_dir / "input").mkdir(parents=True, exist_ok=True)
+        (collection_dir / "output").mkdir(parents=True, exist_ok=True)
+        (collection_dir / "cache").mkdir(parents=True, exist_ok=True)
         cli_overrides = {
             "input.storage.type": "file",
             "input.storage.base_dir": str(collection_dir / "input"),
@@ -161,29 +201,19 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
         }
 
     config = load_config(
-        root_dir=str(collection_dir),
+        root_dir=str(shared_root),
         config_filepath=settings.settings_yaml_path,
         cli_overrides=cli_overrides,
     )
 
     _normalize_litellm_model_config(config)
-
     return config
 
 
 def validate_collection_indexed(
     collection_id: str, method: Optional[str] = None
 ) -> Tuple[bool, Optional[str]]:
-    """
-    Check if a collection has been successfully indexed.
-
-    Args:
-        collection_id: The collection identifier
-        method: Optional search method for method-specific validation
-
-    Returns:
-        Tuple of (is_indexed, error_message)
-    """
+    """Check if a collection has been successfully indexed."""
     use_blob = bool(settings.azure_storage_connection_string)
 
     required_files = [
@@ -199,29 +229,19 @@ def validate_collection_indexed(
             if not _blob_file_exists(collection_id, f"output/{fname}"):
                 return False, f"Collection has not been indexed yet (missing {fname} in blob)"
         return True, None
-    else:
-        collection_dir = settings.collections_dir / collection_id
-        output_dir = collection_dir / "output"
-        if not output_dir.exists():
-            return False, "Collection has not been indexed yet"
-        missing = [f for f in required_files if not (output_dir / f).exists()]
-        if missing:
-            return False, f"Missing indexed files: {', '.join(missing)}"
-        return True, None
+
+    collection_dir = settings.collections_dir / collection_id
+    output_dir = collection_dir / "output"
+    if not output_dir.exists():
+        return False, "Collection has not been indexed yet"
+    missing = [f for f in required_files if not (output_dir / f).exists()]
+    if missing:
+        return False, f"Missing indexed files: {', '.join(missing)}"
+    return True, None
 
 
 def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
-    """
-    Get paths to required parquet files for a search method.
-    When Azure blob is configured, downloads parquets to a local cache dir first.
-
-    Args:
-        collection_id: The collection identifier
-        method: The search method (global, local, tog, drift)
-
-    Returns:
-        Dictionary of data file paths (always local paths for pandas compatibility)
-    """
+    """Get logical parquet paths for a search method."""
     use_blob = bool(settings.azure_storage_connection_string)
 
     file_names = {
@@ -234,85 +254,50 @@ def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
         file_names["relationships"] = "relationships.parquet"
 
     if use_blob:
-        # Download from blob to local cache dir
-        cache_dir = settings.collections_dir / collection_id / "output"
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        paths = {key: Path(fname) for key, fname in file_names.items()}
 
-        client = _blob_client()
-        container = client.get_container_client(_collection_container(collection_id))
-
-        paths = {}
-        for key, fname in file_names.items():
-            local_path = cache_dir / fname
-            if not local_path.exists():
-                logger.info("Downloading %s from blob for collection %s", fname, collection_id)
-                data = container.get_blob_client(f"output/{fname}").download_blob().readall()
-                local_path.write_bytes(data)
-            paths[key] = local_path
-
-        if method == "local":
-            cov_blob = f"output/covariates.parquet"
-            cov_local = cache_dir / "covariates.parquet"
-            if not cov_local.exists() and _blob_file_exists(collection_id, cov_blob):
-                data = container.get_blob_client(cov_blob).download_blob().readall()
-                cov_local.write_bytes(data)
-            if cov_local.exists():
-                paths["covariates"] = cov_local
+        if method == "local" and _blob_file_exists(collection_id, "output/covariates.parquet"):
+            paths["covariates"] = Path("covariates.parquet")
 
         if method == "tog":
-            missing = [k for k in ["entities", "relationships"] if not paths.get(k, Path("x")).exists()]
+            missing = [
+                name
+                for name in ["entities.parquet", "relationships.parquet"]
+                if not _blob_file_exists(collection_id, f"output/{name}")
+            ]
             if missing:
-                raise FileNotFoundError(f"ToG search requires missing files: {', '.join(missing)}")
-    else:
-        output_dir = settings.collections_dir / collection_id / "output"
-        paths = {key: output_dir / fname for key, fname in file_names.items()}
+                raise FileNotFoundError(
+                    f"ToG search requires missing files: {', '.join(missing)}"
+                )
+        return paths
 
-        if method == "local":
-            cov = output_dir / "covariates.parquet"
-            if cov.exists():
-                paths["covariates"] = cov
+    output_dir = settings.collections_dir / collection_id / "output"
+    paths = {key: output_dir / fname for key, fname in file_names.items()}
 
-        if method == "tog":
-            missing = [f for f in ["entities.parquet", "relationships.parquet"] if not (output_dir / f).exists()]
-            if missing:
-                raise FileNotFoundError(f"ToG search requires missing files: {', '.join(missing)}")
+    if method == "local":
+        cov = output_dir / "covariates.parquet"
+        if cov.exists():
+            paths["covariates"] = cov
+
+    if method == "tog":
+        missing = [
+            f
+            for f in ["entities.parquet", "relationships.parquet"]
+            if not (output_dir / f).exists()
+        ]
+        if missing:
+            raise FileNotFoundError(f"ToG search requires missing files: {', '.join(missing)}")
 
     return paths
 
 
 def get_collection_info(collection_id: str) -> Optional[Dict]:
-    """
-    Get basic information about a collection.
-
-    Args:
-        collection_id: The collection identifier
-
-    Returns:
-        Dictionary with collection info or None if not found
-    """
-    collection_dir = settings.collections_dir / collection_id
-
-    if not collection_dir.exists():
-        return None
-
-    input_dir = collection_dir / "input"
-    output_dir = collection_dir / "output"
-
-    # Count documents
-    document_count = 0
-    if input_dir.exists():
-        document_count = len([f for f in input_dir.iterdir() if f.is_file()])
-
-    # Check if indexed
+    """Deprecated helper retained for compatibility."""
     is_indexed, _ = validate_collection_indexed(collection_id)
-
-    # Get creation time
-    created_at = collection_dir.stat().st_ctime
-
     return {
         "id": collection_id,
         "name": collection_id,
-        "document_count": document_count,
+        "document_count": 0,
         "indexed": is_indexed,
-        "created_at": created_at,
+        "created_at": None,
     }

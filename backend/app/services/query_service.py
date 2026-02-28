@@ -2,6 +2,8 @@
 
 import logging
 import re
+import io
+from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
@@ -14,32 +16,29 @@ from ..utils import (
     validate_collection_indexed,
     get_search_data_paths,
 )
+from ..utils.helpers import _blob_client, _collection_container
 
 logger = logging.getLogger(__name__)
 
 _LOG_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 
 
-def _get_query_file_handler(collection_id: str) -> logging.FileHandler:
-    """Return a FileHandler writing to the collection's query.log."""
-    log_dir = settings.collections_dir / collection_id / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    handler = logging.FileHandler(str(log_dir / "query.log"), mode="a")
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    return handler
+def _attach_query_log(collection_id: str):
+    """No-op query logger in cloud mode (avoid local file writes)."""
+    return None
 
 
-def _attach_query_log(collection_id: str) -> logging.FileHandler:
-    """Attach a query.log FileHandler to the app logger for this request."""
-    handler = _get_query_file_handler(collection_id)
-    logger.addHandler(handler)
-    return handler
+def _detach_query_log(handler) -> None:
+    """No-op query logger in cloud mode."""
+    return None
 
 
-def _detach_query_log(handler: logging.FileHandler) -> None:
-    """Remove and close the per-request query.log handler."""
-    logger.removeHandler(handler)
-    handler.close()
+def _blob_parquet(collection_id: str, relative_path: Path) -> pd.DataFrame:
+    """Read parquet from collection blob output/<relative_path> via authenticated download."""
+    client = _blob_client()
+    container = client.get_container_client(_collection_container(collection_id))
+    data = container.get_blob_client(f"output/{relative_path.as_posix()}").download_blob().readall()
+    return pd.read_parquet(io.BytesIO(data))
 
 # Column name mappings: what to use as the "name" and "description" per dataset
 _CONTEXT_COLS: dict[str, tuple[str, str]] = {
@@ -138,9 +137,14 @@ class QueryService:
         data_paths = get_search_data_paths(collection_id, "global")
 
         # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        communities = pd.read_parquet(data_paths["communities"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
+        if settings.azure_storage_connection_string:
+            entities = _blob_parquet(collection_id, data_paths["entities"])
+            communities = _blob_parquet(collection_id, data_paths["communities"])
+            community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+        else:
+            entities = pd.read_parquet(data_paths["entities"])
+            communities = pd.read_parquet(data_paths["communities"])
+            community_reports = pd.read_parquet(data_paths["community_reports"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -198,16 +202,26 @@ class QueryService:
         data_paths = get_search_data_paths(collection_id, "local")
 
         # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        communities = pd.read_parquet(data_paths["communities"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
-        text_units = pd.read_parquet(data_paths["text_units"])
-        relationships = pd.read_parquet(data_paths["relationships"])
+        if settings.azure_storage_connection_string:
+            entities = _blob_parquet(collection_id, data_paths["entities"])
+            communities = _blob_parquet(collection_id, data_paths["communities"])
+            community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+            text_units = _blob_parquet(collection_id, data_paths["text_units"])
+            relationships = _blob_parquet(collection_id, data_paths["relationships"])
+        else:
+            entities = pd.read_parquet(data_paths["entities"])
+            communities = pd.read_parquet(data_paths["communities"])
+            community_reports = pd.read_parquet(data_paths["community_reports"])
+            text_units = pd.read_parquet(data_paths["text_units"])
+            relationships = pd.read_parquet(data_paths["relationships"])
 
         # Load covariates if available
         covariates = None
         if "covariates" in data_paths:
-            covariates = pd.read_parquet(data_paths["covariates"])
+            if settings.azure_storage_connection_string:
+                covariates = _blob_parquet(collection_id, data_paths["covariates"])
+            else:
+                covariates = pd.read_parquet(data_paths["covariates"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -263,8 +277,12 @@ class QueryService:
         data_paths = get_search_data_paths(collection_id, "tog")
 
         # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        relationships = pd.read_parquet(data_paths["relationships"])
+        if settings.azure_storage_connection_string:
+            entities = _blob_parquet(collection_id, data_paths["entities"])
+            relationships = _blob_parquet(collection_id, data_paths["relationships"])
+        else:
+            entities = pd.read_parquet(data_paths["entities"])
+            relationships = pd.read_parquet(data_paths["relationships"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -298,7 +316,7 @@ class QueryService:
             paths = context_data.get("exploration_paths", [])
             if paths:
                 entity_paths: dict[str, list[str]] = {}  # entity -> paths it appears in
-                relationships: dict[str, dict] = {}
+                rel_lookup: dict[str, dict] = {}
                 for path in paths:
                     # Each path: "A --[rel]--> B | B --[rel2]--> C"
                     for segment in path.split(" | "):
@@ -309,16 +327,16 @@ class QueryService:
                             entity_paths.setdefault(tgt, []).append(segment.strip())
                             known_entity_names.add(src)
                             known_entity_names.add(tgt)
-                            relationships[rel] = {"name": rel, "description": ""}
-                entities = {
+                            rel_lookup[rel] = {"name": rel, "description": ""}
+                entity_lookup = {
                     name: {"name": name, "description": " | ".join(dict.fromkeys(path_list))}
                     for name, path_list in entity_paths.items()
                 }
                 serialized = {}
-                if entities:
-                    serialized["Entities"] = entities
-                if relationships:
-                    serialized["Relationships"] = relationships
+                if entity_lookup:
+                    serialized["Entities"] = entity_lookup
+                if rel_lookup:
+                    serialized["Relationships"] = rel_lookup
 
         # Normalize LLM citations: [Data: NAME1, NAME2] -> [Data: Entities (NAME1, NAME2)]
         # The LLM often drops the "Entities (...)" wrapper despite prompt instructions
@@ -361,11 +379,18 @@ class QueryService:
         data_paths = get_search_data_paths(collection_id, "drift")
 
         # Load required dataframes
-        entities = pd.read_parquet(data_paths["entities"])
-        communities = pd.read_parquet(data_paths["communities"])
-        community_reports = pd.read_parquet(data_paths["community_reports"])
-        text_units = pd.read_parquet(data_paths["text_units"])
-        relationships = pd.read_parquet(data_paths["relationships"])
+        if settings.azure_storage_connection_string:
+            entities = _blob_parquet(collection_id, data_paths["entities"])
+            communities = _blob_parquet(collection_id, data_paths["communities"])
+            community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+            text_units = _blob_parquet(collection_id, data_paths["text_units"])
+            relationships = _blob_parquet(collection_id, data_paths["relationships"])
+        else:
+            entities = pd.read_parquet(data_paths["entities"])
+            communities = pd.read_parquet(data_paths["communities"])
+            community_reports = pd.read_parquet(data_paths["community_reports"])
+            text_units = pd.read_parquet(data_paths["text_units"])
+            relationships = pd.read_parquet(data_paths["relationships"])
 
         fh = _attach_query_log(collection_id)
         try:

@@ -1,162 +1,72 @@
 """File storage management service."""
 
-import shutil
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-import aiofiles
 from fastapi import UploadFile
 
-from ..config import settings
 from ..models import CollectionResponse, DocumentResponse
 from ..utils.helpers import _blob_client, _collection_container, _ensure_blob_container
 
 
 class StorageService:
-    """Service for managing file storage operations."""
+    """Service for managing collection and document storage operations in Azure Blob."""
 
     def __init__(self):
         """Initialize the storage service."""
-        self.collections_dir = settings.collections_dir
-        # Ensure collections directory exists
-        self.collections_dir.mkdir(parents=True, exist_ok=True)
+        self.blob_client = _blob_client()
+
+    def _ensure_blob_enabled(self) -> None:
+        if self.blob_client is None:
+            raise ValueError(
+                "Azure Blob Storage is not configured. Set AZURE_STORAGE_CONNECTION_STRING."
+            )
+
+    def _meta_container(self):
+        self._ensure_blob_enabled()
+        container = self.blob_client.get_container_client("gtog-meta")
+        if not container.exists():
+            container.create_container()
+        return container
+
+    def _collection_meta_blob(self, collection_id: str) -> str:
+        return f"collections/{collection_id}.json"
+
+    def _save_collection_meta(self, collection_id: str, description: Optional[str]) -> None:
+        import json
+
+        payload = {
+            "id": collection_id,
+            "name": collection_id,
+            "description": description,
+            "created_at": datetime.now().isoformat(),
+        }
+        self._meta_container().upload_blob(
+            self._collection_meta_blob(collection_id),
+            json.dumps(payload).encode("utf-8"),
+            overwrite=True,
+        )
+
+    def _load_collection_meta(self, collection_id: str) -> Optional[dict]:
+        import json
+
+        blob = self._meta_container().get_blob_client(self._collection_meta_blob(collection_id))
+        if not blob.exists():
+            return None
+        raw = blob.download_blob().readall()
+        return json.loads(raw.decode("utf-8"))
 
     def create_collection(
         self, collection_id: str, description: Optional[str] = None
     ) -> CollectionResponse:
-        """
-        Create a new collection with its directory structure.
+        """Create a new collection in blob-backed storage."""
+        self._ensure_blob_enabled()
 
-        Args:
-            collection_id: Unique identifier for the collection
-            description: Optional description of the collection
-
-        Returns:
-            CollectionResponse with collection details
-
-        Raises:
-            ValueError: If collection already exists
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        if collection_dir.exists():
+        if self._load_collection_meta(collection_id) is not None:
             raise ValueError(f"Collection '{collection_id}' already exists")
 
-        # Create local directory structure
-        collection_dir.mkdir(parents=True)
-        (collection_dir / "input").mkdir()
-        (collection_dir / "output").mkdir()
-        (collection_dir / "cache").mkdir()
-        (collection_dir / "prompts").mkdir()
-
-        # Create blob container if configured
         _ensure_blob_container(collection_id)
-
-        # Generate default prompts from graphrag package
-        try:
-            # Import index prompts
-            from graphrag.prompts.index.extract_claims import EXTRACT_CLAIMS_PROMPT
-            from graphrag.prompts.index.community_report import COMMUNITY_REPORT_PROMPT
-            from graphrag.prompts.index.community_report_text_units import (
-                COMMUNITY_REPORT_TEXT_PROMPT,
-            )
-            from graphrag.prompts.index.extract_graph import GRAPH_EXTRACTION_PROMPT
-            from graphrag.prompts.index.summarize_descriptions import SUMMARIZE_PROMPT
-
-            # Import query prompts
-            from graphrag.prompts.query.basic_search_system_prompt import (
-                BASIC_SEARCH_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.drift_search_system_prompt import (
-                DRIFT_LOCAL_SYSTEM_PROMPT,
-                DRIFT_REDUCE_PROMPT,
-            )
-            from graphrag.prompts.query.global_search_knowledge_system_prompt import (
-                GENERAL_KNOWLEDGE_INSTRUCTION,
-            )
-            from graphrag.prompts.query.global_search_map_system_prompt import (
-                MAP_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.global_search_reduce_system_prompt import (
-                REDUCE_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.local_search_system_prompt import (
-                LOCAL_SEARCH_SYSTEM_PROMPT,
-            )
-            from graphrag.prompts.query.question_gen_system_prompt import (
-                QUESTION_SYSTEM_PROMPT,
-            )
-
-            # Import ToG prompts
-            from graphrag.prompts.query.tog_entity_scoring_prompt import (
-                TOG_ENTITY_SCORING_PROMPT,
-            )
-            from graphrag.prompts.query.tog_relation_scoring_prompt import (
-                TOG_RELATION_SCORING_PROMPT,
-            )
-            from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
-
-            prompts_dir = collection_dir / "prompts"
-
-            # Write index prompts
-            (prompts_dir / "extract_graph.txt").write_text(
-                GRAPH_EXTRACTION_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "summarize_descriptions.txt").write_text(
-                SUMMARIZE_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "extract_claims.txt").write_text(
-                EXTRACT_CLAIMS_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "community_report_graph.txt").write_text(
-                COMMUNITY_REPORT_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "community_report_text.txt").write_text(
-                COMMUNITY_REPORT_TEXT_PROMPT, encoding="utf-8"
-            )
-
-            # Write query prompts
-            (prompts_dir / "drift_search_system_prompt.txt").write_text(
-                DRIFT_LOCAL_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "drift_search_reduce_prompt.txt").write_text(
-                DRIFT_REDUCE_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "global_search_map_system_prompt.txt").write_text(
-                MAP_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "global_search_reduce_system_prompt.txt").write_text(
-                REDUCE_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "global_search_knowledge_system_prompt.txt").write_text(
-                GENERAL_KNOWLEDGE_INSTRUCTION, encoding="utf-8"
-            )
-            (prompts_dir / "local_search_system_prompt.txt").write_text(
-                LOCAL_SEARCH_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "basic_search_system_prompt.txt").write_text(
-                BASIC_SEARCH_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "question_gen_system_prompt.txt").write_text(
-                QUESTION_SYSTEM_PROMPT, encoding="utf-8"
-            )
-            # Write ToG prompts
-            (prompts_dir / "tog_entity_scoring_prompt.txt").write_text(
-                TOG_ENTITY_SCORING_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "tog_relation_scoring_prompt.txt").write_text(
-                TOG_RELATION_SCORING_PROMPT, encoding="utf-8"
-            )
-            (prompts_dir / "tog_reasoning_prompt.txt").write_text(
-                TOG_REASONING_PROMPT, encoding="utf-8"
-            )
-        except Exception as e:
-            import logging
-
-            logging.warning(
-                f"Failed to generate prompts for collection {collection_id}: {e}"
-            )
+        self._save_collection_meta(collection_id, description)
 
         return CollectionResponse(
             id=collection_id,
@@ -168,241 +78,135 @@ class StorageService:
         )
 
     def delete_collection(self, collection_id: str) -> bool:
-        """
-        Delete a collection and all its contents (local + blob).
+        """Delete a collection and all its blob contents."""
+        self._ensure_blob_enabled()
 
-        Args:
-            collection_id: The collection identifier
-
-        Returns:
-            True if deleted successfully
-
-        Raises:
-            ValueError: If collection does not exist
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        if not collection_dir.exists():
+        meta_blob = self._meta_container().get_blob_client(self._collection_meta_blob(collection_id))
+        if not meta_blob.exists():
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        shutil.rmtree(collection_dir)
-
-        # Delete blob container if configured
-        client = _blob_client()
-        if client is not None:
-            container = client.get_container_client(_collection_container(collection_id))
-            if container.exists():
-                container.delete_container()
-
+        meta_blob.delete_blob()
+        container = self.blob_client.get_container_client(_collection_container(collection_id))
+        if container.exists():
+            container.delete_container()
         return True
 
     def list_collections(self) -> List[CollectionResponse]:
-        """
-        List all available collections.
+        """List all collections from blob metadata."""
+        self._ensure_blob_enabled()
 
-        Returns:
-            List of CollectionResponse objects
-        """
-        collections = []
+        collections: List[CollectionResponse] = []
+        container = self._meta_container()
 
-        if not self.collections_dir.exists():
-            return collections
+        for blob in container.list_blobs(name_starts_with="collections/"):
+            collection_id = blob.name.split("/")[-1].replace(".json", "")
+            meta = self._load_collection_meta(collection_id)
+            if meta is None:
+                continue
 
-        for collection_dir in self.collections_dir.iterdir():
-            if collection_dir.is_dir():
-                collection_id = collection_dir.name
-                input_dir = collection_dir / "input"
-                output_dir = collection_dir / "output"
-
-                # Count documents
-                document_count = 0
-                if input_dir.exists():
-                    document_count = len([
-                        f for f in input_dir.iterdir() if f.is_file()
-                    ])
-
-                # Check if indexed (has output files)
-                indexed = False
-                if output_dir.exists():
-                    required_files = ["entities.parquet", "communities.parquet"]
-                    indexed = all((output_dir / f).exists() for f in required_files)
-
-                collections.append(
-                    CollectionResponse(
-                        id=collection_id,
-                        name=collection_id,
-                        description=None,
-                        created_at=datetime.fromtimestamp(
-                            collection_dir.stat().st_ctime
-                        ),
-                        document_count=document_count,
-                        indexed=indexed,
-                    )
+            docs = self.list_documents(collection_id)
+            indexed = False
+            col_container = self.blob_client.get_container_client(_collection_container(collection_id))
+            if col_container.exists():
+                indexed = (
+                    col_container.get_blob_client("output/entities.parquet").exists()
+                    and col_container.get_blob_client("output/communities.parquet").exists()
                 )
+
+            collections.append(
+                CollectionResponse(
+                    id=collection_id,
+                    name=collection_id,
+                    description=meta.get("description"),
+                    created_at=datetime.fromisoformat(meta["created_at"]),
+                    document_count=len(docs),
+                    indexed=indexed,
+                )
+            )
 
         return collections
 
     def get_collection(self, collection_id: str) -> Optional[CollectionResponse]:
-        """
-        Get details about a specific collection.
+        """Get details about a specific collection from blob metadata."""
+        self._ensure_blob_enabled()
 
-        Args:
-            collection_id: The collection identifier
-
-        Returns:
-            CollectionResponse or None if not found
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        if not collection_dir.exists():
+        meta = self._load_collection_meta(collection_id)
+        if meta is None:
             return None
 
-        input_dir = collection_dir / "input"
-        output_dir = collection_dir / "output"
-
-        # Count documents
-        document_count = 0
-        if input_dir.exists():
-            document_count = len([f for f in input_dir.iterdir() if f.is_file()])
-
-        # Check if indexed
-        indexed = False
-        if output_dir.exists():
-            required_files = ["entities.parquet", "communities.parquet"]
-            indexed = all((output_dir / f).exists() for f in required_files)
+        docs = self.list_documents(collection_id)
+        col_container = self.blob_client.get_container_client(_collection_container(collection_id))
+        indexed = (
+            col_container.exists()
+            and col_container.get_blob_client("output/entities.parquet").exists()
+            and col_container.get_blob_client("output/communities.parquet").exists()
+        )
 
         return CollectionResponse(
             id=collection_id,
             name=collection_id,
-            description=None,
-            created_at=datetime.fromtimestamp(collection_dir.stat().st_ctime),
-            document_count=document_count,
+            description=meta.get("description"),
+            created_at=datetime.fromisoformat(meta["created_at"]),
+            document_count=len(docs),
             indexed=indexed,
         )
 
     async def upload_document(
         self, collection_id: str, file: UploadFile
     ) -> DocumentResponse:
-        """
-        Upload a document to a collection (local + blob if configured).
+        """Upload a document to blob-backed collection input."""
+        self._ensure_blob_enabled()
 
-        Args:
-            collection_id: The collection identifier
-            file: The uploaded file
-
-        Returns:
-            DocumentResponse with document details
-
-        Raises:
-            ValueError: If collection does not exist
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        if not collection_dir.exists():
+        if self._load_collection_meta(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        input_dir = collection_dir / "input"
-        file_path = input_dir / file.filename
-
         content = await file.read()
-
-        # Save locally
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(content)
-
-        # Upload to blob if configured
-        client = _blob_client()
-        if client is not None:
-            container = client.get_container_client(_collection_container(collection_id))
-            container.upload_blob(f"input/{file.filename}", content, overwrite=True)
+        container = self.blob_client.get_container_client(_collection_container(collection_id))
+        container.upload_blob(f"input/{file.filename}", content, overwrite=True)
 
         return DocumentResponse(
             name=file.filename,
-            size=file_path.stat().st_size,
+            size=len(content),
             uploaded_at=datetime.now(),
         )
 
     def list_documents(self, collection_id: str) -> List[DocumentResponse]:
-        """
-        List all documents in a collection.
+        """List all documents in a collection from blob."""
+        self._ensure_blob_enabled()
 
-        Args:
-            collection_id: The collection identifier
-
-        Returns:
-            List of DocumentResponse objects
-
-        Raises:
-            ValueError: If collection does not exist
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        if not collection_dir.exists():
+        if self._load_collection_meta(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        input_dir = collection_dir / "input"
-        documents = []
-
-        if input_dir.exists():
-            for file_path in input_dir.iterdir():
-                if file_path.is_file():
-                    documents.append(
-                        DocumentResponse(
-                            name=file_path.name,
-                            size=file_path.stat().st_size,
-                            uploaded_at=datetime.fromtimestamp(
-                                file_path.stat().st_mtime
-                            ),
-                        )
-                    )
-
-        return documents
+        container = self.blob_client.get_container_client(_collection_container(collection_id))
+        docs: List[DocumentResponse] = []
+        for blob in container.list_blobs(name_starts_with="input/"):
+            if blob.name.endswith("/"):
+                continue
+            name = blob.name.replace("input/", "", 1)
+            docs.append(
+                DocumentResponse(
+                    name=name,
+                    size=blob.size or 0,
+                    uploaded_at=blob.last_modified.replace(tzinfo=None)
+                    if blob.last_modified
+                    else datetime.now(),
+                )
+            )
+        return docs
 
     def delete_document(self, collection_id: str, document_name: str) -> bool:
-        """
-        Delete a document from a collection.
+        """Delete a document from blob-backed collection input."""
+        self._ensure_blob_enabled()
 
-        Args:
-            collection_id: The collection identifier
-            document_name: The document filename
-
-        Returns:
-            True if deleted successfully
-
-        Raises:
-            ValueError: If collection or document does not exist
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        if not collection_dir.exists():
+        if self._load_collection_meta(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        file_path = collection_dir / "input" / document_name
-
-        if not file_path.exists():
+        container = self.blob_client.get_container_client(_collection_container(collection_id))
+        blob = container.get_blob_client(f"input/{document_name}")
+        if not blob.exists():
             raise ValueError(f"Document '{document_name}' not found")
-
-        file_path.unlink()
+        blob.delete_blob()
         return True
-
-    def get_collection_path(self, collection_id: str) -> Dict[str, Path]:
-        """
-        Get paths for collection directories.
-
-        Args:
-            collection_id: The collection identifier
-
-        Returns:
-            Dictionary with paths for input, output, cache directories
-        """
-        collection_dir = self.collections_dir / collection_id
-
-        return {
-            "root": collection_dir,
-            "input": collection_dir / "input",
-            "output": collection_dir / "output",
-            "cache": collection_dir / "cache",
-        }
 
 
 # Global storage service instance

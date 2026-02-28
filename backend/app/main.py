@@ -29,13 +29,16 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting GraphRAG FastAPI backend...")
-    
-    # Ensure storage directory exists
-    settings.collections_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Storage directory: {settings.collections_dir}")
-    
+
+    if settings.azure_storage_connection_string:
+        logger.info("Using Azure Blob Storage for collection data")
+    else:
+        # Fallback local mode only when Azure is not configured
+        settings.collections_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Storage directory: {settings.collections_dir}")
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down GraphRAG FastAPI backend...")
 
