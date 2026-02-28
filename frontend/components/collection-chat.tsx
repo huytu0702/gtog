@@ -2,12 +2,100 @@
 
 import React from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { searchApi, Collection, SearchResult } from '@/lib/api';
+import { searchApi, Collection, SearchResult, ConversationTurn } from '@/lib/api';
 import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { NBInput } from '@/components/ui/NBInput';
 import { Send, Bot, User, Settings, Loader2, Globe, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const DATASET_COLORS: Record<string, string> = {
+    Reports:       'bg-blue-100 text-blue-800 border-blue-400',
+    Entities:      'bg-green-100 text-green-800 border-green-400',
+    Relationships: 'bg-purple-100 text-purple-800 border-purple-400',
+    Sources:       'bg-orange-100 text-orange-800 border-orange-400',
+    Claims:        'bg-red-100 text-red-800 border-red-400',
+};
+
+// context_data shape: { [dataset: string]: { [id: string]: { name: string, description: string } } }
+type ContextLookup = Record<string, Record<string, { name: string; description: string }>>;
+
+function buildTooltip(dataset: string, ids: string, context: ContextLookup | null): string {
+    if (!context) return `${dataset}: ${ids}`;
+    // The backend keys are title-cased ("Entities"), match case-insensitively
+    const datasetKey = Object.keys(context).find(
+        (k) => k.toLowerCase() === dataset.toLowerCase()
+    );
+    if (!datasetKey) return `${dataset}: ${ids}`;
+    const lookup = context[datasetKey];
+    const lines = ids.split(',').map((rawId) => {
+        const id = rawId.trim().replace('+more', '').trim();
+        // Match case-insensitively since entity names may differ in case
+        const entryKey = Object.keys(lookup).find((k) => k.toLowerCase() === id.toLowerCase()) ?? id;
+        const entry = lookup[entryKey];
+        if (!entry) return id;
+        const desc = entry.description ? ` — ${entry.description.slice(0, 300)}` : '';
+        return `${entry.name}${desc}`;
+    });
+    return lines.join('\n');
+}
+
+function CitationBadge({
+    dataset,
+    ids,
+    context,
+}: {
+    dataset: string;
+    ids: string;
+    context: ContextLookup | null;
+}) {
+    const color = DATASET_COLORS[dataset] ?? 'bg-gray-100 text-gray-700 border-gray-400';
+    const tooltip = buildTooltip(dataset, ids, context);
+    return (
+        <span
+            className={cn(
+                'inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-bold border rounded-sm mx-0.5 align-middle cursor-help',
+                color
+            )}
+            title={tooltip}
+        >
+            {dataset} <span className="opacity-70">({ids})</span>
+        </span>
+    );
+}
+
+// Regex: matches [Data: Dataset1 (ids); Dataset2 (ids)]
+const CITATION_RE = /\[Data:\s*((?:[^[\]]+?))\]/g;
+const ENTRY_RE = /([A-Za-z]+)\s*\(([^)]+)\)/g;
+
+function MessageContent({ text, context }: { text: string; context: ContextLookup | null }) {
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    CITATION_RE.lastIndex = 0;
+    while ((match = CITATION_RE.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push(text.slice(lastIndex, match.index));
+        }
+        const inner = match[1];
+        const badges: React.ReactNode[] = [];
+        let entryMatch: RegExpExecArray | null;
+        ENTRY_RE.lastIndex = 0;
+        while ((entryMatch = ENTRY_RE.exec(inner)) !== null) {
+            badges.push(
+                <CitationBadge key={badges.length} dataset={entryMatch[1]} ids={entryMatch[2]} context={context} />
+            );
+        }
+        parts.push(<span key={match.index}>{badges}</span>);
+        lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex));
+    }
+
+    return <p className="whitespace-pre-wrap font-medium leading-relaxed">{parts}</p>;
+}
 
 interface CollectionChatProps {
     collection: Collection;
@@ -22,6 +110,9 @@ type Message = {
 
 type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent' | 'web';
 
+// Summarize when history exceeds this many user turns
+const SUMMARIZE_THRESHOLD = 6;
+
 export function CollectionChat({ collection }: CollectionChatProps) {
     const [messages, setMessages] = React.useState<Message[]>([
         { role: 'bot', content: `Hello! I'm ready to answer questions about "${collection.name}".` },
@@ -29,6 +120,8 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     const [input, setInput] = React.useState('');
     const [method, setMethod] = React.useState<SearchMethod>('agent');
     const [isStreaming, setIsStreaming] = React.useState(false);
+    const [convHistory, setConvHistory] = React.useState<ConversationTurn[]>([]);
+    const [convSummary, setConvSummary] = React.useState<string | undefined>(undefined);
     const scrollRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -44,25 +137,55 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                 case 'local': return searchApi.local(collection.id, query);
                 case 'tog': return searchApi.tog(collection.id, query);
                 case 'drift': return searchApi.drift(collection.id, query);
-                case 'agent': return searchApi.agent(collection.id, query);
+                case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary);
                 case 'web': return searchApi.web(collection.id, query);
-                default: return searchApi.agent(collection.id, query);
+                default: return searchApi.agent(collection.id, query, convHistory, convSummary);
             }
         },
-        onSuccess: (data: SearchResult | any) => {
+        onSuccess: async (data: SearchResult | any, query: string) => {
             const methodUsed = data.method_used || data.method;
             const reasoning = data.router_reasoning;
             let content = data.response;
-            
+
             // Add reasoning for agent search
             if (reasoning) {
                 content = `[${methodUsed.toUpperCase()} search selected: ${reasoning}]\n\n${content}`;
             }
-            
+
             setMessages((prev) => [
                 ...prev,
                 { role: 'bot', content, context: data.context_data, method: methodUsed },
             ]);
+
+            // Update conversation history for agent method
+            if (method === 'agent') {
+                const userTurn: ConversationTurn = {
+                    role: 'user',
+                    content: query,
+                    rewritten_query: data.rewritten_query,
+                    method_used: methodUsed,
+                };
+                const assistantTurn: ConversationTurn = {
+                    role: 'assistant',
+                    content: data.response,
+                };
+                const newHistory = [...convHistory, userTurn, assistantTurn];
+
+                // Count user turns
+                const userTurnCount = newHistory.filter(t => t.role === 'user').length;
+                if (userTurnCount >= SUMMARIZE_THRESHOLD) {
+                    try {
+                        const result = await searchApi.summarize(collection.id, newHistory, convSummary);
+                        setConvSummary(result.summary);
+                        setConvHistory(result.trimmed_history);
+                    } catch {
+                        // On summarization failure, keep history as-is
+                        setConvHistory(newHistory);
+                    }
+                } else {
+                    setConvHistory(newHistory);
+                }
+            }
         },
         onError: (error: Error) => {
             setMessages((prev) => [
@@ -116,7 +239,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                             msg.role === 'user' ? 'bg-white' : 'bg-white'
                                         )}
                                     >
-                                        <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
+                                        <MessageContent text={msg.content} context={msg.context ?? null} />
                                     </div>
 
                         {msg.method && (

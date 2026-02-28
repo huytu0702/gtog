@@ -12,6 +12,7 @@ from .state import ToGSearchState, ExplorationNode
 from .exploration import GraphExplorer
 from .pruning import PruningStrategy, LLMPruning, SemanticPruning, PruningMetrics
 from .reasoning import ToGReasoning, ReasoningMetrics
+from graphrag.query.context_builder.conversation_history import ConversationHistory
 
 
 @dataclass
@@ -86,7 +87,11 @@ class ToGSearch:
         self.callbacks = callbacks or []
         self._debug = debug
 
-    async def search(self, query: str) -> SearchResult:
+    async def search(
+        self,
+        query: str,
+        conversation_history: ConversationHistory | None = None,
+    ) -> SearchResult:
         """Perform ToG search and return SearchResult with metrics."""
         start_time = time.time()
         metrics = ToGMetrics()
@@ -100,7 +105,7 @@ class ToGSearch:
             paths,
             chunk_metrics,
             ctx_text,
-        ) in self._stream_search_with_metrics(query):
+        ) in self._stream_search_with_metrics(query, conversation_history):
             if chunk:
                 response_chunks.append(chunk)
             if paths:
@@ -141,26 +146,50 @@ class ToGSearch:
             },
         )
 
-    async def stream_search(self, query: str) -> AsyncGenerator[str, None]:
+    async def stream_search(
+        self,
+        query: str,
+        conversation_history: ConversationHistory | None = None,
+    ) -> AsyncGenerator[str, None]:
         """Perform ToG search with streaming output (backward compatible)."""
-        async for chunk, _, _, _ in self._stream_search_with_metrics(query):
+        async for chunk, _, _, _ in self._stream_search_with_metrics(query, conversation_history):
             if chunk:  # Only yield non-empty chunks
                 yield chunk
 
     async def _stream_search_with_metrics(
-        self, query: str
+        self,
+        query: str,
+        conversation_history: ConversationHistory | None = None,
     ) -> AsyncGenerator[
         Tuple[str, List[str], Union[PruningMetrics, ReasoningMetrics, None], str], None
     ]:
         """Perform ToG search with streaming output."""
+        # Enrich query for entity linking with previous user questions
+        effective_query = query
+        if conversation_history:
+            past_questions = "\n".join(
+                conversation_history.get_user_turns(max_user_turns=5)
+            )
+            if past_questions:
+                effective_query = f"{query}\n{past_questions}"
+
+        # Build history context string for reasoning
+        history_context = ""
+        if conversation_history:
+            history_context, _ = conversation_history.build_context(
+                include_user_turns_only=False,
+                max_qa_turns=5,
+                recency_bias=False,
+            )
+
         # Find initial entities using semantic similarity (like ToG paper)
         if self.embedding_model:
             starting_entities = await self.explorer.find_starting_entities_semantic(
-                query, top_k=self.width
+                effective_query, top_k=self.width
             )
         else:
             starting_entities = self.explorer.find_starting_entities(
-                query, top_k=self.width
+                effective_query, top_k=self.width
             )
 
         if not starting_entities:
@@ -284,7 +313,7 @@ class ToGSearch:
                 answer,
                 early_term_metrics,
             ) = await self.reasoning_module.check_early_termination(
-                query, state.get_current_frontier()
+                query, state.get_current_frontier(), conversation_history_context=history_context
             )
 
             if should_terminate and answer:
@@ -333,7 +362,7 @@ class ToGSearch:
                 answer,
                 reasoning_paths,
                 answer_metrics,
-            ) = await self.reasoning_module.generate_answer(query, all_paths)
+            ) = await self.reasoning_module.generate_answer(query, all_paths, conversation_history_context=history_context)
 
             # Yield answer metrics with context_text
             yield ("", reasoning_paths, answer_metrics, context_text)

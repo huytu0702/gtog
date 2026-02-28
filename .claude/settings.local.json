@@ -11,7 +11,11 @@
       "Bash(pytest:*)",
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(eval\\): create evaluation package structure\n\nPlaceholder __init__.py for graphrag.eval module.\n\nCo-Authored-By: Claude \\(glm-4.7\\) <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_type"
     ],
     "deny": [],
     "ask": []
