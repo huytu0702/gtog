@@ -30,10 +30,12 @@ function buildTooltip(dataset: string, ids: string, context: ContextLookup | nul
     const lookup = context[datasetKey];
     const lines = ids.split(',').map((rawId) => {
         const id = rawId.trim().replace('+more', '').trim();
-        const entry = lookup[id];
-        if (!entry) return `#${id}`;
-        const desc = entry.description ? ` — ${entry.description.slice(0, 120)}` : '';
-        return `#${id}: ${entry.name}${desc}`;
+        // Match case-insensitively since entity names may differ in case
+        const entryKey = Object.keys(lookup).find((k) => k.toLowerCase() === id.toLowerCase()) ?? id;
+        const entry = lookup[entryKey];
+        if (!entry) return id;
+        const desc = entry.description ? ` — ${entry.description.slice(0, 300)}` : '';
+        return `${entry.name}${desc}`;
     });
     return lines.join('\n');
 }

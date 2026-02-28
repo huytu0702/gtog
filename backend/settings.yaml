@@ -156,7 +156,7 @@ tog_search:
   temperature_exploration: 0.4      # LLM temperature for exploration
   temperature_reasoning: 0.0        # LLM temperature for final answer
   max_context_tokens: 8000          # Maximum context tokens
-  max_exploration_paths: 10         # Maximum exploration paths
+  max_exploration_paths: 3         # Maximum exploration paths
   relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"
   entity_scoring_prompt: "prompts/tog_entity_scoring_prompt.txt"
   reasoning_prompt: "prompts/tog_reasoning_prompt.txt"

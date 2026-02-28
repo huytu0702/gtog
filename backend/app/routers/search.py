@@ -230,6 +230,7 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             rewritten_query=route_decision.rewritten_query,
             response=result.response,
             sources=[],
+            context_data=result.context_data,
         )
 
     except ValueError as e:

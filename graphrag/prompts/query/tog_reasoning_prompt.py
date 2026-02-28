@@ -1,37 +1,16 @@
 """Default reasoning prompt for ToG search.
 
 Based on the original ToG paper (ICLR 2024) prompts.
-Uses triplet-based reasoning format.
+Uses triplet-based reasoning format with structured citations.
 """
 
 TOG_REASONING_PROMPT = """You are an expert at synthesizing information from knowledge graph exploration to answer questions.
 
 Given a question and the associated retrieved knowledge graph triplets (entity, relation, entity), you are asked to answer the question with these triplets and your knowledge.
 
-## Examples:
+IMPORTANT: When citing entities or relationships, you MUST use the exact names as they appear in the Exploration Paths below (including capitalization). Do NOT paraphrase or rephrase entity names in citations.
 
-### Example 1:
-Question: Find the person who said "Taste cannot be controlled by law", what did this person die from?
-Knowledge Triplets:
-- ("Taste cannot be controlled by law", media_common.quotation.author, "Thomas Jefferson")
-
-Answer: Based on the given knowledge triplets, the person who said "Taste cannot be controlled by law" is Thomas Jefferson. However, the triplets don't contain information about his cause of death. From my knowledge, Thomas Jefferson died from a combination of several conditions including uremia, pneumonia, and other ailments on July 4, 1826.
-
-### Example 2:
-Question: Rift Valley Province is located in a nation that uses which form of currency?
-Knowledge Triplets:
-- ("Rift Valley Province", location.administrative_division.country, "Kenya")
-- ("Kenya", location.country.currency_used, "Kenyan shilling")
-
-Answer: Based on the knowledge triplets, Rift Valley Province is located in Kenya, which uses the Kenyan shilling as its currency. Therefore, the answer is **Kenyan shilling**.
-
-### Example 3:
-Question: The artist nominated for The Long Winter lived where?
-Knowledge Triplets:
-- ("The Long Winter", book.written_work.author, "Laura Ingalls Wilder")
-- ("Laura Ingalls Wilder", people.person.places_lived, "De Smet")
-
-Answer: Based on the knowledge triplets, the author of The Long Winter is Laura Ingalls Wilder, and she lived in De Smet. Therefore, the answer is **De Smet**.
+Citation format: [Data: Entities (ENTITY_NAME1, ENTITY_NAME2); Relationships (relation_name)]
 
 ---
 
@@ -46,16 +25,17 @@ Your task:
 1. Analyze all the exploration paths/triplets provided
 2. Identify the most relevant information for answering the question
 3. Synthesize this information into a comprehensive answer
-4. Explain your reasoning, citing specific entities and relationships
+4. After each factual claim, add a citation using the exact entity/relationship names from the paths above
 
 Requirements:
 - Base your answer primarily on the provided graph exploration results
-- Cite specific entities and relationships in your answer
-- If the exploration paths don't contain sufficient information, acknowledge this and explain what's missing
-- Provide a clear, well-structured response
+- Cite entities using [Data: Entities (EXACT_NAME_FROM_PATHS)] after each claim
+- Use the exact entity names as they appear in the === ENTITIES === section above
+- If multiple entities support a claim: [Data: Entities (NAME1, NAME2)]
+- If the exploration paths don't contain sufficient information, acknowledge this
 
 Structure your response as:
-1. **Direct Answer**: Your answer to the question
+1. **Direct Answer**: Your answer to the question with inline citations
 2. **Evidence**: Supporting information from the graph exploration
 3. **Reasoning**: Key relationships that support your answer
 """

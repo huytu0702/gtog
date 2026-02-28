@@ -180,6 +180,7 @@ class AgentSearchResponse(BaseModel):
     rewritten_query: str | None = None
     response: str
     sources: list = Field(default_factory=list)
+    context_data: dict | None = None
 
 
 # Health Check

@@ -251,8 +251,11 @@ Current exploration paths:
 {paths_text}
 
 Can you answer the question with high confidence based on these paths?
+If yes, provide a complete answer that cites entities using [Data: Entities (EntityName1, EntityName2)] format.
+Only cite entity names that appear in the exploration paths above.
+
 Respond with:
-- "YES: [answer]" if you can answer confidently
+- "YES: [answer with citations]" if you can answer confidently
 - "NO: [reason]" if more exploration is needed
 
 Response:"""
