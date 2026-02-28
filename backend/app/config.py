@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     storage_root_dir: str = "./storage"
 
     # Model Configuration
-    default_chat_model: str = "gemini-2.5-flash-lite"
-    default_embedding_model: str = "gemini-embedding-001"
+    default_chat_model: str = "gemini/gemini-2.5-flash-lite"
+    default_embedding_model: str = "gemini/gemini-embedding-001"
 
     # Server Configuration
     host: str = "0.0.0.0"

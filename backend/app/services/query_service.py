@@ -16,6 +16,40 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
+# Column name mappings: what to use as the "name" and "description" per dataset
+_CONTEXT_COLS: dict[str, tuple[str, str]] = {
+    "entities":      ("entity", "description"),
+    "relationships": ("source", "description"),
+    "reports":       ("title", "summary"),
+    "sources":       ("text", "text"),
+    "covariates":    ("subject_id", "covariate_type"),
+}
+
+
+def _serialize_context_records(
+    context_data: dict | None,
+) -> dict[str, dict[str, dict]] | None:
+    """Convert context_records DataFrames into a JSON-serializable lookup dict.
+
+    Returns: {dataset_name: {short_id: {name, description}}}
+    """
+    if not context_data:
+        return None
+    result: dict[str, dict[str, dict]] = {}
+    for key, df in context_data.items():
+        if df is None or df.empty:
+            continue
+        key_lower = key.lower()
+        name_col, desc_col = _CONTEXT_COLS.get(key_lower, ("id", ""))
+        lookup: dict[str, dict] = {}
+        for _, row in df.iterrows():
+            short_id = str(row.get("id", ""))
+            name = str(row.get(name_col, "")) if name_col in df.columns else short_id
+            desc = str(row.get(desc_col, "")) if desc_col and desc_col in df.columns else ""
+            lookup[short_id] = {"name": name, "description": desc}
+        result[key] = lookup
+    return result or None
+
 
 class QueryService:
     """Service for managing query/search operations."""
@@ -139,7 +173,7 @@ class QueryService:
         return SearchResponse(
             query=query,
             response=response_text,
-            context_data=None,  # Avoid serialization issues with pandas DataFrames
+            context_data=_serialize_context_records(context_data),
             method=SearchMethod.LOCAL,
         )
 
