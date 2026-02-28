@@ -27,6 +27,7 @@ Rules:
 - If the query asks about current events, news, or real-time information, choose WEB.
 - If the query asks about relationships or connections between concepts, choose TOG.
 - If the query asks for broad overviews or trends across many topics, choose GLOBAL.
+- If the query asks what a document/collection/dataset is about, or asks for a summary/overview of the entire content, choose GLOBAL.
 - If the query asks about specific entities or focused topics, choose LOCAL.
 - Use DRIFT only when LOCAL might miss important related context.
 - Default to LOCAL if uncertain between LOCAL and other methods.
