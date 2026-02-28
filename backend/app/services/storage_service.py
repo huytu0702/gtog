@@ -10,6 +10,7 @@ from fastapi import UploadFile
 
 from ..config import settings
 from ..models import CollectionResponse, DocumentResponse
+from ..utils.helpers import _blob_client, _collection_container, _ensure_blob_container
 
 
 class StorageService:
@@ -42,12 +43,15 @@ class StorageService:
         if collection_dir.exists():
             raise ValueError(f"Collection '{collection_id}' already exists")
 
-        # Create directory structure (matching graphrag init)
+        # Create local directory structure
         collection_dir.mkdir(parents=True)
         (collection_dir / "input").mkdir()
         (collection_dir / "output").mkdir()
         (collection_dir / "cache").mkdir()
         (collection_dir / "prompts").mkdir()
+
+        # Create blob container if configured
+        _ensure_blob_container(collection_id)
 
         # Generate default prompts from graphrag package
         try:
@@ -165,7 +169,7 @@ class StorageService:
 
     def delete_collection(self, collection_id: str) -> bool:
         """
-        Delete a collection and all its contents.
+        Delete a collection and all its contents (local + blob).
 
         Args:
             collection_id: The collection identifier
@@ -182,6 +186,14 @@ class StorageService:
             raise ValueError(f"Collection '{collection_id}' not found")
 
         shutil.rmtree(collection_dir)
+
+        # Delete blob container if configured
+        client = _blob_client()
+        if client is not None:
+            container = client.get_container_client(_collection_container(collection_id))
+            if container.exists():
+                container.delete_container()
+
         return True
 
     def list_collections(self) -> List[CollectionResponse]:
@@ -272,7 +284,7 @@ class StorageService:
         self, collection_id: str, file: UploadFile
     ) -> DocumentResponse:
         """
-        Upload a document to a collection.
+        Upload a document to a collection (local + blob if configured).
 
         Args:
             collection_id: The collection identifier
@@ -292,10 +304,17 @@ class StorageService:
         input_dir = collection_dir / "input"
         file_path = input_dir / file.filename
 
-        # Save the file
+        content = await file.read()
+
+        # Save locally
         async with aiofiles.open(file_path, "wb") as f:
-            content = await file.read()
             await f.write(content)
+
+        # Upload to blob if configured
+        client = _blob_client()
+        if client is not None:
+            container = client.get_container_client(_collection_container(collection_id))
+            container.upload_blob(f"input/{file.filename}", content, overwrite=True)
 
         return DocumentResponse(
             name=file.filename,

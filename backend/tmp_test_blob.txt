@@ -1,0 +1,3 @@
+GraphRAG blob collection test.
+This document is used to verify that collection output and cache are stored in Azure Blob Storage.
+It mentions Microsoft Research, GraphRAG, knowledge graphs, entities, and relationships.

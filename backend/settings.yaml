@@ -72,7 +72,7 @@ vector_store:
     url: ${AZURE_SEARCH_ENDPOINT}
     api_key: ${AZURE_SEARCH_API_KEY}
     index_schema:
-      vector_size: 1536  # gemini-embedding-001 output dimension
+      vector_size: 3072  # gemini-embedding-001 actual output dimension
 
 ### Workflow settings ###
 

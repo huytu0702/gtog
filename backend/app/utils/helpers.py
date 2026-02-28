@@ -1,15 +1,62 @@
 """Utility helper functions."""
 
+import io
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+import pandas as pd
 from graphrag.config.load_config import load_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _blob_client():
+    """Return an Azure BlobServiceClient if connection string is configured."""
+    conn_str = settings.azure_storage_connection_string
+    if not conn_str:
+        return None
+    from azure.storage.blob import BlobServiceClient
+    return BlobServiceClient.from_connection_string(conn_str)
+
+
+def _collection_container(collection_id: str) -> str:
+    """Azure Blob container name for a collection's output."""
+    return f"col-{collection_id}"
+
+
+def _ensure_blob_container(collection_id: str) -> None:
+    """Create the per-collection blob container if it doesn't exist."""
+    client = _blob_client()
+    if client is None:
+        return
+    container_name = _collection_container(collection_id)
+    container = client.get_container_client(container_name)
+    if not container.exists():
+        container.create_container()
+
+
+def _blob_file_exists(collection_id: str, blob_path: str) -> bool:
+    """Check if a blob exists in the collection container."""
+    client = _blob_client()
+    if client is None:
+        return False
+    container = client.get_container_client(_collection_container(collection_id))
+    blob = container.get_blob_client(blob_path)
+    return blob.exists()
+
+
+def read_parquet_from_blob(collection_id: str, blob_path: str) -> pd.DataFrame:
+    """Download a parquet file from blob and return as DataFrame."""
+    client = _blob_client()
+    if client is None:
+        raise FileNotFoundError(f"Azure storage not configured, cannot read {blob_path}")
+    container = client.get_container_client(_collection_container(collection_id))
+    data = container.get_blob_client(blob_path).download_blob().readall()
+    return pd.read_parquet(io.BytesIO(data))
 
 
 def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
@@ -67,16 +114,43 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
     Returns:
         GraphRagConfig with collection-specific path overrides
     """
-    # Get absolute paths
-    storage_root = settings.collections_dir.resolve()
-    collection_dir = storage_root / collection_id
-    collection_dir.mkdir(parents=True, exist_ok=True)
+    use_blob = bool(settings.azure_storage_connection_string)
 
-    # Load the shared settings.yaml with collection-specific overrides
-    config = load_config(
-        root_dir=str(collection_dir),
-        config_filepath=settings.settings_yaml_path,
-        cli_overrides={
+    if use_blob:
+        _ensure_blob_container(collection_id)
+        container_name = _collection_container(collection_id)
+        conn_str = settings.azure_storage_connection_string
+        # Use a temp local dir as graphrag root (for prompts/settings resolution only)
+        storage_root = settings.collections_dir.resolve()
+        collection_dir = storage_root / collection_id
+        collection_dir.mkdir(parents=True, exist_ok=True)
+        (collection_dir / "input").mkdir(exist_ok=True)
+
+        cli_overrides = {
+            "input.storage.type": "blob",
+            "input.storage.connection_string": conn_str,
+            "input.storage.container_name": container_name,
+            "input.storage.base_dir": "input",
+            "input.file_pattern": ".*\\.(txt|md)$",
+            "output.type": "blob",
+            "output.connection_string": conn_str,
+            "output.container_name": container_name,
+            "output.base_dir": "output",
+            "cache.type": "blob",
+            "cache.connection_string": conn_str,
+            "cache.container_name": container_name,
+            "cache.base_dir": "cache",
+            "reporting.type": "blob",
+            "reporting.connection_string": conn_str,
+            "reporting.container_name": container_name,
+            "reporting.base_dir": "logs",
+            "vector_store.default_vector_store.container_name": collection_id,
+        }
+    else:
+        storage_root = settings.collections_dir.resolve()
+        collection_dir = storage_root / collection_id
+        collection_dir.mkdir(parents=True, exist_ok=True)
+        cli_overrides = {
             "input.storage.type": "file",
             "input.storage.base_dir": str(collection_dir / "input"),
             "input.file_pattern": ".*\\.(txt|md)$",
@@ -84,7 +158,12 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
             "output.base_dir": str(collection_dir / "output"),
             "cache.type": "file",
             "cache.base_dir": str(collection_dir / "cache"),
-        },
+        }
+
+    config = load_config(
+        root_dir=str(collection_dir),
+        config_filepath=settings.settings_yaml_path,
+        cli_overrides=cli_overrides,
     )
 
     _normalize_litellm_model_config(config)
@@ -105,90 +184,98 @@ def validate_collection_indexed(
     Returns:
         Tuple of (is_indexed, error_message)
     """
-    collection_dir = settings.collections_dir / collection_id
-    output_dir = collection_dir / "output"
+    use_blob = bool(settings.azure_storage_connection_string)
 
-    if not output_dir.exists():
-        return False, "Collection has not been indexed yet"
-
-    # Base required files for all methods
     required_files = [
         "entities.parquet",
         "communities.parquet",
         "community_reports.parquet",
     ]
-
-    # Method-specific requirements
     if method in ["local", "drift", "tog"]:
         required_files.extend(["text_units.parquet", "relationships.parquet"])
 
-    # ToG has strict requirements
-    if method == "tog":
-        # ToG specifically needs entities and relationships
-        if not (output_dir / "entities.parquet").exists():
-            return False, "ToG search requires entities.parquet"
-        if not (output_dir / "relationships.parquet").exists():
-            return False, "ToG search requires relationships.parquet"
-
-    missing_files = []
-    for file in required_files:
-        if not (output_dir / file).exists():
-            missing_files.append(file)
-
-    if missing_files:
-        return False, f"Missing indexed files: {', '.join(missing_files)}"
-
-    return True, None
+    if use_blob:
+        for fname in required_files:
+            if not _blob_file_exists(collection_id, f"output/{fname}"):
+                return False, f"Collection has not been indexed yet (missing {fname} in blob)"
+        return True, None
+    else:
+        collection_dir = settings.collections_dir / collection_id
+        output_dir = collection_dir / "output"
+        if not output_dir.exists():
+            return False, "Collection has not been indexed yet"
+        missing = [f for f in required_files if not (output_dir / f).exists()]
+        if missing:
+            return False, f"Missing indexed files: {', '.join(missing)}"
+        return True, None
 
 
 def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
     """
     Get paths to required parquet files for a search method.
+    When Azure blob is configured, downloads parquets to a local cache dir first.
 
     Args:
         collection_id: The collection identifier
         method: The search method (global, local, tog, drift)
 
     Returns:
-        Dictionary of data file paths
+        Dictionary of data file paths (always local paths for pandas compatibility)
     """
-    output_dir = settings.collections_dir / collection_id / "output"
+    use_blob = bool(settings.azure_storage_connection_string)
 
-    # Common files for all methods
-    paths = {
-        "entities": output_dir / "entities.parquet",
-        "communities": output_dir / "communities.parquet",
-        "community_reports": output_dir / "community_reports.parquet",
+    file_names = {
+        "entities": "entities.parquet",
+        "communities": "communities.parquet",
+        "community_reports": "community_reports.parquet",
     }
-
-    # Method-specific files
     if method in ["local", "drift", "tog"]:
-        paths.update(
-            {
-                "text_units": output_dir / "text_units.parquet",
-                "relationships": output_dir / "relationships.parquet",
-            }
-        )
+        file_names["text_units"] = "text_units.parquet"
+        file_names["relationships"] = "relationships.parquet"
 
-    if method == "local":
-        # Local search may use covariates if available
-        covariates_path = output_dir / "covariates.parquet"
-        if covariates_path.exists():
-            paths["covariates"] = covariates_path
+    if use_blob:
+        # Download from blob to local cache dir
+        cache_dir = settings.collections_dir / collection_id / "output"
+        cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # ToG-specific validation
-    if method == "tog":
-        # Ensure ToG has required files
-        required_files = ["entities.parquet", "relationships.parquet"]
-        missing_files = []
-        for file in required_files:
-            if not (output_dir / file).exists():
-                missing_files.append(file)
+        client = _blob_client()
+        container = client.get_container_client(_collection_container(collection_id))
 
-        if missing_files:
-            raise FileNotFoundError(
-                f"ToG search requires missing files: {', '.join(missing_files)}"
-            )
+        paths = {}
+        for key, fname in file_names.items():
+            local_path = cache_dir / fname
+            if not local_path.exists():
+                logger.info("Downloading %s from blob for collection %s", fname, collection_id)
+                data = container.get_blob_client(f"output/{fname}").download_blob().readall()
+                local_path.write_bytes(data)
+            paths[key] = local_path
+
+        if method == "local":
+            cov_blob = f"output/covariates.parquet"
+            cov_local = cache_dir / "covariates.parquet"
+            if not cov_local.exists() and _blob_file_exists(collection_id, cov_blob):
+                data = container.get_blob_client(cov_blob).download_blob().readall()
+                cov_local.write_bytes(data)
+            if cov_local.exists():
+                paths["covariates"] = cov_local
+
+        if method == "tog":
+            missing = [k for k in ["entities", "relationships"] if not paths.get(k, Path("x")).exists()]
+            if missing:
+                raise FileNotFoundError(f"ToG search requires missing files: {', '.join(missing)}")
+    else:
+        output_dir = settings.collections_dir / collection_id / "output"
+        paths = {key: output_dir / fname for key, fname in file_names.items()}
+
+        if method == "local":
+            cov = output_dir / "covariates.parquet"
+            if cov.exists():
+                paths["covariates"] = cov
+
+        if method == "tog":
+            missing = [f for f in ["entities.parquet", "relationships.parquet"] if not (output_dir / f).exists()]
+            if missing:
+                raise FileNotFoundError(f"ToG search requires missing files: {', '.join(missing)}")
 
     return paths
 

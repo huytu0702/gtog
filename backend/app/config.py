@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # Storage Configuration
     storage_root_dir: str = "./storage"
+    azure_storage_connection_string: str = ""
 
     # Model Configuration
     default_chat_model: str = "gemini/gemini-2.5-flash-lite"
