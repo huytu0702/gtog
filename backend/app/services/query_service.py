@@ -21,6 +21,7 @@ from ..utils.helpers import _blob_client, _collection_container
 logger = logging.getLogger(__name__)
 
 _LOG_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+_BLOB_PARQUET_FALLBACK_WARNING_EMITTED = False
 
 
 def _attach_query_log(collection_id: str):
@@ -35,6 +36,14 @@ def _detach_query_log(handler) -> None:
 
 def _blob_parquet(collection_id: str, relative_path: Path) -> pd.DataFrame:
     """Read parquet from collection blob output/<relative_path> via authenticated download."""
+    global _BLOB_PARQUET_FALLBACK_WARNING_EMITTED
+    if not _BLOB_PARQUET_FALLBACK_WARNING_EMITTED:
+        logger.warning(
+            "Using temporary blob/parquet fallback in query hot path; "
+            "this remains only until Phase 3 cutover."
+        )
+        _BLOB_PARQUET_FALLBACK_WARNING_EMITTED = True
+
     client = _blob_client()
     container = client.get_container_client(_collection_container(collection_id))
     data = container.get_blob_client(f"output/{relative_path.as_posix()}").download_blob().readall()

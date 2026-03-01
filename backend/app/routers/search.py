@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from sse_starlette.sse import EventSourceResponse
 
+from ..config import settings
 from ..models import (
     SearchResponse,
     GlobalSearchRequest,
@@ -95,6 +96,9 @@ async def tog_search(collection_id: str, request: ToGSearchRequest):
 @router.get("/tog/debug")
 async def get_tog_entities(collection_id: str):
     """Debug endpoint to see entities available for ToG search."""
+    if not settings.enable_tog_debug_endpoint:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     try:
         from ..utils import get_search_data_paths
         import pandas as pd

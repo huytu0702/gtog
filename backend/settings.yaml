@@ -71,8 +71,13 @@ vector_store:
     type: azure_ai_search
     url: ${AZURE_SEARCH_ENDPOINT}
     api_key: ${AZURE_SEARCH_API_KEY}
-    index_schema:
-      vector_size: 3072  # gemini-embedding-001 actual output dimension
+    embeddings_schema:
+      entity.description:
+        vector_size: 3072  # gemini-embedding-001 actual output dimension
+      community.full_content:
+        vector_size: 3072
+      text_unit.text:
+        vector_size: 3072
 
 ### Workflow settings ###
 

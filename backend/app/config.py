@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Server Configuration
     host: str = "0.0.0.0"
     port: int = 8000
+    enable_tog_debug_endpoint: bool = False
 
     @property
     def collections_dir(self) -> Path:

@@ -14,6 +14,7 @@ from .routers import (
     indexing_router,
     search_router,
 )
+from .utils import validate_graphrag_settings_compatibility
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting GraphRAG FastAPI backend...")
+    validate_graphrag_settings_compatibility(settings.settings_yaml_path)
 
     if settings.azure_storage_connection_string:
         logger.info("Using Azure Blob Storage for collection data")
