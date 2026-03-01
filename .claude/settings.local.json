@@ -16,7 +16,8 @@
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_type",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "WebFetch(domain:microsoft.github.io)"
     ],
     "deny": [],
     "ask": []
