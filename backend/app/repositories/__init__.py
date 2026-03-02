@@ -9,6 +9,11 @@ from .control_plane_repository import (
     get_control_plane_repository,
     require_control_plane_repository,
 )
+from .serving_repository import (
+    CosmosServingRepository,
+    get_serving_repository,
+    require_serving_repository,
+)
 
 __all__ = [
     "CosmosControlPlaneRepository",
@@ -18,4 +23,7 @@ __all__ = [
     "INDEX_JOB_FAILED",
     "get_control_plane_repository",
     "require_control_plane_repository",
+    "CosmosServingRepository",
+    "get_serving_repository",
+    "require_serving_repository",
 ]

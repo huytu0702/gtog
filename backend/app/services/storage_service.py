@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import UploadFile
 
 from ..models import CollectionResponse, DocumentResponse
-from ..repositories import get_control_plane_repository
+from ..repositories import get_control_plane_repository, get_serving_repository
 from ..utils.helpers import _blob_client, _collection_container, _ensure_blob_container
 
 
@@ -20,6 +20,7 @@ class StorageService:
         """Initialize the storage service."""
         self.blob_client = _blob_client()
         self.control_plane = get_control_plane_repository()
+        self.serving_repo = get_serving_repository()
 
     def _ensure_blob_enabled(self) -> None:
         if self.blob_client is None:
@@ -42,12 +43,12 @@ class StorageService:
         return datetime.fromisoformat(value)
 
     def _is_indexed(self, collection_id: str) -> bool:
-        col_container = self.blob_client.get_container_client(_collection_container(collection_id))
-        return (
-            col_container.exists()
-            and col_container.get_blob_client("output/entities.parquet").exists()
-            and col_container.get_blob_client("output/communities.parquet").exists()
-        )
+        if self.control_plane is None:
+            return False
+        collection = self.control_plane.get_collection(collection_id)
+        if collection is None:
+            return False
+        return bool(collection.get("activeVersion"))
 
     def _to_collection_response(self, item: dict, document_count: int, indexed: bool) -> CollectionResponse:
         return CollectionResponse(
@@ -82,6 +83,8 @@ class StorageService:
         self._ensure_blob_enabled()
         self._ensure_control_plane_enabled()
         self.control_plane.delete_collection(collection_id)
+        if self.serving_repo is not None:
+            self.serving_repo.purge_collection(collection_id)
 
         container = self.blob_client.get_container_client(_collection_container(collection_id))
         if container.exists():

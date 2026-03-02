@@ -20,6 +20,12 @@ DOCUMENTS_CONTAINER="${DOCUMENTS_CONTAINER:-documents}"
 INDEXING_JOBS_CONTAINER="${INDEXING_JOBS_CONTAINER:-indexingJobs}"
 JOB_EVENTS_CONTAINER="${JOB_EVENTS_CONTAINER:-jobEvents}"
 ARTIFACT_MANIFEST_CONTAINER="${ARTIFACT_MANIFEST_CONTAINER:-artifactManifest}"
+ENTITIES_CONTAINER="${ENTITIES_CONTAINER:-entities}"
+RELATIONSHIPS_CONTAINER="${RELATIONSHIPS_CONTAINER:-relationships}"
+TEXT_UNITS_CONTAINER="${TEXT_UNITS_CONTAINER:-textUnits}"
+COMMUNITIES_CONTAINER="${COMMUNITIES_CONTAINER:-communities}"
+COMMUNITY_REPORTS_CONTAINER="${COMMUNITY_REPORTS_CONTAINER:-communityReports}"
+COVARIATES_CONTAINER="${COVARIATES_CONTAINER:-covariates}"
 
 BLOB_CONTAINERS=("gtog-input" "gtog-output" "gtog-cache" "gtog-logs")
 
@@ -42,14 +48,15 @@ az storage account create \
   --allow-blob-public-access false \
   --output none
 
-echo ">>> Fetching storage connection string"
-STORAGE_CONNECTION_STRING="$(
-  az storage account show-connection-string \
-    --name "${STORAGE_ACCOUNT}" \
+echo ">>> Fetching storage account key"
+STORAGE_ACCOUNT_KEY="$(
+  az storage account keys list \
+    --account-name "${STORAGE_ACCOUNT}" \
     --resource-group "${RESOURCE_GROUP}" \
-    --query connectionString \
+    --query "[0].value" \
     --output tsv
 )"
+STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=${STORAGE_ACCOUNT};AccountKey=${STORAGE_ACCOUNT_KEY};EndpointSuffix=core.windows.net"
 
 echo ">>> Ensuring blob containers"
 for container in "${BLOB_CONTAINERS[@]}"; do
@@ -130,6 +137,12 @@ create_container "${DOCUMENTS_CONTAINER}" "1000"
 create_container "${INDEXING_JOBS_CONTAINER}" "4000"
 create_container "${JOB_EVENTS_CONTAINER}" "4000"
 create_container "${ARTIFACT_MANIFEST_CONTAINER}" "1000"
+create_container "${ENTITIES_CONTAINER}" "4000"
+create_container "${RELATIONSHIPS_CONTAINER}" "4000"
+create_container "${TEXT_UNITS_CONTAINER}" "4000"
+create_container "${COMMUNITIES_CONTAINER}" "1000"
+create_container "${COMMUNITY_REPORTS_CONTAINER}" "1000"
+create_container "${COVARIATES_CONTAINER}" "1000"
 
 COSMOS_ENDPOINT="$(
   az cosmosdb show \
@@ -161,6 +174,8 @@ echo "=========================================="
 echo
 echo "Add these to backend/.env:"
 echo "AZURE_STORAGE_CONNECTION_STRING=\"${STORAGE_CONNECTION_STRING}\""
+echo "AZURE_STORAGE_ACCOUNT_NAME=\"${STORAGE_ACCOUNT}\""
+echo "AZURE_STORAGE_ACCOUNT_KEY=\"${STORAGE_ACCOUNT_KEY}\""
 echo "AZURE_SEARCH_ENDPOINT=\"${SEARCH_ENDPOINT}\""
 echo "AZURE_SEARCH_API_KEY=\"${SEARCH_API_KEY}\""
 echo "AZURE_COSMOS_CONNECTION_STRING=\"${COSMOS_CONNECTION_STRING}\""
@@ -172,6 +187,12 @@ echo "AZURE_COSMOS_DOCUMENTS_CONTAINER=\"${DOCUMENTS_CONTAINER}\""
 echo "AZURE_COSMOS_INDEXING_JOBS_CONTAINER=\"${INDEXING_JOBS_CONTAINER}\""
 echo "AZURE_COSMOS_JOB_EVENTS_CONTAINER=\"${JOB_EVENTS_CONTAINER}\""
 echo "AZURE_COSMOS_ARTIFACT_MANIFEST_CONTAINER=\"${ARTIFACT_MANIFEST_CONTAINER}\""
+echo "AZURE_COSMOS_ENTITIES_CONTAINER=\"${ENTITIES_CONTAINER}\""
+echo "AZURE_COSMOS_RELATIONSHIPS_CONTAINER=\"${RELATIONSHIPS_CONTAINER}\""
+echo "AZURE_COSMOS_TEXT_UNITS_CONTAINER=\"${TEXT_UNITS_CONTAINER}\""
+echo "AZURE_COSMOS_COMMUNITIES_CONTAINER=\"${COMMUNITIES_CONTAINER}\""
+echo "AZURE_COSMOS_COMMUNITY_REPORTS_CONTAINER=\"${COMMUNITY_REPORTS_CONTAINER}\""
+echo "AZURE_COSMOS_COVARIATES_CONTAINER=\"${COVARIATES_CONTAINER}\""
 echo
 echo "Search SKU in use: ${SEARCH_SKU}"
 echo "Do not commit secrets to git."

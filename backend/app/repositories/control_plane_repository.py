@@ -34,6 +34,12 @@ def _document_item_id(collection_id: str, document_name: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"{collection_id}:{document_name}"))
 
 
+def _new_serving_version() -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    suffix = uuid4().hex[:8]
+    return f"v{timestamp}-{suffix}"
+
+
 class CosmosControlPlaneRepository:
     """Repository for control-plane entities in Cosmos DB."""
 
@@ -135,6 +141,25 @@ class CosmosControlPlaneRepository:
         self._container("collections").delete_item(item=collection_id, partition_key=collection_id)
         return True
 
+    def get_active_version(self, collection_id: str) -> str | None:
+        """Return active serving version for one collection."""
+        collection = self.get_collection(collection_id)
+        if collection is None:
+            return None
+        return collection.get("activeVersion")
+
+    def set_active_version(self, collection_id: str, version: str) -> dict[str, Any]:
+        """Atomically update active serving version for one collection."""
+        collection = self.get_collection(collection_id)
+        if collection is None:
+            raise ValueError(f"Collection '{collection_id}' not found")
+        collection["activeVersion"] = version
+        collection["updatedAt"] = _utcnow_iso()
+        return self._container("collections").replace_item(
+            item=collection["id"],
+            body=collection,
+        )
+
     def upsert_document(
         self,
         *,
@@ -222,6 +247,7 @@ class CosmosControlPlaneRepository:
             "id": str(uuid4()),
             "collectionId": collection_id,
             "status": INDEX_JOB_QUEUED,
+            "targetVersion": _new_serving_version(),
             "attempt": 0,
             "maxAttempts": max_attempts,
             "requestedAt": now,
@@ -282,6 +308,10 @@ class CosmosControlPlaneRepository:
         if to_status == INDEX_JOB_RUNNING:
             job["attempt"] = int(job.get("attempt", 0)) + 1
             job["startedAt"] = now
+            job["finishedAt"] = None
+            job["error"] = None
+        elif to_status == INDEX_JOB_QUEUED:
+            job["startedAt"] = None
             job["finishedAt"] = None
             job["error"] = None
         elif to_status == INDEX_JOB_COMPLETED:

@@ -8,15 +8,16 @@ from typing import Any, Optional
 
 import pandas as pd
 import graphrag.api as api
-
 from ..config import settings
 from ..models import SearchMethod, SearchResponse
+from ..repositories import get_control_plane_repository, get_serving_repository
 from ..utils import (
     load_graphrag_config,
     validate_collection_indexed,
     get_search_data_paths,
 )
 from ..utils.helpers import _blob_client, _collection_container
+from ..utils.helpers import _storage_connection_string
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,66 @@ class QueryService:
 
     def __init__(self):
         """Initialize the query service."""
-        pass
+        self.control_plane = get_control_plane_repository()
+        self.serving_repo = get_serving_repository()
+
+    def _load_context_from_serving(
+        self, collection_id: str, method: str
+    ) -> tuple[str, dict[str, pd.DataFrame]]:
+        if self.control_plane is None or self.serving_repo is None:
+            raise RuntimeError("Cosmos serving repository is not configured")
+
+        collection = self.control_plane.get_collection(collection_id)
+        if collection is None:
+            raise ValueError(f"Collection '{collection_id}' not found")
+
+        active_version = collection.get("activeVersion")
+        if not active_version:
+            raise ValueError("Collection has not been indexed yet (no active serving version)")
+
+        required = {
+            "global": ["entities", "communities", "community_reports"],
+            "local": [
+                "entities",
+                "communities",
+                "community_reports",
+                "text_units",
+                "relationships",
+            ],
+            "tog": ["entities", "relationships"],
+            "drift": [
+                "entities",
+                "communities",
+                "community_reports",
+                "text_units",
+                "relationships",
+            ],
+        }[method]
+
+        frames: dict[str, pd.DataFrame] = {}
+        for dataset in required:
+            frame = self.serving_repo.load_dataframe(
+                collection_id=collection_id,
+                version=str(active_version),
+                dataset=dataset,
+            )
+            if frame.empty:
+                raise ValueError(
+                    f"Serving context is incomplete for active version {active_version} "
+                    f"(dataset={dataset})"
+                )
+            frames[dataset] = frame
+
+        if method == "local":
+            covariates = self.serving_repo.load_dataframe(
+                collection_id=collection_id,
+                version=str(active_version),
+                dataset="covariates",
+            )
+            if not covariates.empty:
+                frames["covariates"] = covariates
+
+        return str(active_version), frames
 
     async def global_search(
         self,
@@ -136,24 +196,26 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        # Validate collection is indexed for global search
-        is_indexed, error = validate_collection_indexed(collection_id, method="global")
-        if not is_indexed:
-            raise ValueError(error)
-
-        # Load config and data
-        config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "global")
-
-        # Load required dataframes
-        if settings.azure_storage_connection_string:
-            entities = _blob_parquet(collection_id, data_paths["entities"])
-            communities = _blob_parquet(collection_id, data_paths["communities"])
-            community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+        if self.control_plane is not None and self.serving_repo is not None:
+            active_version, frames = self._load_context_from_serving(collection_id, "global")
+            config = load_graphrag_config(collection_id, version=active_version)
+            entities = frames["entities"]
+            communities = frames["communities"]
+            community_reports = frames["community_reports"]
         else:
-            entities = pd.read_parquet(data_paths["entities"])
-            communities = pd.read_parquet(data_paths["communities"])
-            community_reports = pd.read_parquet(data_paths["community_reports"])
+            is_indexed, error = validate_collection_indexed(collection_id, method="global")
+            if not is_indexed:
+                raise ValueError(error)
+            config = load_graphrag_config(collection_id)
+            data_paths = get_search_data_paths(collection_id, "global")
+            if _storage_connection_string():
+                entities = _blob_parquet(collection_id, data_paths["entities"])
+                communities = _blob_parquet(collection_id, data_paths["communities"])
+                community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+            else:
+                entities = pd.read_parquet(data_paths["entities"])
+                communities = pd.read_parquet(data_paths["communities"])
+                community_reports = pd.read_parquet(data_paths["community_reports"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -201,36 +263,40 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        # Validate collection is indexed for local search
-        is_indexed, error = validate_collection_indexed(collection_id, method="local")
-        if not is_indexed:
-            raise ValueError(error)
-
-        # Load config and data
-        config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "local")
-
-        # Load required dataframes
-        if settings.azure_storage_connection_string:
-            entities = _blob_parquet(collection_id, data_paths["entities"])
-            communities = _blob_parquet(collection_id, data_paths["communities"])
-            community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
-            text_units = _blob_parquet(collection_id, data_paths["text_units"])
-            relationships = _blob_parquet(collection_id, data_paths["relationships"])
+        if self.control_plane is not None and self.serving_repo is not None:
+            active_version, frames = self._load_context_from_serving(collection_id, "local")
+            config = load_graphrag_config(collection_id, version=active_version)
+            entities = frames["entities"]
+            communities = frames["communities"]
+            community_reports = frames["community_reports"]
+            text_units = frames["text_units"]
+            relationships = frames["relationships"]
+            covariates = frames.get("covariates")
         else:
-            entities = pd.read_parquet(data_paths["entities"])
-            communities = pd.read_parquet(data_paths["communities"])
-            community_reports = pd.read_parquet(data_paths["community_reports"])
-            text_units = pd.read_parquet(data_paths["text_units"])
-            relationships = pd.read_parquet(data_paths["relationships"])
-
-        # Load covariates if available
-        covariates = None
-        if "covariates" in data_paths:
-            if settings.azure_storage_connection_string:
-                covariates = _blob_parquet(collection_id, data_paths["covariates"])
+            is_indexed, error = validate_collection_indexed(collection_id, method="local")
+            if not is_indexed:
+                raise ValueError(error)
+            config = load_graphrag_config(collection_id)
+            data_paths = get_search_data_paths(collection_id, "local")
+            if _storage_connection_string():
+                entities = _blob_parquet(collection_id, data_paths["entities"])
+                communities = _blob_parquet(collection_id, data_paths["communities"])
+                community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+                text_units = _blob_parquet(collection_id, data_paths["text_units"])
+                relationships = _blob_parquet(collection_id, data_paths["relationships"])
             else:
-                covariates = pd.read_parquet(data_paths["covariates"])
+                entities = pd.read_parquet(data_paths["entities"])
+                communities = pd.read_parquet(data_paths["communities"])
+                community_reports = pd.read_parquet(data_paths["community_reports"])
+                text_units = pd.read_parquet(data_paths["text_units"])
+                relationships = pd.read_parquet(data_paths["relationships"])
+
+            covariates = None
+            if "covariates" in data_paths:
+                if _storage_connection_string():
+                    covariates = _blob_parquet(collection_id, data_paths["covariates"])
+                else:
+                    covariates = pd.read_parquet(data_paths["covariates"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -276,22 +342,23 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        # Validate collection is indexed for ToG
-        is_indexed, error = validate_collection_indexed(collection_id, method="tog")
-        if not is_indexed:
-            raise ValueError(error)
-
-        # Load config and data
-        config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "tog")
-
-        # Load required dataframes
-        if settings.azure_storage_connection_string:
-            entities = _blob_parquet(collection_id, data_paths["entities"])
-            relationships = _blob_parquet(collection_id, data_paths["relationships"])
+        if self.control_plane is not None and self.serving_repo is not None:
+            active_version, frames = self._load_context_from_serving(collection_id, "tog")
+            config = load_graphrag_config(collection_id, version=active_version)
+            entities = frames["entities"]
+            relationships = frames["relationships"]
         else:
-            entities = pd.read_parquet(data_paths["entities"])
-            relationships = pd.read_parquet(data_paths["relationships"])
+            is_indexed, error = validate_collection_indexed(collection_id, method="tog")
+            if not is_indexed:
+                raise ValueError(error)
+            config = load_graphrag_config(collection_id)
+            data_paths = get_search_data_paths(collection_id, "tog")
+            if _storage_connection_string():
+                entities = _blob_parquet(collection_id, data_paths["entities"])
+                relationships = _blob_parquet(collection_id, data_paths["relationships"])
+            else:
+                entities = pd.read_parquet(data_paths["entities"])
+                relationships = pd.read_parquet(data_paths["relationships"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -378,28 +445,33 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        # Validate collection is indexed for drift search
-        is_indexed, error = validate_collection_indexed(collection_id, method="drift")
-        if not is_indexed:
-            raise ValueError(error)
-
-        # Load config and data
-        config = load_graphrag_config(collection_id)
-        data_paths = get_search_data_paths(collection_id, "drift")
-
-        # Load required dataframes
-        if settings.azure_storage_connection_string:
-            entities = _blob_parquet(collection_id, data_paths["entities"])
-            communities = _blob_parquet(collection_id, data_paths["communities"])
-            community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
-            text_units = _blob_parquet(collection_id, data_paths["text_units"])
-            relationships = _blob_parquet(collection_id, data_paths["relationships"])
+        if self.control_plane is not None and self.serving_repo is not None:
+            active_version, frames = self._load_context_from_serving(collection_id, "drift")
+            config = load_graphrag_config(collection_id, version=active_version)
+            entities = frames["entities"]
+            communities = frames["communities"]
+            community_reports = frames["community_reports"]
+            text_units = frames["text_units"]
+            relationships = frames["relationships"]
         else:
-            entities = pd.read_parquet(data_paths["entities"])
-            communities = pd.read_parquet(data_paths["communities"])
-            community_reports = pd.read_parquet(data_paths["community_reports"])
-            text_units = pd.read_parquet(data_paths["text_units"])
-            relationships = pd.read_parquet(data_paths["relationships"])
+            is_indexed, error = validate_collection_indexed(collection_id, method="drift")
+            if not is_indexed:
+                raise ValueError(error)
+
+            config = load_graphrag_config(collection_id)
+            data_paths = get_search_data_paths(collection_id, "drift")
+            if _storage_connection_string():
+                entities = _blob_parquet(collection_id, data_paths["entities"])
+                communities = _blob_parquet(collection_id, data_paths["communities"])
+                community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
+                text_units = _blob_parquet(collection_id, data_paths["text_units"])
+                relationships = _blob_parquet(collection_id, data_paths["relationships"])
+            else:
+                entities = pd.read_parquet(data_paths["entities"])
+                communities = pd.read_parquet(data_paths["communities"])
+                community_reports = pd.read_parquet(data_paths["community_reports"])
+                text_units = pd.read_parquet(data_paths["text_units"])
+                relationships = pd.read_parquet(data_paths["relationships"])
 
         fh = _attach_query_log(collection_id)
         try:
@@ -428,6 +500,40 @@ class QueryService:
             context_data=_serialize_context_records(context_data),
             method=SearchMethod.DRIFT,
         )
+
+    def get_tog_entities_preview(self, collection_id: str, limit: int = 20) -> dict[str, Any]:
+        """Return ToG entity preview for debugging."""
+        if self.control_plane is not None and self.serving_repo is not None:
+            active_version, frames = self._load_context_from_serving(collection_id, "tog")
+            entities_df = frames["entities"]
+            source = f"cosmos:{active_version}"
+        else:
+            data_paths = get_search_data_paths(collection_id, "tog")
+            if _storage_connection_string():
+                entities_df = _blob_parquet(collection_id, data_paths["entities"])
+                source = "blob"
+            else:
+                entities_df = pd.read_parquet(data_paths["entities"])
+                source = "file"
+
+        entities_info = []
+        for _, row in entities_df.head(limit).iterrows():
+            description = str(row.get("description", ""))
+            entities_info.append(
+                {
+                    "id": row.get("title") or row.get("id"),
+                    "description": description[:100] + "..." if len(description) > 100 else description,
+                    "type": row.get("type", "unknown"),
+                }
+            )
+
+        return {
+            "collection_id": collection_id,
+            "source": source,
+            "total_entities": len(entities_df),
+            "showing_first": len(entities_info),
+            "entities": entities_info,
+        }
 
 
 # Global query service instance

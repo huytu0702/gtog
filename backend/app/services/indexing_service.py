@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 import graphrag.api as api
 from graphrag.callbacks.noop_workflow_callbacks import NoopWorkflowCallbacks
@@ -18,6 +19,7 @@ from ..repositories import (
 )
 from ..utils import load_graphrag_config
 from ..utils.arrow_fix import apply_arrow_fix, remove_arrow_fix
+from .serving_materialization_service import serving_materialization_service
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,23 @@ class IndexingService:
             "message": message,
         }
 
+    def _schedule_retry_if_possible(self, collection_id: str, failed_job: dict[str, Any]) -> None:
+        attempt = int(failed_job.get("attempt", 0))
+        max_attempts = int(failed_job.get("maxAttempts", 0))
+        if attempt >= max_attempts:
+            return
+
+        job_id = str(failed_job["id"])
+        self.control_plane.transition_indexing_job(
+            collection_id=collection_id,
+            job_id=job_id,
+            to_status=INDEX_JOB_QUEUED,
+            metadata={"reason": "auto-retry", "attempt": attempt},
+        )
+        self.running_tasks[collection_id] = asyncio.create_task(
+            self._run_indexing_task(collection_id=collection_id, job_id=job_id)
+        )
+
     async def start_indexing(self, collection_id: str) -> IndexStatusResponse:
         """
         Start indexing a collection in the background.
@@ -117,12 +136,15 @@ class IndexingService:
         self._ensure_control_plane_enabled()
 
         try:
-            self.control_plane.transition_indexing_job(
+            running_job = self.control_plane.transition_indexing_job(
                 collection_id=collection_id,
                 job_id=job_id,
                 to_status=INDEX_JOB_RUNNING,
                 metadata={"source": "api"},
             )
+            target_version = str(running_job.get("targetVersion") or "")
+            if not target_version:
+                target_version = f"v{uuid4().hex[:12]}"
             self._set_runtime_progress(job_id, 5.0, "Starting indexing...")
 
             # Apply ArrowStringArray fix before indexing.
@@ -130,7 +152,10 @@ class IndexingService:
             logger.info(f"Starting indexing for collection: {collection_id}")
 
             self._set_runtime_progress(job_id, 10.0, "Loading configuration...")
-            config = load_graphrag_config(collection_id)
+            config = load_graphrag_config(
+                collection_id,
+                version=target_version if target_version else None,
+            )
             logger.info(f"Configuration loaded for {collection_id}")
 
             self._set_runtime_progress(job_id, 20.0, "Running indexing pipeline...")
@@ -148,7 +173,7 @@ class IndexingService:
                         error_messages.extend([str(err) for err in output.errors])
 
                 joined_errors = "; ".join(error_messages[:3])
-                self.control_plane.transition_indexing_job(
+                failed_job = self.control_plane.transition_indexing_job(
                     collection_id=collection_id,
                     job_id=job_id,
                     to_status=INDEX_JOB_FAILED,
@@ -157,12 +182,23 @@ class IndexingService:
                 )
                 self._set_runtime_progress(job_id, 100.0, "Indexing failed")
                 logger.error(f"Indexing failed for {collection_id}: {joined_errors}")
+                self._schedule_retry_if_possible(collection_id, failed_job)
             else:
+                self._set_runtime_progress(job_id, 70.0, "Materializing serving context...")
+                materialized_counts = serving_materialization_service.materialize_collection_version(
+                    collection_id=collection_id,
+                    version=target_version,
+                )
+                self.control_plane.set_active_version(collection_id, target_version)
                 self.control_plane.transition_indexing_job(
                     collection_id=collection_id,
                     job_id=job_id,
                     to_status=INDEX_JOB_COMPLETED,
-                    metadata={"stage": "build_index"},
+                    metadata={
+                        "stage": "build_index",
+                        "version": target_version,
+                        "materializedCounts": materialized_counts,
+                    },
                 )
                 self._set_runtime_progress(job_id, 100.0, "Indexing completed successfully")
                 logger.info(f"Indexing completed successfully for {collection_id}")
@@ -170,13 +206,14 @@ class IndexingService:
         except Exception as err:
             logger.exception(f"Error during indexing for {collection_id}")
             try:
-                self.control_plane.transition_indexing_job(
+                failed_job = self.control_plane.transition_indexing_job(
                     collection_id=collection_id,
                     job_id=job_id,
                     to_status=INDEX_JOB_FAILED,
                     error=str(err),
                     metadata={"stage": "exception"},
                 )
+                self._schedule_retry_if_possible(collection_id, failed_job)
             except Exception:
                 logger.exception("Failed to transition indexing job to failed state")
             self._set_runtime_progress(job_id, 100.0, "Indexing failed with error")

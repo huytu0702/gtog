@@ -1,7 +1,9 @@
 """Utility helper functions."""
 
+import hashlib
 import io
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -10,13 +12,30 @@ from graphrag.config.load_config import load_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
 from ..config import settings
+from ..repositories import get_control_plane_repository, get_serving_repository
 
 logger = logging.getLogger(__name__)
 
 
+def _storage_connection_string() -> str:
+    """Resolve Azure Storage connection string from explicit string or account key."""
+    if settings.azure_storage_connection_string:
+        return settings.azure_storage_connection_string
+
+    if settings.azure_storage_account_name and settings.azure_storage_account_key:
+        return (
+            "DefaultEndpointsProtocol=https;"
+            f"AccountName={settings.azure_storage_account_name};"
+            f"AccountKey={settings.azure_storage_account_key};"
+            "EndpointSuffix=core.windows.net"
+        )
+
+    return ""
+
+
 def _blob_client():
     """Return an Azure BlobServiceClient if connection string is configured."""
-    conn_str = settings.azure_storage_connection_string
+    conn_str = _storage_connection_string()
     if not conn_str:
         return None
     from azure.storage.blob import BlobServiceClient
@@ -133,19 +152,35 @@ def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
                 )
 
 
-def load_graphrag_config(collection_id: str) -> GraphRagConfig:
+def _build_vector_index_name(collection_id: str, version: str | None = None) -> str:
+    """Build an Azure AI Search-safe index name for collection/version isolation."""
+    base = collection_id if version is None else f"{collection_id}-{version}"
+    normalized = re.sub(r"[^a-z0-9-]", "-", base.lower())
+    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
+
+    if not normalized:
+        normalized = "gtog-index"
+    if len(normalized) <= 128:
+        return normalized
+
+    digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
+    return f"{normalized[:117]}-{digest}"
+
+
+def load_graphrag_config(collection_id: str, version: str | None = None) -> GraphRagConfig:
     """
     Load shared GraphRAG configuration with collection-specific storage overrides.
     All collections use one shared prompt folder at backend/prompts.
     """
-    use_blob = bool(settings.azure_storage_connection_string)
+    conn_str = _storage_connection_string()
+    use_blob = bool(conn_str)
     shared_root = settings.settings_yaml_path.parent.resolve()
     _validate_shared_prompt_files(shared_root / "prompts")
+    vector_index_name = _build_vector_index_name(collection_id, version)
 
     if use_blob:
         _ensure_blob_container(collection_id)
         container_name = _collection_container(collection_id)
-        conn_str = settings.azure_storage_connection_string
         cli_overrides = {
             "input.storage.type": "blob",
             "input.storage.connection_string": conn_str,
@@ -164,7 +199,7 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
             "reporting.connection_string": conn_str,
             "reporting.container_name": container_name,
             "reporting.base_dir": "logs",
-            "vector_store.default_vector_store.container_name": collection_id,
+            "vector_store.default_vector_store.container_name": vector_index_name,
         }
     else:
         storage_root = settings.collections_dir.resolve()
@@ -181,6 +216,7 @@ def load_graphrag_config(collection_id: str) -> GraphRagConfig:
             "output.base_dir": str(collection_dir / "output"),
             "cache.type": "file",
             "cache.base_dir": str(collection_dir / "cache"),
+            "vector_store.default_vector_store.container_name": vector_index_name,
         }
 
     config = load_config(
@@ -197,7 +233,38 @@ def validate_collection_indexed(
     collection_id: str, method: Optional[str] = None
 ) -> Tuple[bool, Optional[str]]:
     """Check if a collection has been successfully indexed."""
-    use_blob = bool(settings.azure_storage_connection_string)
+    control_plane = get_control_plane_repository()
+    serving_repo = get_serving_repository()
+    if control_plane is not None and serving_repo is not None:
+        collection = control_plane.get_collection(collection_id)
+        if collection is None:
+            return False, f"Collection '{collection_id}' not found"
+        version = collection.get("activeVersion")
+        if not version:
+            return False, "Collection has not been indexed yet (no active serving version)"
+
+        required_datasets = ["entities", "communities", "community_reports"]
+        if method in ["local", "drift", "tog"]:
+            required_datasets.extend(["text_units", "relationships"])
+
+        missing = []
+        for dataset in required_datasets:
+            if serving_repo.count_rows(
+                collection_id=collection_id,
+                version=str(version),
+                dataset=dataset,
+            ) == 0:
+                missing.append(dataset)
+
+        if missing:
+            return (
+                False,
+                "Collection active serving version is incomplete: "
+                + ", ".join(sorted(missing)),
+            )
+        return True, None
+
+    use_blob = bool(_storage_connection_string())
 
     required_files = [
         "entities.parquet",
@@ -225,7 +292,7 @@ def validate_collection_indexed(
 
 def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
     """Get logical parquet paths for a search method."""
-    use_blob = bool(settings.azure_storage_connection_string)
+    use_blob = bool(_storage_connection_string())
 
     file_names = {
         "entities": "entities.parquet",

@@ -100,28 +100,7 @@ async def get_tog_entities(collection_id: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
     try:
-        from ..utils import get_search_data_paths
-        import pandas as pd
-
-        data_paths = get_search_data_paths(collection_id, "tog")
-        entities_df = pd.read_parquet(data_paths["entities"])
-
-        entities_info = []
-        for _, row in entities_df.head(20).iterrows():
-            entities_info.append({
-                "id": row["title"],
-                "description": row["description"][:100] + "..."
-                if len(row["description"]) > 100
-                else row["description"],
-                "type": row.get("type", "unknown"),
-            })
-
-        return {
-            "collection_id": collection_id,
-            "total_entities": len(entities_df),
-            "showing_first": len(entities_info),
-            "entities": entities_info,
-        }
+        return query_service.get_tog_entities_preview(collection_id, limit=20)
     except Exception as e:
         logger.exception("Error getting ToG entities")
         raise HTTPException(

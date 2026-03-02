@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import httpx
-import pandas as pd
 import pytest
 
 from backend.app.main import app
@@ -95,24 +94,31 @@ class TestToGDebugEndpoint:
 
     @pytest.mark.asyncio
     async def test_tog_debug_returns_data_when_enabled(self):
-        entities_df = pd.DataFrame(
-            [{"title": "Entity A", "description": "Entity A description", "type": "org"}]
-        )
-
         with patch("backend.app.routers.search.settings.enable_tog_debug_endpoint", True):
             with patch(
-                "backend.app.utils.get_search_data_paths",
-                return_value={"entities": "entities.parquet"},
+                "backend.app.routers.search.query_service.get_tog_entities_preview",
+                return_value={
+                    "collection_id": "test-collection",
+                    "source": "cosmos:v1",
+                    "total_entities": 1,
+                    "showing_first": 1,
+                    "entities": [
+                        {
+                            "id": "Entity A",
+                            "description": "Entity A description",
+                            "type": "org",
+                        }
+                    ],
+                },
             ):
-                with patch("pandas.read_parquet", return_value=entities_df):
-                    transport = httpx.ASGITransport(app=app)
-                    async with httpx.AsyncClient(
-                        transport=transport,
-                        base_url="http://testserver",
-                    ) as client:
-                        response = await client.get(
-                            "/api/collections/test-collection/search/tog/debug"
-                        )
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.get(
+                        "/api/collections/test-collection/search/tog/debug"
+                    )
 
         assert response.status_code == 200
         body = response.json()

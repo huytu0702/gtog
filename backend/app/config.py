@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     # Storage Configuration
     storage_root_dir: str = "./storage"
     azure_storage_connection_string: str = ""
+    azure_storage_account_name: str = ""
+    azure_storage_account_key: str = ""
     azure_cosmos_connection_string: str = ""
     azure_cosmos_endpoint: str = ""
     azure_cosmos_key: str = ""
@@ -32,6 +34,12 @@ class Settings(BaseSettings):
     azure_cosmos_indexing_jobs_container: str = "indexingJobs"
     azure_cosmos_job_events_container: str = "jobEvents"
     azure_cosmos_artifact_manifest_container: str = "artifactManifest"
+    azure_cosmos_entities_container: str = "entities"
+    azure_cosmos_relationships_container: str = "relationships"
+    azure_cosmos_text_units_container: str = "textUnits"
+    azure_cosmos_communities_container: str = "communities"
+    azure_cosmos_community_reports_container: str = "communityReports"
+    azure_cosmos_covariates_container: str = "covariates"
 
     # Model Configuration
     default_chat_model: str = "gemini/gemini-2.5-flash-lite"
