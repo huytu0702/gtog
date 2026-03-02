@@ -20,7 +20,7 @@ INDEX_JOB_FAILED = "failed"
 
 _ALLOWED_JOB_TRANSITIONS: dict[str, set[str]] = {
     INDEX_JOB_QUEUED: {INDEX_JOB_RUNNING, INDEX_JOB_FAILED},
-    INDEX_JOB_RUNNING: {INDEX_JOB_COMPLETED, INDEX_JOB_FAILED},
+    INDEX_JOB_RUNNING: {INDEX_JOB_QUEUED, INDEX_JOB_COMPLETED, INDEX_JOB_FAILED},
     INDEX_JOB_FAILED: {INDEX_JOB_QUEUED},
     INDEX_JOB_COMPLETED: set(),
 }
@@ -279,6 +279,22 @@ class CosmosControlPlaneRepository:
             )
         )
         return jobs[0] if jobs else None
+
+    def list_active_indexing_jobs(self) -> list[dict[str, Any]]:
+        """List queued/running jobs across all collections."""
+        return list(
+            self._container("indexing_jobs").query_items(
+                query=(
+                    "SELECT * FROM c WHERE c.status = @queued OR c.status = @running "
+                    "ORDER BY c.requestedAt DESC"
+                ),
+                parameters=[
+                    {"name": "@queued", "value": INDEX_JOB_QUEUED},
+                    {"name": "@running", "value": INDEX_JOB_RUNNING},
+                ],
+                enable_cross_partition_query=True,
+            )
+        )
 
     def transition_indexing_job(
         self,

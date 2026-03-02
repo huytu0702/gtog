@@ -102,6 +102,37 @@ class IndexingService:
             self._run_indexing_task(collection_id=collection_id, job_id=job_id)
         )
 
+    def recover_pending_jobs(self) -> None:
+        """Recover queued/running jobs from Cosmos after process restart."""
+        self._ensure_control_plane_enabled()
+        active_jobs = self.control_plane.list_active_indexing_jobs()
+        scheduled_collections: set[str] = set()
+        for job in active_jobs:
+            collection_id = str(job.get("collectionId", ""))
+            job_id = str(job.get("id", ""))
+            status = str(job.get("status", ""))
+            if not collection_id or not job_id:
+                continue
+            if collection_id in scheduled_collections:
+                continue
+
+            current_task = self.running_tasks.get(collection_id)
+            if current_task is not None and not current_task.done():
+                continue
+
+            if status == INDEX_JOB_RUNNING:
+                self.control_plane.transition_indexing_job(
+                    collection_id=collection_id,
+                    job_id=job_id,
+                    to_status=INDEX_JOB_QUEUED,
+                    metadata={"reason": "process-recovery"},
+                )
+
+            self.running_tasks[collection_id] = asyncio.create_task(
+                self._run_indexing_task(collection_id=collection_id, job_id=job_id)
+            )
+            scheduled_collections.add(collection_id)
+
     async def start_indexing(self, collection_id: str) -> IndexStatusResponse:
         """
         Start indexing a collection in the background.

@@ -14,6 +14,7 @@ from .routers import (
     indexing_router,
     search_router,
 )
+from .services import indexing_service
 from .utils import validate_graphrag_settings_compatibility
 
 # Configure logging
@@ -39,6 +40,11 @@ async def lifespan(app: FastAPI):
             "Using Azure Cosmos DB for control-plane metadata "
             f"(database={settings.azure_cosmos_database_name})"
         )
+        try:
+            indexing_service.recover_pending_jobs()
+            logger.info("Recovered pending indexing jobs from Cosmos")
+        except Exception:
+            logger.exception("Failed to recover pending indexing jobs")
     else:
         logger.warning(
             "Azure Cosmos DB is not configured. Collection/document/indexing metadata "
