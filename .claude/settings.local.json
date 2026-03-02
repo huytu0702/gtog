@@ -16,7 +16,9 @@
       "WebFetch(domain:microsoft.github.io)",
       "Bash(.venv/Scripts/python:*)",
       "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \"F:/KL/gtog/.venv/Scripts/python.exe\":*)",
-      "Bash(\"F:/KL/gtog/.venv/Scripts/python.exe\":*)"
+      "Bash(\"F:/KL/gtog/.venv/Scripts/python.exe\":*)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 uv run:*)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 \"F:/KL/gtog/.venv/Scripts/graphrag.exe\" eval:*)"
     ],
     "deny": [],
     "ask": []
