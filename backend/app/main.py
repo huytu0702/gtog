@@ -32,6 +32,19 @@ async def lifespan(app: FastAPI):
     logger.info("Starting GraphRAG FastAPI backend...")
     validate_graphrag_settings_compatibility(settings.settings_yaml_path)
 
+    if settings.azure_cosmos_connection_string or (
+        settings.azure_cosmos_endpoint and settings.azure_cosmos_key
+    ):
+        logger.info(
+            "Using Azure Cosmos DB for control-plane metadata "
+            f"(database={settings.azure_cosmos_database_name})"
+        )
+    else:
+        logger.warning(
+            "Azure Cosmos DB is not configured. Collection/document/indexing metadata "
+            "APIs require Cosmos in Phase 1."
+        )
+
     if settings.azure_storage_connection_string:
         logger.info("Using Azure Blob Storage for collection data")
     else:

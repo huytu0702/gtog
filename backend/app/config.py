@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     # Storage Configuration
     storage_root_dir: str = "./storage"
     azure_storage_connection_string: str = ""
+    azure_cosmos_connection_string: str = ""
+    azure_cosmos_endpoint: str = ""
+    azure_cosmos_key: str = ""
+    azure_cosmos_database_name: str = "gtog-control"
+    azure_cosmos_collections_container: str = "collections"
+    azure_cosmos_documents_container: str = "documents"
+    azure_cosmos_indexing_jobs_container: str = "indexingJobs"
+    azure_cosmos_job_events_container: str = "jobEvents"
+    azure_cosmos_artifact_manifest_container: str = "artifactManifest"
 
     # Model Configuration
     default_chat_model: str = "gemini/gemini-2.5-flash-lite"

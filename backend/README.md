@@ -44,6 +44,11 @@ Edit `.env` and set your API keys:
 ```env
 GRAPHRAG_API_KEY=your_openai_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
+AZURE_STORAGE_CONNECTION_STRING=...
+AZURE_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+AZURE_SEARCH_API_KEY=...
+AZURE_COSMOS_CONNECTION_STRING=...
+AZURE_COSMOS_DATABASE_NAME=gtog-control
 ```
 
 ### 4. Verify Settings
