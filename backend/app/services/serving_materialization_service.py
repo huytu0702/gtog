@@ -36,7 +36,7 @@ class ServingMaterializationService:
             raise RuntimeError(
                 "Azure Cosmos DB is required for serving materialization. "
                 "Configure AZURE_COSMOS_CONNECTION_STRING or "
-                "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY."
+                "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
             )
 
     def _load_frame(self, collection_id: str, file_name: str) -> pd.DataFrame:

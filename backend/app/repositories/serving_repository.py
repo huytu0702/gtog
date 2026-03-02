@@ -12,6 +12,12 @@ from azure.cosmos import CosmosClient
 from azure.cosmos.partition_key import PartitionKey
 
 from ..config import settings
+from ..azure_runtime import (
+    bootstrap_runtime_secrets,
+    cosmos_client_kwargs,
+    cosmos_endpoint_credential,
+    is_cosmos_configured,
+)
 
 
 def _utcnow_iso() -> str:
@@ -43,6 +49,7 @@ class CosmosServingRepository:
         connection_string: str,
         endpoint: str,
         key: str,
+        credential: Any | None,
         database_name: str,
         entities_container: str,
         relationships_container: str,
@@ -50,15 +57,18 @@ class CosmosServingRepository:
         communities_container: str,
         community_reports_container: str,
         covariates_container: str,
+        client_kwargs: dict[str, Any] | None = None,
     ) -> None:
+        kwargs = client_kwargs or {}
         if connection_string:
-            self._client = CosmosClient.from_connection_string(connection_string)
-        elif endpoint and key:
-            self._client = CosmosClient(url=endpoint, credential=key)
+            self._client = CosmosClient.from_connection_string(connection_string, **kwargs)
+        elif endpoint and (key or credential):
+            self._client = CosmosClient(url=endpoint, credential=key or credential, **kwargs)
         else:
             raise ValueError(
                 "Cosmos DB is not configured. Set AZURE_COSMOS_CONNECTION_STRING "
-                "or AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY."
+                "or AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
+                "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
             )
 
         self._database = self._client.create_database_if_not_exists(id=database_name)
@@ -192,13 +202,13 @@ class CosmosServingRepository:
 @lru_cache(maxsize=1)
 def get_serving_repository() -> CosmosServingRepository | None:
     """Return singleton serving repository when Cosmos is configured."""
-    if settings.azure_cosmos_connection_string or (
-        settings.azure_cosmos_endpoint and settings.azure_cosmos_key
-    ):
+    bootstrap_runtime_secrets()
+    if is_cosmos_configured():
         return CosmosServingRepository(
             connection_string=settings.azure_cosmos_connection_string,
             endpoint=settings.azure_cosmos_endpoint,
             key=settings.azure_cosmos_key,
+            credential=cosmos_endpoint_credential(),
             database_name=settings.azure_cosmos_database_name,
             entities_container=settings.azure_cosmos_entities_container,
             relationships_container=settings.azure_cosmos_relationships_container,
@@ -206,6 +216,7 @@ def get_serving_repository() -> CosmosServingRepository | None:
             communities_container=settings.azure_cosmos_communities_container,
             community_reports_container=settings.azure_cosmos_community_reports_container,
             covariates_container=settings.azure_cosmos_covariates_container,
+            client_kwargs=cosmos_client_kwargs(),
         )
     return None
 
@@ -217,6 +228,7 @@ def require_serving_repository() -> CosmosServingRepository:
         raise RuntimeError(
             "Azure Cosmos DB is required for serving context storage. "
             "Configure AZURE_COSMOS_CONNECTION_STRING or "
-            "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY."
+            "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
+            "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
         )
     return repository

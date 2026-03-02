@@ -16,6 +16,7 @@ from .routers import (
 )
 from .services import indexing_service
 from .utils import validate_graphrag_settings_compatibility
+from .azure_runtime import bootstrap_runtime_secrets, is_cosmos_configured
 
 # Configure logging
 logging.basicConfig(
@@ -31,11 +32,10 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting GraphRAG FastAPI backend...")
+    bootstrap_runtime_secrets()
     validate_graphrag_settings_compatibility(settings.settings_yaml_path)
 
-    if settings.azure_cosmos_connection_string or (
-        settings.azure_cosmos_endpoint and settings.azure_cosmos_key
-    ):
+    if is_cosmos_configured():
         logger.info(
             "Using Azure Cosmos DB for control-plane metadata "
             f"(database={settings.azure_cosmos_database_name})"

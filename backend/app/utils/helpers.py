@@ -13,34 +13,19 @@ from graphrag.config.models.graph_rag_config import GraphRagConfig
 
 from ..config import settings
 from ..repositories import get_control_plane_repository, get_serving_repository
+from ..azure_runtime import create_blob_service_client, resolve_storage_connection_string
 
 logger = logging.getLogger(__name__)
 
 
 def _storage_connection_string() -> str:
-    """Resolve Azure Storage connection string from explicit string or account key."""
-    if settings.azure_storage_connection_string:
-        return settings.azure_storage_connection_string
-
-    if settings.azure_storage_account_name and settings.azure_storage_account_key:
-        return (
-            "DefaultEndpointsProtocol=https;"
-            f"AccountName={settings.azure_storage_account_name};"
-            f"AccountKey={settings.azure_storage_account_key};"
-            "EndpointSuffix=core.windows.net"
-        )
-
-    return ""
+    """Resolve Azure Storage connection string from runtime profile."""
+    return resolve_storage_connection_string()
 
 
 def _blob_client():
-    """Return an Azure BlobServiceClient if connection string is configured."""
-    conn_str = _storage_connection_string()
-    if not conn_str:
-        return None
-    from azure.storage.blob import BlobServiceClient
-
-    return BlobServiceClient.from_connection_string(conn_str)
+    """Return an Azure BlobServiceClient if storage auth is configured."""
+    return create_blob_service_client()
 
 
 def _collection_container(collection_id: str) -> str:

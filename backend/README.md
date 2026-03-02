@@ -47,12 +47,21 @@ OPENAI_API_KEY=your_openai_api_key_here
 AZURE_STORAGE_CONNECTION_STRING=...
 AZURE_STORAGE_ACCOUNT_NAME=...        # optional fallback when connection string unavailable
 AZURE_STORAGE_ACCOUNT_KEY=...         # optional fallback when connection string unavailable
+AZURE_STORAGE_ACCOUNT_URL=...         # optional for managed identity blob auth
 AZURE_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
 AZURE_SEARCH_API_KEY=...
+AZURE_USE_MANAGED_IDENTITY=false
+AZURE_MANAGED_IDENTITY_CLIENT_ID=...  # optional for user-assigned MI
+AZURE_KEY_VAULT_URL=https://<vault>.vault.azure.net/
+AZURE_KEY_VAULT_SEARCH_API_KEY_SECRET_NAME=search-api-key
+AZURE_KEY_VAULT_COSMOS_KEY_SECRET_NAME=cosmos-key
 AZURE_COSMOS_CONNECTION_STRING=...
 AZURE_COSMOS_ENDPOINT=...
 AZURE_COSMOS_KEY=...
 AZURE_COSMOS_DATABASE_NAME=gtog-control
+AZURE_COSMOS_RETRY_TOTAL=9
+AZURE_COSMOS_RETRY_BACKOFF_MAX_SECONDS=30
+AZURE_COSMOS_RETRY_ON_STATUS_CODES=429,503
 ```
 
 ### 4. Verify Settings

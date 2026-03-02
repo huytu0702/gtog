@@ -33,7 +33,8 @@ class StorageService:
             raise RuntimeError(
                 "Azure Cosmos DB is required for control-plane metadata in Phase 1. "
                 "Configure AZURE_COSMOS_CONNECTION_STRING or "
-                "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY."
+                "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
+                "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
             )
 
     @staticmethod

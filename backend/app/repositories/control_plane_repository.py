@@ -12,6 +12,12 @@ from azure.cosmos.exceptions import CosmosResourceNotFoundError
 from azure.cosmos.partition_key import PartitionKey
 
 from ..config import settings
+from ..azure_runtime import (
+    bootstrap_runtime_secrets,
+    cosmos_client_kwargs,
+    cosmos_endpoint_credential,
+    is_cosmos_configured,
+)
 
 INDEX_JOB_QUEUED = "queued"
 INDEX_JOB_RUNNING = "running"
@@ -49,21 +55,25 @@ class CosmosControlPlaneRepository:
         connection_string: str,
         endpoint: str,
         key: str,
+        credential: Any | None,
         database_name: str,
         collections_container: str,
         documents_container: str,
         indexing_jobs_container: str,
         job_events_container: str,
         artifact_manifest_container: str,
+        client_kwargs: dict[str, Any] | None = None,
     ) -> None:
+        kwargs = client_kwargs or {}
         if connection_string:
-            self._client = CosmosClient.from_connection_string(connection_string)
-        elif endpoint and key:
-            self._client = CosmosClient(url=endpoint, credential=key)
+            self._client = CosmosClient.from_connection_string(connection_string, **kwargs)
+        elif endpoint and (key or credential):
+            self._client = CosmosClient(url=endpoint, credential=key or credential, **kwargs)
         else:
             raise ValueError(
                 "Cosmos DB is not configured. Set AZURE_COSMOS_CONNECTION_STRING "
-                "or AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY."
+                "or AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
+                "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
             )
 
         self._database = self._client.create_database_if_not_exists(id=database_name)
@@ -396,19 +406,20 @@ class CosmosControlPlaneRepository:
 @lru_cache(maxsize=1)
 def get_control_plane_repository() -> CosmosControlPlaneRepository | None:
     """Return singleton control-plane repository when Cosmos is configured."""
-    if settings.azure_cosmos_connection_string or (
-        settings.azure_cosmos_endpoint and settings.azure_cosmos_key
-    ):
+    bootstrap_runtime_secrets()
+    if is_cosmos_configured():
         return CosmosControlPlaneRepository(
             connection_string=settings.azure_cosmos_connection_string,
             endpoint=settings.azure_cosmos_endpoint,
             key=settings.azure_cosmos_key,
+            credential=cosmos_endpoint_credential(),
             database_name=settings.azure_cosmos_database_name,
             collections_container=settings.azure_cosmos_collections_container,
             documents_container=settings.azure_cosmos_documents_container,
             indexing_jobs_container=settings.azure_cosmos_indexing_jobs_container,
             job_events_container=settings.azure_cosmos_job_events_container,
             artifact_manifest_container=settings.azure_cosmos_artifact_manifest_container,
+            client_kwargs=cosmos_client_kwargs(),
         )
     return None
 
@@ -420,6 +431,7 @@ def require_control_plane_repository() -> CosmosControlPlaneRepository:
         raise ValueError(
             "Azure Cosmos DB is required for control-plane metadata in Phase 1. "
             "Configure AZURE_COSMOS_CONNECTION_STRING or "
-            "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY."
+            "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
+            "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
         )
     return repository
