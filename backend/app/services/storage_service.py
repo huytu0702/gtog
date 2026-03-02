@@ -10,7 +10,12 @@ from fastapi import UploadFile
 
 from ..models import CollectionResponse, DocumentResponse
 from ..repositories import get_control_plane_repository, get_serving_repository
-from ..utils.helpers import _blob_client, _collection_container, _ensure_blob_container
+from ..utils.helpers import (
+    _blob_client,
+    _collection_container,
+    _ensure_blob_container,
+    delete_search_indexes_for_collection,
+)
 
 
 class StorageService:
@@ -90,6 +95,12 @@ class StorageService:
         container = self.blob_client.get_container_client(_collection_container(collection_id))
         if container.exists():
             container.delete_container()
+
+        # Best-effort cleanup for Azure AI Search indexes tied to this collection.
+        try:
+            delete_search_indexes_for_collection(collection_id)
+        except Exception:
+            pass
         return True
 
     def list_collections(self) -> list[CollectionResponse]:

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pandas as pd
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.indexes import SearchIndexClient
 from graphrag.config.load_config import load_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
@@ -152,6 +154,31 @@ def _build_vector_index_name(collection_id: str, version: str | None = None) -> 
     return f"{normalized[:117]}-{digest}"
 
 
+def _search_index_client() -> SearchIndexClient | None:
+    if not settings.azure_search_endpoint or not settings.azure_search_api_key:
+        return None
+    return SearchIndexClient(
+        endpoint=settings.azure_search_endpoint,
+        credential=AzureKeyCredential(settings.azure_search_api_key),
+    )
+
+
+def delete_search_indexes_for_collection(collection_id: str) -> int:
+    """Delete Azure AI Search indexes associated with one collection."""
+    client = _search_index_client()
+    if client is None:
+        return 0
+
+    # GraphRAG creates indexes with suffixes per vector schema field.
+    prefix = f"{_build_vector_index_name(collection_id)}-"
+    deleted = 0
+    for index_name in client.list_index_names():
+        if str(index_name).startswith(prefix):
+            client.delete_index(index_name)
+            deleted += 1
+    return deleted
+
+
 def load_graphrag_config(collection_id: str, version: str | None = None) -> GraphRagConfig:
     """
     Load shared GraphRAG configuration with collection-specific storage overrides.
@@ -161,7 +188,9 @@ def load_graphrag_config(collection_id: str, version: str | None = None) -> Grap
     use_blob = bool(conn_str)
     shared_root = settings.settings_yaml_path.parent.resolve()
     _validate_shared_prompt_files(shared_root / "prompts")
-    vector_index_name = _build_vector_index_name(collection_id, version)
+    # Keep one stable index prefix per collection to avoid index explosion
+    # on Azure AI Search Free tier (max 3 indexes/service).
+    vector_index_name = _build_vector_index_name(collection_id)
 
     if use_blob:
         _ensure_blob_container(collection_id)

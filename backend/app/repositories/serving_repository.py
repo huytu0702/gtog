@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
@@ -26,8 +27,28 @@ def _utcnow_iso() -> str:
 
 def _normalize_value(value: Any) -> Any:
     """Normalize dataframe values for Cosmos JSON serialization."""
-    if pd.isna(value):
-        return None
+    if isinstance(value, dict):
+        return {str(k): _normalize_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_normalize_value(v) for v in value]
+
+    # Pandas/NumPy array-like values (for example embeddings) must not go
+    # through boolean checks such as `pd.isna(value)` directly.
+    if hasattr(value, "tolist") and not isinstance(value, (str, bytes, bytearray)):
+        try:
+            list_value = value.tolist()
+            if isinstance(list_value, list):
+                return [_normalize_value(v) for v in list_value]
+        except Exception:
+            pass
+
+    try:
+        is_na = pd.isna(value)
+        if isinstance(is_na, bool) and is_na:
+            return None
+    except Exception:
+        pass
+
     if hasattr(value, "item"):
         try:
             return value.item()
@@ -38,6 +59,31 @@ def _normalize_value(value: Any) -> Any:
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
     return {str(key): _normalize_value(value) for key, value in row.items()}
+
+
+def _is_missing_id(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        is_na = pd.isna(value)
+        if isinstance(is_na, bool):
+            return is_na
+    except Exception:
+        pass
+    return False
+
+
+def _source_id_from_record(record: dict[str, Any], index: int) -> str:
+    for key in ("id", "title", "name", "short_id"):
+        candidate = _normalize_value(record.get(key))
+        if _is_missing_id(candidate):
+            continue
+        if isinstance(candidate, (dict, list)):
+            return json.dumps(candidate, sort_keys=True)
+        return str(candidate)
+    return str(index)
 
 
 class CosmosServingRepository:
@@ -119,13 +165,7 @@ class CosmosServingRepository:
         records = frame.to_dict(orient="records")
         for idx, raw_record in enumerate(records):
             record = _normalize_row(raw_record)
-            source_id = (
-                record.get("id")
-                or record.get("title")
-                or record.get("name")
-                or record.get("short_id")
-                or str(idx)
-            )
+            source_id = _source_id_from_record(record, idx)
             item_id = str(
                 uuid5(
                     NAMESPACE_URL,

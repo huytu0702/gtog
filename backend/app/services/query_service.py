@@ -50,6 +50,27 @@ def _blob_parquet(collection_id: str, relative_path: Path) -> pd.DataFrame:
     data = container.get_blob_client(f"output/{relative_path.as_posix()}").download_blob().readall()
     return pd.read_parquet(io.BytesIO(data))
 
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        is_na = pd.isna(value)
+        if isinstance(is_na, bool):
+            return is_na
+    except Exception:
+        pass
+    return False
+
+
+def _preferred_entity_name_column(entities: pd.DataFrame) -> str:
+    for col in ("title", "name", "entity", "id"):
+        if col in entities.columns:
+            return col
+    return entities.columns[0] if len(entities.columns) > 0 else "id"
+
 # Column name mappings: what to use as the "name" and "description" per dataset
 _CONTEXT_COLS: dict[str, tuple[str, str]] = {
     "entities":      ("entity", "description"),
@@ -369,7 +390,8 @@ class QueryService:
 
             # Debug: Show entity names
             if len(entities) > 0:
-                entity_names = entities["title"].tolist()[:10]
+                name_column = _preferred_entity_name_column(entities)
+                entity_names = entities[name_column].astype(str).tolist()[:10]
                 logger.info(f"Available entities: {entity_names}")
             else:
                 logger.warning("No entities found in parquet file")
@@ -519,9 +541,14 @@ class QueryService:
         entities_info = []
         for _, row in entities_df.head(limit).iterrows():
             description = str(row.get("description", ""))
+            entity_id = row.get("title")
+            if _is_missing_value(entity_id):
+                entity_id = row.get("id")
+            if _is_missing_value(entity_id):
+                entity_id = row.get("name")
             entities_info.append(
                 {
-                    "id": row.get("title") or row.get("id"),
+                    "id": str(entity_id) if not _is_missing_value(entity_id) else "",
                     "description": description[:100] + "..." if len(description) > 100 else description,
                     "type": row.get("type", "unknown"),
                 }
