@@ -10,6 +10,7 @@ from .config import settings
 from .models import HealthResponse
 from .routers import (
     collections_router,
+    conversation_router,
     documents_router,
     indexing_router,
     search_router,
@@ -46,6 +47,10 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("Failed to recover pending indexing jobs")
     else:
+        if settings.query_context_mode.lower() == "cosmos_only":
+            raise RuntimeError(
+                "QUERY_CONTEXT_MODE=cosmos_only requires Azure Cosmos DB to be configured."
+            )
         logger.warning(
             "Azure Cosmos DB is not configured. Collection/document/indexing metadata "
             "APIs require Cosmos in Phase 1."
@@ -87,6 +92,7 @@ app.include_router(collections_router)
 app.include_router(documents_router)
 app.include_router(indexing_router)
 app.include_router(search_router)
+app.include_router(conversation_router)
 
 
 # Health check endpoint

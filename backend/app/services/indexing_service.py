@@ -9,6 +9,7 @@ from uuid import uuid4
 import graphrag.api as api
 from graphrag.callbacks.noop_workflow_callbacks import NoopWorkflowCallbacks
 
+from ..config import settings
 from ..models import IndexStatus, IndexStatusResponse
 from ..repositories import (
     INDEX_JOB_COMPLETED,
@@ -221,6 +222,17 @@ class IndexingService:
                     version=target_version,
                 )
                 self.control_plane.set_active_version(collection_id, target_version)
+                try:
+                    from .query_service import query_service
+
+                    query_service.invalidate_collection_cache(collection_id)
+                    if settings.serving_cache_warm_on_index_complete:
+                        await query_service._load_context_from_serving(collection_id, "global")
+                except Exception:
+                    logger.exception(
+                        "Failed to invalidate serving context cache for collection %s",
+                        collection_id,
+                    )
                 self.control_plane.transition_indexing_job(
                     collection_id=collection_id,
                     job_id=job_id,

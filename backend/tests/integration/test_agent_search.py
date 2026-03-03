@@ -13,7 +13,8 @@ class TestAgentSearchIntegration:
     @pytest.fixture
     def client(self):
         """Create test client."""
-        return TestClient(app)
+        with patch("backend.app.main.settings.query_context_mode", "hybrid"):
+            return TestClient(app)
 
     def test_full_agent_search_flow(self, client):
         """Test complete agent search from request to response."""

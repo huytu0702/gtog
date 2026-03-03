@@ -14,6 +14,11 @@ from .serving_repository import (
     get_serving_repository,
     require_serving_repository,
 )
+from .conversation_repository import (
+    CosmosConversationRepository,
+    get_conversation_repository,
+    require_conversation_repository,
+)
 
 __all__ = [
     "CosmosControlPlaneRepository",
@@ -26,4 +31,7 @@ __all__ = [
     "CosmosServingRepository",
     "get_serving_repository",
     "require_serving_repository",
+    "CosmosConversationRepository",
+    "get_conversation_repository",
+    "require_conversation_repository",
 ]

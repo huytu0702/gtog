@@ -1,28 +1,22 @@
 """Query service for GraphRAG search operations."""
 
+import asyncio
 import logging
 import re
-import io
-from pathlib import Path
+import time
 from typing import Any, Optional
 
 import pandas as pd
 import graphrag.api as api
-from ..config import settings
+from ..errors import ServingContextNotReadyError, ServingContextUnavailableError
 from ..models import SearchMethod, SearchResponse
 from ..repositories import get_control_plane_repository, get_serving_repository
-from ..utils import (
-    load_graphrag_config,
-    validate_collection_indexed,
-    get_search_data_paths,
-)
-from ..utils.helpers import _blob_client, _collection_container
-from ..utils.helpers import _storage_connection_string
+from ..utils import load_graphrag_config
+from .serving_context_cache import serving_context_cache
 
 logger = logging.getLogger(__name__)
 
 _LOG_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-_BLOB_PARQUET_FALLBACK_WARNING_EMITTED = False
 
 
 def _attach_query_log(collection_id: str):
@@ -33,22 +27,6 @@ def _attach_query_log(collection_id: str):
 def _detach_query_log(handler) -> None:
     """No-op query logger in cloud mode."""
     return None
-
-
-def _blob_parquet(collection_id: str, relative_path: Path) -> pd.DataFrame:
-    """Read parquet from collection blob output/<relative_path> via authenticated download."""
-    global _BLOB_PARQUET_FALLBACK_WARNING_EMITTED
-    if not _BLOB_PARQUET_FALLBACK_WARNING_EMITTED:
-        logger.warning(
-            "Using temporary blob/parquet fallback in query hot path; "
-            "this remains only until Phase 3 cutover."
-        )
-        _BLOB_PARQUET_FALLBACK_WARNING_EMITTED = True
-
-    client = _blob_client()
-    container = client.get_container_client(_collection_container(collection_id))
-    data = container.get_blob_client(f"output/{relative_path.as_posix()}").download_blob().readall()
-    return pd.read_parquet(io.BytesIO(data))
 
 
 def _is_missing_value(value: Any) -> bool:
@@ -137,20 +115,66 @@ class QueryService:
         """Initialize the query service."""
         self.control_plane = get_control_plane_repository()
         self.serving_repo = get_serving_repository()
+        self.context_cache = serving_context_cache
 
-    def _load_context_from_serving(
+    async def _load_dataset_frame(
+        self,
+        *,
+        collection_id: str,
+        version: str,
+        dataset: str,
+    ) -> pd.DataFrame:
+        if self.serving_repo is None:
+            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+
+        def _loader() -> pd.DataFrame:
+            return self.serving_repo.load_dataframe(
+                collection_id=collection_id,
+                version=version,
+                dataset=dataset,
+            )
+
+        started = time.perf_counter()
+        try:
+            cache_hit, frame = await asyncio.to_thread(
+                self.context_cache.get_or_load_with_status,
+                collection_id=collection_id,
+                version=version,
+                dataset=dataset,
+                loader=_loader,
+            )
+        except Exception as exc:
+            raise ServingContextUnavailableError(
+                f"Failed loading serving dataset '{dataset}' for version '{version}'"
+            ) from exc
+
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        logger.info(
+            "serving_context_load collection=%s version=%s dataset=%s cache_hit=%s rows=%s load_ms=%.2f",
+            collection_id,
+            version,
+            dataset,
+            cache_hit,
+            len(frame),
+            elapsed_ms,
+        )
+        return frame
+
+    async def _load_context_from_serving(
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
         if self.control_plane is None or self.serving_repo is None:
-            raise RuntimeError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
 
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
-            raise ValueError(f"Collection '{collection_id}' not found")
+            raise FileNotFoundError(f"Collection '{collection_id}' not found")
 
         active_version = collection.get("activeVersion")
         if not active_version:
-            raise ValueError("Collection has not been indexed yet (no active serving version)")
+            raise ServingContextNotReadyError(
+                "Collection has not been indexed yet (no active serving version)"
+            )
 
         required = {
             "global": ["entities", "communities", "community_reports"],
@@ -173,20 +197,20 @@ class QueryService:
 
         frames: dict[str, pd.DataFrame] = {}
         for dataset in required:
-            frame = self.serving_repo.load_dataframe(
+            frame = await self._load_dataset_frame(
                 collection_id=collection_id,
                 version=str(active_version),
                 dataset=dataset,
             )
             if frame.empty:
-                raise ValueError(
+                raise ServingContextNotReadyError(
                     f"Serving context is incomplete for active version {active_version} "
                     f"(dataset={dataset})"
                 )
             frames[dataset] = frame
 
         if method == "local":
-            covariates = self.serving_repo.load_dataframe(
+            covariates = await self._load_dataset_frame(
                 collection_id=collection_id,
                 version=str(active_version),
                 dataset="covariates",
@@ -195,6 +219,10 @@ class QueryService:
                 frames["covariates"] = covariates
 
         return str(active_version), frames
+
+    def invalidate_collection_cache(self, collection_id: str) -> None:
+        """Invalidate in-process serving context cache for one collection."""
+        self.context_cache.invalidate_collection(collection_id)
 
     async def global_search(
         self,
@@ -217,26 +245,11 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        if self.control_plane is not None and self.serving_repo is not None:
-            active_version, frames = self._load_context_from_serving(collection_id, "global")
-            config = load_graphrag_config(collection_id, version=active_version)
-            entities = frames["entities"]
-            communities = frames["communities"]
-            community_reports = frames["community_reports"]
-        else:
-            is_indexed, error = validate_collection_indexed(collection_id, method="global")
-            if not is_indexed:
-                raise ValueError(error)
-            config = load_graphrag_config(collection_id)
-            data_paths = get_search_data_paths(collection_id, "global")
-            if _storage_connection_string():
-                entities = _blob_parquet(collection_id, data_paths["entities"])
-                communities = _blob_parquet(collection_id, data_paths["communities"])
-                community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
-            else:
-                entities = pd.read_parquet(data_paths["entities"])
-                communities = pd.read_parquet(data_paths["communities"])
-                community_reports = pd.read_parquet(data_paths["community_reports"])
+        active_version, frames = await self._load_context_from_serving(collection_id, "global")
+        config = load_graphrag_config(collection_id, version=active_version)
+        entities = frames["entities"]
+        communities = frames["communities"]
+        community_reports = frames["community_reports"]
 
         fh = _attach_query_log(collection_id)
         try:
@@ -284,40 +297,14 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        if self.control_plane is not None and self.serving_repo is not None:
-            active_version, frames = self._load_context_from_serving(collection_id, "local")
-            config = load_graphrag_config(collection_id, version=active_version)
-            entities = frames["entities"]
-            communities = frames["communities"]
-            community_reports = frames["community_reports"]
-            text_units = frames["text_units"]
-            relationships = frames["relationships"]
-            covariates = frames.get("covariates")
-        else:
-            is_indexed, error = validate_collection_indexed(collection_id, method="local")
-            if not is_indexed:
-                raise ValueError(error)
-            config = load_graphrag_config(collection_id)
-            data_paths = get_search_data_paths(collection_id, "local")
-            if _storage_connection_string():
-                entities = _blob_parquet(collection_id, data_paths["entities"])
-                communities = _blob_parquet(collection_id, data_paths["communities"])
-                community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
-                text_units = _blob_parquet(collection_id, data_paths["text_units"])
-                relationships = _blob_parquet(collection_id, data_paths["relationships"])
-            else:
-                entities = pd.read_parquet(data_paths["entities"])
-                communities = pd.read_parquet(data_paths["communities"])
-                community_reports = pd.read_parquet(data_paths["community_reports"])
-                text_units = pd.read_parquet(data_paths["text_units"])
-                relationships = pd.read_parquet(data_paths["relationships"])
-
-            covariates = None
-            if "covariates" in data_paths:
-                if _storage_connection_string():
-                    covariates = _blob_parquet(collection_id, data_paths["covariates"])
-                else:
-                    covariates = pd.read_parquet(data_paths["covariates"])
+        active_version, frames = await self._load_context_from_serving(collection_id, "local")
+        config = load_graphrag_config(collection_id, version=active_version)
+        entities = frames["entities"]
+        communities = frames["communities"]
+        community_reports = frames["community_reports"]
+        text_units = frames["text_units"]
+        relationships = frames["relationships"]
+        covariates = frames.get("covariates")
 
         fh = _attach_query_log(collection_id)
         try:
@@ -363,23 +350,10 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        if self.control_plane is not None and self.serving_repo is not None:
-            active_version, frames = self._load_context_from_serving(collection_id, "tog")
-            config = load_graphrag_config(collection_id, version=active_version)
-            entities = frames["entities"]
-            relationships = frames["relationships"]
-        else:
-            is_indexed, error = validate_collection_indexed(collection_id, method="tog")
-            if not is_indexed:
-                raise ValueError(error)
-            config = load_graphrag_config(collection_id)
-            data_paths = get_search_data_paths(collection_id, "tog")
-            if _storage_connection_string():
-                entities = _blob_parquet(collection_id, data_paths["entities"])
-                relationships = _blob_parquet(collection_id, data_paths["relationships"])
-            else:
-                entities = pd.read_parquet(data_paths["entities"])
-                relationships = pd.read_parquet(data_paths["relationships"])
+        active_version, frames = await self._load_context_from_serving(collection_id, "tog")
+        config = load_graphrag_config(collection_id, version=active_version)
+        entities = frames["entities"]
+        relationships = frames["relationships"]
 
         fh = _attach_query_log(collection_id)
         try:
@@ -394,7 +368,7 @@ class QueryService:
                 entity_names = entities[name_column].astype(str).tolist()[:10]
                 logger.info(f"Available entities: {entity_names}")
             else:
-                logger.warning("No entities found in parquet file")
+                logger.warning("No entities found in serving context")
 
             # Perform search - API returns (response, context_data) tuple
             response_text, context_data = await api.tog_search(
@@ -467,33 +441,13 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        if self.control_plane is not None and self.serving_repo is not None:
-            active_version, frames = self._load_context_from_serving(collection_id, "drift")
-            config = load_graphrag_config(collection_id, version=active_version)
-            entities = frames["entities"]
-            communities = frames["communities"]
-            community_reports = frames["community_reports"]
-            text_units = frames["text_units"]
-            relationships = frames["relationships"]
-        else:
-            is_indexed, error = validate_collection_indexed(collection_id, method="drift")
-            if not is_indexed:
-                raise ValueError(error)
-
-            config = load_graphrag_config(collection_id)
-            data_paths = get_search_data_paths(collection_id, "drift")
-            if _storage_connection_string():
-                entities = _blob_parquet(collection_id, data_paths["entities"])
-                communities = _blob_parquet(collection_id, data_paths["communities"])
-                community_reports = _blob_parquet(collection_id, data_paths["community_reports"])
-                text_units = _blob_parquet(collection_id, data_paths["text_units"])
-                relationships = _blob_parquet(collection_id, data_paths["relationships"])
-            else:
-                entities = pd.read_parquet(data_paths["entities"])
-                communities = pd.read_parquet(data_paths["communities"])
-                community_reports = pd.read_parquet(data_paths["community_reports"])
-                text_units = pd.read_parquet(data_paths["text_units"])
-                relationships = pd.read_parquet(data_paths["relationships"])
+        active_version, frames = await self._load_context_from_serving(collection_id, "drift")
+        config = load_graphrag_config(collection_id, version=active_version)
+        entities = frames["entities"]
+        communities = frames["communities"]
+        community_reports = frames["community_reports"]
+        text_units = frames["text_units"]
+        relationships = frames["relationships"]
 
         fh = _attach_query_log(collection_id)
         try:
@@ -525,18 +479,34 @@ class QueryService:
 
     def get_tog_entities_preview(self, collection_id: str, limit: int = 20) -> dict[str, Any]:
         """Return ToG entity preview for debugging."""
-        if self.control_plane is not None and self.serving_repo is not None:
-            active_version, frames = self._load_context_from_serving(collection_id, "tog")
-            entities_df = frames["entities"]
-            source = f"cosmos:{active_version}"
-        else:
-            data_paths = get_search_data_paths(collection_id, "tog")
-            if _storage_connection_string():
-                entities_df = _blob_parquet(collection_id, data_paths["entities"])
-                source = "blob"
-            else:
-                entities_df = pd.read_parquet(data_paths["entities"])
-                source = "file"
+        if self.control_plane is None or self.serving_repo is None:
+            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+        collection = self.control_plane.get_collection(collection_id)
+        if collection is None:
+            raise FileNotFoundError(f"Collection '{collection_id}' not found")
+        active_version = str(collection.get("activeVersion") or "")
+        if not active_version:
+            raise ServingContextNotReadyError(
+                "Collection has not been indexed yet (no active serving version)"
+            )
+        cache_hit, entities_df = self.context_cache.get_or_load_with_status(
+            collection_id=collection_id,
+            version=active_version,
+            dataset="entities",
+            loader=lambda: self.serving_repo.load_dataframe(
+                collection_id=collection_id,
+                version=active_version,
+                dataset="entities",
+            ),
+        )
+        logger.info(
+            "serving_context_preview collection=%s version=%s dataset=entities cache_hit=%s rows=%s",
+            collection_id,
+            active_version,
+            cache_hit,
+            len(entities_df),
+        )
+        source = f"cosmos:{active_version}"
 
         entities_info = []
         for _, row in entities_df.head(limit).iterrows():

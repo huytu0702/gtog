@@ -10,6 +10,7 @@ from .serving_materialization_service import (
     serving_materialization_service,
     ServingMaterializationService,
 )
+from .conversation_service import conversation_service, ConversationService
 
 __all__ = [
     "storage_service",
@@ -28,4 +29,6 @@ __all__ = [
     "WebSearchResult",
     "serving_materialization_service",
     "ServingMaterializationService",
+    "conversation_service",
+    "ConversationService",
 ]

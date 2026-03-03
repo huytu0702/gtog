@@ -101,6 +101,20 @@ class StorageService:
             delete_search_indexes_for_collection(collection_id)
         except Exception:
             pass
+
+        try:
+            from .conversation_service import conversation_service
+
+            conversation_service.purge_collection(collection_id)
+        except Exception:
+            pass
+
+        try:
+            from .query_service import query_service
+
+            query_service.invalidate_collection_cache(collection_id)
+        except Exception:
+            pass
         return True
 
     def list_collections(self) -> list[CollectionResponse]:

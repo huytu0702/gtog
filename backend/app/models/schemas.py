@@ -137,8 +137,8 @@ class ConversationTurn(BaseModel):
     """A single turn in a conversation."""
 
     role: Literal["user", "assistant"]
-    content: str
-    rewritten_query: str | None = None  # user turns only
+    content: str = Field(..., min_length=1, max_length=4000)
+    rewritten_query: str | None = Field(default=None, max_length=4000)  # user turns only
     method_used: str | None = None      # user turns only
 
 
@@ -146,7 +146,7 @@ class SummarizeRequest(BaseModel):
     """Request model for conversation summarization."""
 
     conversation_history: list[ConversationTurn]
-    existing_summary: str | None = None
+    existing_summary: str | None = Field(default=None, max_length=2000)
 
 
 class SummarizeResponse(BaseModel):
@@ -161,8 +161,9 @@ class AgentSearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, max_length=1000)
     stream: bool = True
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
-    conversation_summary: str | None = None
+    conversation_summary: str | None = Field(default=None, max_length=2000)
 
 
 class WebSearchRequest(BaseModel):
@@ -181,6 +182,28 @@ class AgentSearchResponse(BaseModel):
     response: str
     sources: list = Field(default_factory=list)
     context_data: dict | None = None
+    session_id: str | None = None
+
+
+class SessionCreateResponse(BaseModel):
+    """Response model for creating a conversation session."""
+
+    session_id: str
+    collection_id: str
+    created_at: datetime
+
+
+class SessionDetailResponse(BaseModel):
+    """Response model for session details and prompt context."""
+
+    session_id: str
+    collection_id: str
+    summary: str | None = None
+    turn_count: int
+    user_turn_count: int
+    created_at: datetime
+    updated_at: datetime
+    recent_turns: list[ConversationTurn]
 
 
 # Health Check

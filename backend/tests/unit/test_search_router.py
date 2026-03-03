@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
 import pytest
 
+from backend.app.errors import ServingContextUnavailableError
 from backend.app.main import app
 
 
@@ -123,3 +124,25 @@ class TestToGDebugEndpoint:
         assert response.status_code == 200
         body = response.json()
         assert body["total_entities"] == 1
+
+
+class TestSearchErrorMapping:
+    """Test HTTP mapping for serving context failures."""
+
+    @pytest.mark.asyncio
+    async def test_global_returns_503_when_serving_unavailable(self):
+        with patch(
+            "backend.app.routers.search.query_service.global_search",
+            new=AsyncMock(side_effect=ServingContextUnavailableError("cosmos down")),
+        ):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/global",
+                    json={"query": "hello"},
+                )
+
+        assert response.status_code == 503

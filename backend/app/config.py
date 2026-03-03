@@ -63,6 +63,22 @@ class Settings(BaseSettings):
     azure_cosmos_communities_container: str = "communities"
     azure_cosmos_community_reports_container: str = "communityReports"
     azure_cosmos_covariates_container: str = "covariates"
+    azure_cosmos_conversation_sessions_container: str = "conversationSessions"
+    azure_cosmos_conversation_turns_container: str = "conversationTurns"
+
+    # Query serving mode
+    query_context_mode: str = "cosmos_only"
+    serving_dataset_cache_max_entries: int = 96
+    serving_cache_warm_on_index_complete: bool = True
+
+    # Conversation memory
+    conversation_legacy_payload_enabled: bool = True
+    conversation_turn_ttl_days: int = 30
+    conversation_session_ttl_days: int = 90
+    conversation_summarize_user_turn_threshold: int = 8
+    conversation_recent_user_turns: int = 3
+    conversation_turn_max_chars: int = 4000
+    conversation_summary_max_chars: int = 2000
 
     # Model Configuration
     default_chat_model: str = "gemini/gemini-2.5-flash-lite"
