@@ -383,6 +383,7 @@ def get_tog_search_engine(
         pruning_strategy = LLMPruning(
             model=chat_model,
             temperature=config.tog_search.temperature_exploration,
+            max_relations_for_llm=config.tog_search.max_relations_for_llm,
             relation_scoring_prompt=relation_scoring_prompt,
             entity_scoring_prompt=entity_scoring_prompt,
         )

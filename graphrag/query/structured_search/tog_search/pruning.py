@@ -69,11 +69,13 @@ class LLMPruning(PruningStrategy):
         self,
         model: ChatModel,
         temperature: float = 0.4,
+        max_relations_for_llm: int = 10,
         relation_scoring_prompt: str | None = None,
         entity_scoring_prompt: str | None = None,
     ):
         self.model = model
         self.temperature = temperature
+        self.max_relations_for_llm = max_relations_for_llm
         
         # Load prompts - if file path is given, read the file content
         self.relation_scoring_prompt = self._load_prompt(
@@ -119,10 +121,19 @@ class LLMPruning(PruningStrategy):
         if not relations:
             return [], metrics
 
+        # Keep prompt size bounded. When relation count is too large, upstream ToG
+        # behavior is closer to selecting top candidates than scoring every edge.
+        scored_subset_relations = relations
+        excluded_relations: List[Tuple[str, str, str, float]] = []
+        if len(relations) > self.max_relations_for_llm:
+            sorted_relations = sorted(relations, key=lambda x: x[3], reverse=True)
+            scored_subset_relations = sorted_relations[: self.max_relations_for_llm]
+            excluded_relations = sorted_relations[self.max_relations_for_llm :]
+
         # Build relations text
         relations_text = "\n".join([
             f"{i + 1}. [{direction}] {rel_desc[:100]}... (weight: {weight:.2f})"
-            for i, (rel_desc, _, direction, weight) in enumerate(relations)
+            for i, (rel_desc, _, direction, weight) in enumerate(scored_subset_relations)
         ])
 
         prompt = self.relation_scoring_prompt.format(
@@ -144,15 +155,20 @@ class LLMPruning(PruningStrategy):
         metrics.output_tokens = len(response) // 4
 
         # Parse scores
-        scores = self._parse_scores(response, len(relations))
+        scores = self._parse_scores(response, len(scored_subset_relations))
 
-        # Combine with relation data
         scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
-                relations, scores
+                scored_subset_relations, scores
             )
         ]
+
+        # Unscored relations are intentionally downweighted so they do not dominate
+        # when the model could only evaluate a bounded candidate set.
+        for rel_desc, target_id, direction, weight in excluded_relations:
+            scored_relations.append((rel_desc, target_id, direction, weight, 0.0))
+
         return scored_relations, metrics
 
     async def score_entities(
@@ -199,32 +215,37 @@ class LLMPruning(PruningStrategy):
         # Clean response and try to extract list pattern first
         response = response.strip()
 
-        # Try to match list pattern: [1, 2, 3] or 1, 2, 3
-        list_match = re.search(r"\[([\d\s,\.]+)\]", response)
-        if list_match:
-            numbers_str = list_match.group(1)
-        else:
-            # Look for comma-separated numbers
-            numbers_str = response
+        # Prefer the last bracketed list to avoid accidentally parsing examples.
+        list_matches = re.findall(r"\[([\d\s,\.\-]+)\]", response)
+        numbers_str = list_matches[-1] if list_matches else response
 
         # Extract numbers
-        numbers = re.findall(r"\d+\.?\d*", numbers_str)
-        scores = []
+        numbers = re.findall(r"-?\d+\.?\d*", numbers_str)
+        parsed_scores: List[float] = []
 
         for num_str in numbers[:expected_count]:
             try:
-                score = float(num_str)
-                # Clamp to 1-10 range
-                score = max(1.0, min(10.0, score))
-                scores.append(score)
+                parsed_scores.append(float(num_str))
             except ValueError:
-                scores.append(5.0)  # Default score
+                parsed_scores.append(5.0)
+
+        # If model emitted 0..1 probabilities (common in original ToG style),
+        # rescale to 1..10 instead of collapsing everything to 1.
+        normalized_scores: List[float] = []
+        if parsed_scores:
+            min_score = min(parsed_scores)
+            max_score = max(parsed_scores)
+            looks_like_probability = 0.0 <= min_score and max_score <= 1.0
+            if looks_like_probability:
+                normalized_scores = [1.0 + (9.0 * s) for s in parsed_scores]
+            else:
+                normalized_scores = [max(1.0, min(10.0, s)) for s in parsed_scores]
 
         # If not enough scores, pad with uniform distribution
-        while len(scores) < expected_count:
-            scores.append(5.0)
+        while len(normalized_scores) < expected_count:
+            normalized_scores.append(5.0)
 
-        return scores[:expected_count]
+        return normalized_scores[:expected_count]
 
 
 class SemanticPruning(PruningStrategy):

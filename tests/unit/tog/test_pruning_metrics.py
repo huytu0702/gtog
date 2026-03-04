@@ -84,3 +84,46 @@ async def test_bm25_pruning_returns_metrics():
     assert isinstance(metrics, PruningMetrics)
     assert metrics.llm_calls == 0  # BM25 uses lexical matching, not LLM
     assert len(scored) == 2
+
+
+def test_llm_pruning_parse_scores_rescales_probability_outputs():
+    """0..1 outputs should be rescaled to 1..10 instead of all becoming 1."""
+    pruning = LLMPruning(model=MagicMock())
+    scores = pruning._parse_scores("[0.0, 0.5, 1.0]", expected_count=3)
+    assert scores == [1.0, 5.5, 10.0]
+
+
+def test_llm_pruning_parse_scores_uses_last_list():
+    """When multiple lists exist in output, parser should use the final answer list."""
+    pruning = LLMPruning(model=MagicMock())
+    scores = pruning._parse_scores(
+        "example [9, 2, 6] final [8, 3, 7]",
+        expected_count=3,
+    )
+    assert scores == [8.0, 3.0, 7.0]
+
+
+@pytest.mark.asyncio
+async def test_llm_pruning_limits_relations_for_llm_and_downweights_excluded():
+    """Only top weighted relations should be sent to LLM when relation set is too large."""
+    mock_model = MagicMock()
+    mock_model.achat_stream = MagicMock(return_value=AsyncIteratorMock(["[8, 7]"]))
+
+    pruning = LLMPruning(model=mock_model, max_relations_for_llm=2)
+    relations = [
+        ("rel high 1", "target1", "OUTGOING", 10.0),
+        ("rel high 2", "target2", "OUTGOING", 9.0),
+        ("rel low", "target3", "OUTGOING", 1.0),
+    ]
+
+    scored, _ = await pruning.score_relations(
+        query="test query",
+        entity_name="TestEntity",
+        relations=relations,
+    )
+
+    assert len(scored) == 3
+    scored_map = {(r[0], r[1]): r[4] for r in scored}
+    assert scored_map[("rel high 1", "target1")] == 8.0
+    assert scored_map[("rel high 2", "target2")] == 7.0
+    assert scored_map[("rel low", "target3")] == 0.0

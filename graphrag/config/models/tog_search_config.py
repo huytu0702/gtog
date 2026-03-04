@@ -32,6 +32,10 @@ class ToGSearchConfig(BaseModel):
         description="Number of entities to retain during pruning.",
         default=5
     )
+    max_relations_for_llm: int = Field(
+        description="Maximum number of relations sent to LLM for scoring in each pruning step.",
+        default=10
+    )
 
     # Temperature Settings
     temperature_exploration: float = Field(
