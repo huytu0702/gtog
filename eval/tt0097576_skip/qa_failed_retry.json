@@ -1,0 +1,32 @@
+[
+  {
+    "question": "What does Sallah tell Indy and Henry about Marcus?",
+    "ground_truth": "Marcus was abducted",
+    "context": "SALLAH\nAh, they set out across the desert this afternoon. I believe they took Mister Brody with them. [17]"
+  },
+  {
+    "question": "What happens when Elsa takes the Grail past the temple entrance?",
+    "ground_truth": "The temple begins to collapse and Elsa falls into an abyss",
+    "context": "Elsa steps onto the edge of the Great Seal... A RUMBLING SOUND IS HEARD and the ground roars and shifts... Elsa slips into the crevasse. [5], [6]"
+  },
+  {
+    "question": "Who are the Brotherhood of the Cruciform Sword?",
+    "ground_truth": "A secret society that protects the Holy Grail from people with evil intentions",
+    "context": "KAZIM The secret of the Grail has been safe for a thousand years. And for all that time the Brotherhood of the Cruciform Sword has been prepared to do anything to keep it safe. [26]"
+  },
+  {
+    "question": "What message does the inscription Indy and Elsa find in the tomb contain?",
+    "ground_truth": "The location of the Holy Grail",
+    "context": "INDY This is it! We found it! Look -- the engraving on the shield. It's the same as on the Grail Tablets. The shield is the second marker! ... BRODY It's the name of a city. \"Alexandretta?\""
+  },
+  {
+    "question": "Do Indy and Henry meet Hitler?",
+    "ground_truth": "Yes, they met an accidental face to face encounter with Adolf Hitler",
+    "context": "They move off and almost run headlong into Hitler and his entire entourage coming down from the Podium. ... Hitler looks Indy's way. They make eye contact."
+  },
+  {
+    "question": "What is Marcus doing in Turkey when he is captured?",
+    "ground_truth": "Marcus is captured in Turkey while waiting with Sallah for the Joneses",
+    "context": "SALLAH Marcus Brody, sir. And where is Indy? ... Sallah shoulders his way through the mob toward Brody... SALLAH (to Brody; pointing) Okay, okay, quick, quick, quick! Hide in that door! ... METAL DOORS ARE SLAMMED behind Brody and we realize that he has actually run into the back of a Nazi TROOP TRUCK."
+  }
+]

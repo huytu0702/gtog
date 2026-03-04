@@ -27,7 +27,7 @@ models:
     model_provider: gemini
     auth_type: api_key
     api_key: ${GRAPHRAG_API_KEY}
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash-lite
     model_supports_json: true
     concurrent_requests: 10
     async_mode: threaded
@@ -173,6 +173,7 @@ tog_search:
   num_retain_entity: 3              # Entities to retain per level
   temperature_exploration: 0.4      # LLM temperature for exploration
   temperature_reasoning: 0.0        # LLM temperature for final answer
+  max_relations_for_llm: 10         # Cap relations sent to LLM per prune step
   max_context_tokens: 8000          # Maximum context tokens
   max_exploration_paths: 10         # Maximum exploration paths
   relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"
