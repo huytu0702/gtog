@@ -28,6 +28,8 @@ from .schemas import (
     WebSearchRequest,
     SummarizeRequest,
     SummarizeResponse,
+    SessionCreateResponse,
+    SessionDetailResponse,
 )
 
 __all__ = [
@@ -56,6 +58,8 @@ __all__ = [
     "WebSearchRequest",
     "SummarizeRequest",
     "SummarizeResponse",
+    "SessionCreateResponse",
+    "SessionDetailResponse",
     # Health
     "HealthResponse",
     # SSE Events

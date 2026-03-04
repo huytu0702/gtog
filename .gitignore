@@ -65,6 +65,8 @@ docsite/
 
 # Windows special files
 nul
+.azure/
+.gitconfig
 
 # Generated output and cache directories
 test-project/output/

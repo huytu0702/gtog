@@ -24,6 +24,10 @@ class ToGMetrics:
     output_tokens: int = 0
     exploration_llm_calls: int = 0
     reasoning_llm_calls: int = 0
+    exploration_prompt_tokens: int = 0
+    reasoning_prompt_tokens: int = 0
+    exploration_output_tokens: int = 0
+    reasoning_output_tokens: int = 0
     embedding_calls: int = 0
     embedding_tokens: int = 0
 
@@ -33,6 +37,8 @@ class ToGMetrics:
         self.prompt_tokens += m.prompt_tokens
         self.output_tokens += m.output_tokens
         self.exploration_llm_calls += m.llm_calls
+        self.exploration_prompt_tokens += m.prompt_tokens
+        self.exploration_output_tokens += m.output_tokens
         self.embedding_calls += m.embedding_calls
         self.embedding_tokens += m.embedding_tokens
 
@@ -42,6 +48,8 @@ class ToGMetrics:
         self.prompt_tokens += m.prompt_tokens
         self.output_tokens += m.output_tokens
         self.reasoning_llm_calls += m.llm_calls
+        self.reasoning_prompt_tokens += m.prompt_tokens
+        self.reasoning_output_tokens += m.output_tokens
 
 
 class ToGSearch:
@@ -134,15 +142,12 @@ class ToGSearch:
                 "reasoning": metrics.reasoning_llm_calls,
             },
             prompt_tokens_categories={
-                "exploration": metrics.prompt_tokens
-                - (metrics.prompt_tokens - metrics.embedding_tokens)
-                if metrics.embedding_tokens
-                else 0,
-                "reasoning": metrics.prompt_tokens,
+                "exploration": metrics.exploration_prompt_tokens,
+                "reasoning": metrics.reasoning_prompt_tokens,
             },
             output_tokens_categories={
-                "exploration": metrics.output_tokens,
-                "reasoning": metrics.output_tokens,
+                "exploration": metrics.exploration_output_tokens,
+                "reasoning": metrics.reasoning_output_tokens,
             },
         )
 
@@ -265,27 +270,80 @@ class ToGSearch:
                 scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
                 top_relations = scored_relations[: self.num_retain_entity]
 
-                # Create new exploration nodes
-                for rel_desc, target_id, direction, weight, score in top_relations:
+                # Build entity candidates for a second-stage prune (closer to original ToG)
+                # so we do not rely on relation scores alone when many candidates exist.
+                candidate_data = []
+                for rel_desc, target_id, direction, weight, rel_score in top_relations:
                     target_info = self.explorer.get_full_entity_info(target_id)
                     rel_info = self.explorer.get_full_relation_info(
                         node.entity_id, target_id, rel_desc
                     )
                     if target_info:
-                        entity_id_full, target_name, target_full_desc = target_info
+                        _, target_name, target_full_desc = target_info
                         rel_full_desc = rel_info[1] if rel_info else rel_desc
-                        new_node = ExplorationNode(
+                        candidate_data.append(
+                            (
+                                rel_desc,
+                                target_id,
+                                direction,
+                                weight,
+                                rel_score,
+                                target_name,
+                                target_full_desc,
+                                rel_full_desc,
+                            )
+                        )
+
+                if not candidate_data:
+                    continue
+
+                entity_candidates = [
+                    (target_id, target_name, target_full_desc)
+                    for (
+                        _rel_desc,
+                        target_id,
+                        _direction,
+                        _weight,
+                        _rel_score,
+                        target_name,
+                        target_full_desc,
+                        _rel_full_desc,
+                    ) in candidate_data
+                ]
+                current_path = self._node_to_path_string(node)
+
+                entity_scores, entity_metrics = await self.pruning_strategy.score_entities(
+                    query=query,
+                    current_path=current_path,
+                    entities=entity_candidates,
+                )
+                yield ("", [], entity_metrics, "")
+
+                # Create new exploration nodes with combined score.
+                for idx, (
+                    rel_desc,
+                    target_id,
+                    _direction,
+                    _weight,
+                    rel_score,
+                    target_name,
+                    target_full_desc,
+                    rel_full_desc,
+                ) in enumerate(candidate_data):
+                    entity_score = entity_scores[idx] if idx < len(entity_scores) else 5.0
+                    combined_score = rel_score * (max(entity_score, 0.0) / 10.0)
+                    new_node = ExplorationNode(
                             entity_id=target_id,
                             entity_name=target_name,
                             entity_description=target_full_desc,
                             depth=next_depth,
-                            score=score,
+                            score=combined_score,
                             parent=node,
                             relation_from_parent=rel_desc,
                             relation_full_description=rel_full_desc,
                             entity_full_description=target_full_desc,
                         )
-                        next_level_nodes.append(new_node)
+                    next_level_nodes.append(new_node)
 
             # Add next level nodes to state
             state.nodes_by_depth[next_depth] = next_level_nodes
@@ -434,3 +492,20 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
                 None,
                 "",
             )
+
+    def _node_to_path_string(self, node: ExplorationNode) -> str:
+        """Build a readable chain string from root to current node."""
+        chain: List[str] = []
+        current = node
+        while current.parent is not None:
+            relation = current.relation_from_parent or "related_to"
+            chain.append(
+                f"{current.parent.entity_name} --[{relation}]--> {current.entity_name}"
+            )
+            current = current.parent
+
+        if not chain:
+            return node.entity_name
+
+        chain.reverse()
+        return " | ".join(chain)

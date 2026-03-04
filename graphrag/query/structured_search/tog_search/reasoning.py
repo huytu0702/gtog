@@ -177,7 +177,7 @@ Structure your response as:
         # Section 2: Relationships (merged with descriptions)
         output_parts.append("\n\n=== RELATIONSHIPS ===")
         for source, relation, target, source_desc, target_desc in relationships:
-            output_parts.append(f"\n• {source} --[{relation}]--> {target}")
+            output_parts.append(f"\n- {source} --[{relation}]--> {target}")
             # Add relationship description inline only if it provides additional information
             rel_key = (source, target, relation)
             if rel_key in relation_details:
