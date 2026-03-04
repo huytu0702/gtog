@@ -27,7 +27,7 @@ models:
     model_provider: gemini
     auth_type: api_key
     api_key: ${GRAPHRAG_API_KEY}
-    model: gemini-2.5-flash
+    model: gemini-2.5-flash-lite
     model_supports_json: true
     concurrent_requests: 2
     async_mode: threaded
