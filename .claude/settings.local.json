@@ -24,7 +24,9 @@
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_type",
       "Bash(sed:*)",
-      "WebFetch(domain:microsoft.github.io)"
+      "WebFetch(domain:microsoft.github.io)",
+      "Bash(\"/f/KL/gtog-eval/.venv/Scripts/python.exe\":*)",
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \"/f/KL/gtog-eval/.venv/Scripts/python.exe\":*)"
     ],
     "deny": [],
     "ask": []

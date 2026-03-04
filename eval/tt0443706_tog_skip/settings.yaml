@@ -173,6 +173,7 @@ tog_search:
   num_retain_entity: 5              # Entities to retain per level
   temperature_exploration: 0.4      # LLM temperature for exploration
   temperature_reasoning: 0.0        # LLM temperature for final answer
+  max_relations_for_llm: 10         # Cap relations sent to LLM per prune step
   max_context_tokens: 8000          # Maximum context tokens
   max_exploration_paths: 10         # Maximum exploration paths
   relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"

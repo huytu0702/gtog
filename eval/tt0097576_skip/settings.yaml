@@ -29,13 +29,13 @@ models:
     api_key: ${GRAPHRAG_API_KEY}
     model: gemini-2.5-flash-lite
     model_supports_json: true
-    concurrent_requests: 10
+    concurrent_requests: 2
     async_mode: threaded
     retry_strategy: exponential_backoff
     max_retries: 7
     max_retry_wait: 60.0
     tokens_per_minute: 100000
-    requests_per_minute: 1500
+    requests_per_minute: 600
 
   default_embedding_model:
     type: embedding
@@ -170,9 +170,10 @@ tog_search:
   width: 3                          # Beam width for exploration
   depth: 3                          # Maximum exploration depth
   prune_strategy: llm               # Options: llm, semantic, bm25
-  num_retain_entity: 3              # Entities to retain per level
+  num_retain_entity: 5              # Entities to retain per level
   temperature_exploration: 0.4      # LLM temperature for exploration
   temperature_reasoning: 0.0        # LLM temperature for final answer
+  max_relations_for_llm: 10         # Cap relations sent to LLM per prune step
   max_context_tokens: 8000          # Maximum context tokens
   max_exploration_paths: 10         # Maximum exploration paths
   relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"
