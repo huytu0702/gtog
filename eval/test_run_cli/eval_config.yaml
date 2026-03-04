@@ -2,7 +2,7 @@ dataset:
   path: "test.json"
 
 indexes:
-  default: "F:/KL/gtog/eval/test_run_cli"
+  default: "F:/KL/gtog-eval/eval/test_run_cli"
 
 methods:
   - tog

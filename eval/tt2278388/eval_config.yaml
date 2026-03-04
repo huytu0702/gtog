@@ -2,7 +2,7 @@ dataset:
   path: "tt2278388.json"
 
 indexes:
-  tt2278388: "F:/KL/gtog/eval/tt2278388"
+  tt2278388: "F:/KL/gtog-eval/eval/tt2278388"
 
 methods:
   - tog

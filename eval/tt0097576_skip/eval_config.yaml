@@ -2,7 +2,7 @@ dataset:
   path: "tt0097576.json"
 
 indexes:
-  tt0097576: "F:/KL/gtog/eval/tt0097576_skip"
+  tt0097576: "F:/KL/gtog-eval/eval/tt0097576_skip"
 
 methods:
   - tog
