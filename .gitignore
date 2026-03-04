@@ -73,7 +73,7 @@ test-project/cache/
 *.lance
 
 
-/my-graphrag-project
+.azure/
 /backend/storage/collections/test_2
 /backend/storage/collections/test
 .venv_new/
