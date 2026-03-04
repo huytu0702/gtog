@@ -4,6 +4,7 @@ from .storage_service import storage_service, StorageService
 from .indexing_service import indexing_service, IndexingService
 from .query_service import query_service, QueryService
 from .router_agent import router_agent, RouterAgent, RouteDecision
+from .summarization_service import summarization_service, SummarizationService
 from .web_search import web_search_service, WebSearchService, WebSearchResult
 
 __all__ = [
@@ -16,6 +17,8 @@ __all__ = [
     "router_agent",
     "RouterAgent",
     "RouteDecision",
+    "summarization_service",
+    "SummarizationService",
     "web_search_service",
     "WebSearchService",
     "WebSearchResult",

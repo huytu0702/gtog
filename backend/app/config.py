@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     settings_file: str = "settings.yaml"
 
     # Model Configuration
-    default_chat_model: str = "gpt-4o-mini"
-    default_embedding_model: str = "text-embedding-3-small"
+    default_chat_model: str = "gemini/gemini-2.5-flash-lite"
+    default_embedding_model: str = "gemini/gemini-embedding-001"
 
     # Server Configuration
     host: str = "0.0.0.0"

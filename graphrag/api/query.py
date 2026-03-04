@@ -57,6 +57,7 @@ from graphrag.utils.api import (
 )
 from graphrag.vector_stores.base import BaseVectorStore
 from graphrag.utils.cli import redact
+from graphrag.query.context_builder.conversation_history import ConversationHistory
 
 # Initialize standard logger
 logger = logging.getLogger(__name__)
@@ -1234,6 +1235,7 @@ async def tog_search(
     entities: pd.DataFrame,
     relationships: pd.DataFrame,
     query: str,
+    conversation_history: ConversationHistory | None = None,
     callbacks: list[QueryCallbacks] | None = None,
     verbose: bool = False,
 ) -> tuple[
@@ -1278,7 +1280,7 @@ async def tog_search(
         callbacks=callbacks,
         entity_text_embeddings=entity_text_embeddings,
     )
-    result = await search_engine.search(query=query)
+    result = await search_engine.search(query=query, conversation_history=conversation_history)
     logger.debug("Query response: %s", truncate(str(result.response), 400))
     return result.response, result.context_data
 
@@ -1289,6 +1291,7 @@ def tog_search_streaming(
     entities: pd.DataFrame,
     relationships: pd.DataFrame,
     query: str,
+    conversation_history: ConversationHistory | None = None,
     callbacks: list[QueryCallbacks] | None = None,
     entity_text_embeddings: Optional[BaseVectorStore] = None,
     verbose: bool = False,
@@ -1329,4 +1332,4 @@ def tog_search_streaming(
         callbacks=callbacks,
         entity_text_embeddings=entity_text_embeddings,
     )
-    return search_engine.stream_search(query=query)
+    return search_engine.stream_search(query=query, conversation_history=conversation_history)

@@ -43,9 +43,17 @@ export interface SearchResult {
     method: string;
 }
 
+export interface ConversationTurn {
+    role: 'user' | 'assistant';
+    content: string;
+    rewritten_query?: string;
+    method_used?: string;
+}
+
 export interface AgentSearchResult {
     method_used: string;
     router_reasoning: string;
+    rewritten_query?: string;
     response: string;
     sources: Array<{
         id: number;
@@ -53,6 +61,11 @@ export interface AgentSearchResult {
         url?: string;
         text_unit_id?: string;
     }>;
+}
+
+export interface SummarizeResult {
+    summary: string;
+    trimmed_history: ConversationTurn[];
 }
 
 export interface WebSearchResult {
@@ -145,10 +158,28 @@ export const searchApi = {
         });
         return response.data;
     },
-    agent: async (collectionId: string, query: string) => {
+    agent: async (
+        collectionId: string,
+        query: string,
+        conversationHistory: ConversationTurn[] = [],
+        conversationSummary?: string,
+    ) => {
         const response = await api.post<AgentSearchResult>(`/collections/${collectionId}/search/agent`, {
             query,
             stream: false,
+            conversation_history: conversationHistory,
+            conversation_summary: conversationSummary,
+        });
+        return response.data;
+    },
+    summarize: async (
+        collectionId: string,
+        conversationHistory: ConversationTurn[],
+        existingSummary?: string,
+    ) => {
+        const response = await api.post<SummarizeResult>(`/collections/${collectionId}/search/agent/summarize`, {
+            conversation_history: conversationHistory,
+            existing_summary: existingSummary,
         });
         return response.data;
     },
