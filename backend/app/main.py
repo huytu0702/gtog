@@ -10,10 +10,14 @@ from .config import settings
 from .models import HealthResponse
 from .routers import (
     collections_router,
+    conversation_router,
     documents_router,
     indexing_router,
     search_router,
 )
+from .services import indexing_service
+from .utils import validate_graphrag_settings_compatibility
+from .azure_runtime import bootstrap_runtime_secrets, is_cosmos_configured
 
 # Configure logging
 logging.basicConfig(
@@ -29,13 +33,38 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting GraphRAG FastAPI backend...")
-    
-    # Ensure storage directory exists
-    settings.collections_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Storage directory: {settings.collections_dir}")
-    
+    bootstrap_runtime_secrets()
+    validate_graphrag_settings_compatibility(settings.settings_yaml_path)
+
+    if is_cosmos_configured():
+        logger.info(
+            "Using Azure Cosmos DB for control-plane metadata "
+            f"(database={settings.azure_cosmos_database_name})"
+        )
+        try:
+            indexing_service.recover_pending_jobs()
+            logger.info("Recovered pending indexing jobs from Cosmos")
+        except Exception:
+            logger.exception("Failed to recover pending indexing jobs")
+    else:
+        if settings.query_context_mode.lower() == "cosmos_only":
+            raise RuntimeError(
+                "QUERY_CONTEXT_MODE=cosmos_only requires Azure Cosmos DB to be configured."
+            )
+        logger.warning(
+            "Azure Cosmos DB is not configured. Collection/document/indexing metadata "
+            "APIs require Cosmos in Phase 1."
+        )
+
+    if settings.azure_storage_connection_string:
+        logger.info("Using Azure Blob Storage for collection data")
+    else:
+        # Fallback local mode only when Azure is not configured
+        settings.collections_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Storage directory: {settings.collections_dir}")
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down GraphRAG FastAPI backend...")
 
@@ -63,6 +92,7 @@ app.include_router(collections_router)
 app.include_router(documents_router)
 app.include_router(indexing_router)
 app.include_router(search_router)
+app.include_router(conversation_router)
 
 
 # Health check endpoint

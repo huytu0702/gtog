@@ -2,7 +2,6 @@
 
 import logging
 from fastapi import APIRouter, HTTPException, status, Request
-from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..models import CollectionCreate, CollectionResponse, CollectionList
@@ -47,20 +46,6 @@ async def create_collection(request: Request, collection: CollectionCreate):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "Internal server error", "message": str(e)},
-        )
-        logger.info(f"Created collection: {collection.name}")
-        return result
-    except ValueError as e:
-        logger.warning(f"Validation error creating collection {collection.name}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid collection data: {str(e)}",
-        )
-    except Exception as e:
-        logger.exception(f"Error creating collection {collection.name}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}",
         )
 
 
