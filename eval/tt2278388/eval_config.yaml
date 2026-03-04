@@ -8,7 +8,7 @@ methods:
   - tog
 
 output:
-  dir: "eval_results"
+  dir: "eval_results_tt2278388"
   save_intermediate: true
 
 judge:
