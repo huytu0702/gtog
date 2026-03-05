@@ -85,8 +85,13 @@ vector_store:
     type: lancedb
     db_uri: output/lancedb
     container_name: default
-    index_schema:
-      vector_size: 1536
+    embeddings_schema:
+      entity.description:
+        vector_size: 3072
+      community.full_content:
+        vector_size: 3072
+      text_unit.text:
+        vector_size: 3072
 
 ### Workflow settings ###
 
