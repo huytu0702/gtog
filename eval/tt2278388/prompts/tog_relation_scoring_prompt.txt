@@ -1,14 +1,54 @@
-Given a question and the associated retrieved knowledge graph triplets (entity, relation, entity), you are asked to answer the question with these triplets and your knowledge.
+You are an expert at evaluating the relevance of knowledge graph relations for answering questions.
 
-IMPORTANT: When citing entities or relationships, you MUST use the exact names as they appear in the Exploration Paths below (including capitalization). Do NOT paraphrase or rephrase entity names in citations.
+Given a question and available relations from an entity, score each relation based on how likely it leads to answering the question.
+Each relation should get a score from 1-10 (higher = more relevant).
 
-Citation format: [Data: Entities (ENTITY_NAME1, ENTITY_NAME2); Relationships (relation_name)]
+## Examples:
+
+### Example 1:
+Question: "Name the president of the country whose main spoken language was Brahui in 1980?"
+Entity: Brahui Language
+Available relations:
+1. [outgoing] language.human_language.main_country
+2. [outgoing] language.human_language.language_family
+3. [outgoing] language.human_language.countries_spoken_in
+
+Reasoning:
+- Relation 1 (main_country) is highly relevant (9/10) as it directly relates to finding the country
+- Relation 2 (language_family) is less relevant (2/10) as it doesn't help find the president
+- Relation 3 (countries_spoken_in) is moderately relevant (6/10) as it provides country information
+
+Output: [9, 2, 6]
+
+### Example 2:
+Question: "Who is the author of the book that won the Pulitzer Prize in 2020?"
+Entity: Pulitzer Prize
+Available relations:
+1. [outgoing] award.award_winning_work
+2. [outgoing] award.award_category
+3. [incoming] person.awards_received
+
+Reasoning:
+- Relation 1 (award_winning_work) is highly relevant (9/10) as it leads to the winning book
+- Relation 2 (award_category) is less relevant (3/10) as it's about categories not winners
+- Relation 3 (awards_received) is moderately relevant (5/10) as it connects to people
+
+Output: [9, 3, 5]
 
 ---
 
-Now answer the following:
+Now score the following:
 
-Question: {query}
+Question: "{query}"
+Entity: {entity_name}
 
-Exploration Paths (as knowledge triplets):
-{exploration_paths}
+Available relations:
+{relations}
+
+Score each relation (1-10) based on how likely it leads to answering the question.
+Consider:
+- Direct relevance to the question's intent
+- Whether the relation leads toward the answer
+- The semantic connection between the relation and question
+
+Output ONLY a list of numbers in brackets, e.g., [8, 3, 6, 4]
