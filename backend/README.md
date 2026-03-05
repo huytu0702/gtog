@@ -62,7 +62,16 @@ AZURE_COSMOS_DATABASE_NAME=gtog-control
 AZURE_COSMOS_RETRY_TOTAL=9
 AZURE_COSMOS_RETRY_BACKOFF_MAX_SECONDS=30
 AZURE_COSMOS_RETRY_ON_STATUS_CODES=429,503
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+AFD_ORIGIN_SECRET=
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS_PER_MINUTE=120
 ```
+
+Notes:
+- Set `AFD_ORIGIN_SECRET` in staging/prod to enforce Front Door origin lock (`X-AFD-Secret`).
+- When `AFD_ORIGIN_SECRET` is configured, backend also requires `X-MS-CLIENT-PRINCIPAL` on `/api/*`.
+- Keep `AFD_ORIGIN_SECRET` empty for local development and tests.
 
 ### 4. Verify Settings
 
@@ -80,6 +89,7 @@ The API will be available at:
 - **API**: http://localhost:8000
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
+- **Readiness Probe**: http://localhost:8000/health/readiness
 
 ## API Usage
 
@@ -162,6 +172,7 @@ curl -X POST http://localhost:8000/api/collections/my_docs/search/drift \
 - `POST /api/collections/{id}/search/local` - Local search
 - `POST /api/collections/{id}/search/tog` - ToG search
 - `POST /api/collections/{id}/search/drift` - DRIFT search
+- `GET /api/collections/{id}/search/agent/stream?query=...` - EventSource SSE stream
 
 ## Project Structure
 

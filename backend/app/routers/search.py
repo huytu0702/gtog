@@ -2,7 +2,7 @@
 
 import json
 import logging
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sse_starlette.sse import EventSourceResponse
 
 from ..config import settings
@@ -283,14 +283,8 @@ async def web_search(collection_id: str, request: WebSearchRequest):
         raise _map_search_error(e)
 
 
-@router.post("/agent/stream")
-async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
-    """
-    Perform an agent-routed search with SSE streaming.
-
-    Streams status updates and response content.
-    """
-
+def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest) -> EventSourceResponse:
+    """Build an SSE response for an agent-routed search stream."""
     async def event_generator():
         try:
             # Send routing status
@@ -412,4 +406,35 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
                 "data": json.dumps({"message": "Internal error while processing stream."}),
             }
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/agent/stream")
+async def agent_search_stream_get(
+    collection_id: str,
+    query: str = Query(..., min_length=1, max_length=1000),
+    session_id: str | None = Query(default=None, min_length=1, max_length=128),
+):
+    """
+    Perform an agent-routed search with SSE streaming (EventSource compatible).
+
+    Auth is expected to come from Easy Auth cookies at the platform layer.
+    """
+    request = AgentSearchRequest(
+        query=query,
+        stream=True,
+        session_id=session_id,
+    )
+    return _build_agent_stream_response(collection_id, request)
+
+
+@router.post("/agent/stream")
+async def agent_search_stream_post(collection_id: str, request: AgentSearchRequest):
+    """Backward-compatible POST route for clients not yet using EventSource GET."""
+    return _build_agent_stream_response(collection_id, request)

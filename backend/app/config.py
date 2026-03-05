@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     enable_tog_debug_endpoint: bool = False
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    afd_origin_secret: str = ""
+    rate_limit_enabled: bool = True
+    rate_limit_requests_per_minute: int = 120
 
     @property
     def collections_dir(self) -> Path:

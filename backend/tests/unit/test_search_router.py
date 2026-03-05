@@ -146,3 +146,37 @@ class TestSearchErrorMapping:
                 )
 
         assert response.status_code == 503
+
+
+class TestAgentStreamEndpoint:
+    """Test GET /agent/stream EventSource contract."""
+
+    @pytest.mark.asyncio
+    async def test_agent_stream_get_returns_event_stream_headers(self):
+        mock_route_decision = MagicMock()
+        mock_route_decision.method = "web"
+        mock_route_decision.confidence = 0.95
+        mock_route_decision.reasoning = "Needs web context"
+        mock_route_decision.rewritten_query = None
+
+        async def fake_stream(_query: str):
+            yield "stream chunk"
+
+        with patch("backend.app.routers.search.router_agent") as mock_router:
+            with patch("backend.app.routers.search.web_search_service") as mock_web:
+                mock_router.route = AsyncMock(return_value=mock_route_decision)
+                mock_web.search_streaming = fake_stream
+
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.get(
+                        "/api/collections/test-collection/search/agent/stream",
+                        params={"query": "What changed?"},
+                    )
+
+        assert response.status_code == 200
+        assert response.headers.get("cache-control") == "no-cache"
+        assert response.headers.get("x-accel-buffering") == "no"
