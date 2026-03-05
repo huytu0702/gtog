@@ -2,8 +2,8 @@
 flowchart TB
   U[User Browser] --> FD[Azure Front Door - WAF - Routing - Rate Limit]
 
-  FD -->|/*| FE[ACA Frontend - Next.js - Easy Auth]
-  FD -->|/api/*| BE[ACA Backend - FastAPI - Easy Auth]
+  FD -->|"/* (HTML/JS)"| FE[ACA Frontend - Next.js - Easy Auth]
+  FD -->|"/api/* + X-AFD-Secret"| BE[ACA Backend - FastAPI - Easy Auth]
 
   subgraph EASYAUTH[ACA Managed Authentication - Easy Auth]
     EA1[Frontend: unauthenticated -> redirect to Entra login]
@@ -17,9 +17,10 @@ flowchart TB
   FE -->|2 - Easy Auth redirect| ENTRA[Microsoft Entra ID]
   ENTRA -->|3 - auth session + tokens| FE
   U -->|4 - GET /.auth/me| FE
-  U -->|5 - call /api/* with Bearer token| FD
+  U -->|"5a - /api/* with Bearer token"| FD
+  U -->|"5b - SSE /api/* with session cookie"| FD
 
-  FD -.->|Inject X-AFD-Secret| BE
+  FD -.->|Inject X-AFD-Secret + X-Azure-Ref| BE
   BE --> LOCK[Origin Lock Check - deny if header missing]
 
   subgraph DATALAYER[Data Layer - already deployed]
@@ -44,8 +45,8 @@ flowchart TB
   subgraph CICD[Azure DevOps CI/CD]
     REPO[Git Repo] --> PIPE[Pipeline YAML]
     PIPE --> ACR[Azure Container Registry]
-    ACR --> FE
-    ACR --> BE
+    ACR -->|"frontend:<sha>-<env>"| FE
+    ACR -->|"backend:<sha>"| BE
   end
 ```
 
@@ -57,3 +58,9 @@ flowchart TB
 - Backend uses Managed Identity to read runtime secrets from Key Vault. Frontend does not use Managed Identity.
 - `AFD_ORIGIN_SECRET` must be different per environment (staging/prod).
 - Data layer (Cosmos, Blob, Search, Key Vault + MI) is already provisioned from previous phases and must be reused.
+- SSE endpoints (agent stream, indexing status) use session cookie auth because `EventSource` cannot set custom headers.
+- Front Door origin timeout for backend set to 240s to support long-running SSE streams.
+- Frontend image is built per-environment (`frontend:<sha>-<env>`) because `NEXT_PUBLIC_` vars are inlined at build time.
+- Backend image is environment-agnostic (runtime env vars only).
+- Backend Easy Auth must have `allowedAudiences` including `api://<backend-app-id>` for token validation.
+- Backend logs `X-Azure-Ref` header from Front Door for cross-layer request correlation.
