@@ -2,30 +2,39 @@
 flowchart TB
   U[User Browser] --> FD[Azure Front Door - WAF - Routing - Rate Limit]
 
-  FD -->|All paths| FE[ACA Frontend - Next.js - Easy Auth]
-  FD -->|API paths - public| BE[ACA Backend - FastAPI - Easy Auth - internal ingress only]
+  FD -->|/*| FE[ACA Frontend - Next.js - Easy Auth]
+  FD -->|/api/*| BE[ACA Backend - FastAPI - Easy Auth]
 
   subgraph EASYAUTH[ACA Managed Authentication - Easy Auth]
-    EA1[Frontend: unauthenticated → redirect to Entra login]
-    EA2[Backend: unauthenticated → return 401]
+    EA1[Frontend: unauthenticated -> redirect to Entra login]
+    EA2[Backend: unauthenticated -> return 401]
     EA3[Both: token validated at platform level before app receives request]
-    EA4[Both: user identity injected as X-MS-CLIENT-PRINCIPAL headers]
+    EA4[Both: user identity headers injected: X-MS-CLIENT-PRINCIPAL*]
     EA1 --- EA2 --- EA3 --- EA4
   end
 
   U -->|1 - visit app| FE
-  FE -->|2 - Easy Auth redirects to Entra login| ENTRA[Microsoft Entra ID]
-  ENTRA -->|3 - tokens returned to Easy Auth| FE
-  U -->|4 - GET /.auth/me to get access token| FE
-  U -->|5 - call /api/* via Front Door with Bearer token| FD
+  FE -->|2 - Easy Auth redirect| ENTRA[Microsoft Entra ID]
+  ENTRA -->|3 - auth session + tokens| FE
+  U -->|4 - GET /.auth/me| FE
+  U -->|5 - call /api/* with Bearer token| FD
 
-  FD -.->|Inject header X-AFD-Secret| BE
+  FD -.->|Inject X-AFD-Secret| BE
   BE --> LOCK[Origin Lock Check - deny if header missing]
 
-  BE --> KV[Azure Key Vault - BE Managed Identity]
-  BE --> COSMOS[Azure Cosmos DB]
-  BE --> BLOB[Azure Blob Storage]
-  BE --> SEARCH[Azure AI Search - vector store]
+  subgraph DATALAYER[Data Layer - already deployed]
+    KV[Azure Key Vault]
+    MI[User-assigned Managed Identity for backend]
+    COSMOS[Azure Cosmos DB]
+    BLOB[Azure Blob Storage]
+    SEARCH[Azure AI Search]
+  end
+
+  BE --> MI
+  MI --> KV
+  BE --> COSMOS
+  BE --> BLOB
+  BE --> SEARCH
   BE --> LLM[Gemini or OpenAI APIs]
   BE --> TAVILY[Tavily API]
 
@@ -41,10 +50,10 @@ flowchart TB
 ```
 
 **Notes:**
-- Auth is handled entirely by **ACA Easy Auth** at the platform level — no auth code in Next.js or FastAPI.
+- Auth is handled by ACA Easy Auth at the platform level (no custom JWT validation in app code).
 - Frontend Easy Auth action: `RedirectToLoginPage`. Backend Easy Auth action: `Return401`.
-- Browser calls `/.auth/me` (served by Easy Auth) to get the access token, then sends it as `Authorization: Bearer` to `/api/*` via Front Door.
-- Backend has **internal ingress only** — only reachable via Front Door publicly. Easy Auth on the backend validates the Bearer token before FastAPI processes the request.
-- `X-AFD-Secret` origin lock applies to all Front Door → backend traffic.
-- Backend Managed Identity used for Key Vault access only. Frontend does not need a Managed Identity.
-- Separate `AFD_ORIGIN_SECRET` values per environment (staging vs prod) in Key Vault.
+- Browser calls `/api/*` through Front Door. Front Door routes to backend origin and injects `X-AFD-Secret`.
+- Backend is protected against bypass by layered controls: Front Door route + `X-AFD-Secret` check + Easy Auth on backend.
+- Backend uses Managed Identity to read runtime secrets from Key Vault. Frontend does not use Managed Identity.
+- `AFD_ORIGIN_SECRET` must be different per environment (staging/prod).
+- Data layer (Cosmos, Blob, Search, Key Vault + MI) is already provisioned from previous phases and must be reused.
