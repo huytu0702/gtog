@@ -10,8 +10,8 @@ from backend.app.main import app
 
 
 @pytest.mark.asyncio
-async def test_api_rejects_missing_afd_secret_when_configured():
-    with patch.object(main.settings, "afd_origin_secret", "secret-123"):
+async def test_api_rejects_missing_edge_secret_when_configured():
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -26,8 +26,8 @@ async def test_api_rejects_missing_afd_secret_when_configured():
 
 
 @pytest.mark.asyncio
-async def test_api_rejects_missing_principal_when_afd_secret_matches():
-    with patch.object(main.settings, "afd_origin_secret", "secret-123"):
+async def test_api_rejects_missing_principal_when_edge_secret_matches():
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -35,7 +35,7 @@ async def test_api_rejects_missing_principal_when_afd_secret_matches():
         ) as client:
             response = await client.post(
                 "/api/collections/test-collection/search/web",
-                headers={"X-AFD-Secret": "secret-123"},
+                headers={"X-Edge-Secret": "secret-123"},
                 json={"query": "hello", "stream": False},
             )
 
@@ -48,7 +48,7 @@ async def test_api_allows_request_when_guards_present():
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "afd_origin_secret", "secret-123"):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
         with patch("backend.app.routers.search.web_search_service") as mock_web:
             mock_web.search = AsyncMock(return_value=mock_result)
             transport = httpx.ASGITransport(app=app)
@@ -59,7 +59,7 @@ async def test_api_allows_request_when_guards_present():
                 response = await client.post(
                     "/api/collections/test-collection/search/web",
                     headers={
-                        "X-AFD-Secret": "secret-123",
+                        "X-Edge-Secret": "secret-123",
                         "X-MS-CLIENT-PRINCIPAL": "present",
                     },
                     json={"query": "hello", "stream": False},
@@ -70,7 +70,7 @@ async def test_api_allows_request_when_guards_present():
 
 @pytest.mark.asyncio
 async def test_fallback_rate_limiter_returns_429():
-    with patch.object(main.settings, "afd_origin_secret", ""):
+    with patch.object(main.settings, "edge_origin_secret", ""):
         with patch.object(main.settings, "rate_limit_enabled", True):
             with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
                 with patch("backend.app.routers.search.web_search_service") as mock_web:

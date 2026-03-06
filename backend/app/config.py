@@ -1,6 +1,8 @@
 """Application configuration using Pydantic Settings."""
 
 from pathlib import Path
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -89,7 +91,10 @@ class Settings(BaseSettings):
     port: int = 8000
     enable_tog_debug_endpoint: bool = False
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
-    afd_origin_secret: str = ""
+    edge_origin_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("EDGE_ORIGIN_SECRET", "AFD_ORIGIN_SECRET"),
+    )
     rate_limit_enabled: bool = True
     rate_limit_requests_per_minute: int = 120
 

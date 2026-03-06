@@ -1,27 +1,39 @@
 ```mermaid
 flowchart TB
-  U[User Browser] --> FD[Azure Front Door - WAF - Routing - Rate Limit]
+  U[User Browser]
 
-  FD -->|"/* (HTML/JS)"| FE[ACA Frontend - Next.js - Easy Auth]
-  FD -->|"/api/* + X-AFD-Secret"| BE[ACA Backend - FastAPI - Easy Auth]
+  U -->|Visit https://app.<domain>| CFAPP[Cloudflare Edge - app host]
+  U -->|API and auth calls to https://api.<domain>| CFAPI[Cloudflare Edge - api host]
 
-  subgraph EASYAUTH[ACA Managed Authentication - Easy Auth]
-    EA1[Frontend: unauthenticated -> redirect to Entra login]
-    EA2[Backend: unauthenticated -> return 401]
-    EA3[Both: token validated at platform level before app receives request]
-    EA4[Both: user identity headers injected: X-MS-CLIENT-PRINCIPAL*]
-    EA1 --- EA2 --- EA3 --- EA4
+  CFAPP --> FE[ACA Frontend - Next.js - Public UI]
+  CFAPI -->|"X-Edge-Secret + Cf-Ray"| BE[ACA Backend - FastAPI - Easy Auth]
+
+  subgraph EDGE[Cloudflare Edge Controls]
+    E1[Proxied DNS]
+    E2[Rate limit on api host]
+    E3[WAF or custom edge rules]
+    E4[Cache bypass for API auth and SSE]
+    E5[Request header transform injects X-Edge-Secret]
+    E1 --- E2 --- E3 --- E4 --- E5
   end
 
-  U -->|1 - visit app| FE
-  FE -->|2 - Easy Auth redirect| ENTRA[Microsoft Entra ID]
-  ENTRA -->|3 - auth session + tokens| FE
-  U -->|4 - GET /.auth/me| FE
-  U -->|"5a - /api/* with Bearer token"| FD
-  U -->|"5b - SSE /api/* with session cookie"| FD
+  CFAPP --- EDGE
+  CFAPI --- EDGE
 
-  FD -.->|Inject X-AFD-Secret + X-Azure-Ref| BE
-  BE --> LOCK[Origin Lock Check - deny if header missing]
+  subgraph EASYAUTH[ACA Managed Authentication - Backend Only]
+    EA1[Backend unauthenticated requests return 401]
+    EA2[Easy Auth validates token before FastAPI receives request]
+    EA3[User identity header injected: X-MS-CLIENT-PRINCIPAL]
+    EA1 --- EA2 --- EA3
+  end
+
+  FE -->|Login redirect to api host| ENTRA[Microsoft Entra ID]
+  ENTRA -->|Auth session + tokens on api host| BE
+  FE -->|GET https://api.<domain>/.auth/me| BE
+  FE -->|"GET /api/* with Bearer token"| CFAPI
+  FE -->|"SSE /api/* with session cookie"| CFAPI
+
+  BE --> LOCK[Origin Lock Check - deny if X-Edge-Secret missing]
 
   subgraph DATALAYER[Data Layer - already deployed]
     KV[Azure Key Vault]
@@ -51,16 +63,20 @@ flowchart TB
 ```
 
 **Notes:**
-- Auth is handled by ACA Easy Auth at the platform level (no custom JWT validation in app code).
-- Frontend Easy Auth action: `RedirectToLoginPage`. Backend Easy Auth action: `Return401`.
-- Browser calls `/api/*` through Front Door. Front Door routes to backend origin and injects `X-AFD-Secret`.
-- Backend is protected against bypass by layered controls: Front Door route + `X-AFD-Secret` check + Easy Auth on backend.
+- Cloudflare replaces Azure Front Door as the public edge because Front Door is not available in the target Azure Student setup.
+- Public routing uses two hostnames, not one path-routed hostname:
+  - `app.<domain>` -> frontend ACA
+  - `api.<domain>` -> backend ACA
+- Backend remains protected by layered controls: Cloudflare rate limiting/WAF, `X-Edge-Secret`, and Easy Auth on the backend.
+- Frontend is public. Backend is the protected auth boundary.
+- Frontend login/logout actions must target the backend auth host and redirect users back to `app.<domain>` after login/logout.
 - Backend uses Managed Identity to read runtime secrets from Key Vault. Frontend does not use Managed Identity.
-- `AFD_ORIGIN_SECRET` must be different per environment (staging/prod).
+- `EDGE_ORIGIN_SECRET` must be different per environment (staging/prod).
 - Data layer (Cosmos, Blob, Search, Key Vault + MI) is already provisioned from previous phases and must be reused.
 - SSE endpoints (agent stream, indexing status) use session cookie auth because `EventSource` cannot set custom headers.
-- Front Door origin timeout for backend set to 240s to support long-running SSE streams.
-- Frontend image is built per-environment (`frontend:<sha>-<env>`) because `NEXT_PUBLIC_` vars are inlined at build time.
+- SSE responses must emit heartbeat events every 25-30 seconds to avoid idle proxy timeout at the edge.
+- Frontend image is built per environment (`frontend:<sha>-<env>`) because `NEXT_PUBLIC_` vars are inlined at build time.
 - Backend image is environment-agnostic (runtime env vars only).
 - Backend Easy Auth must have `allowedAudiences` including `api://<backend-app-id>` for token validation.
-- Backend logs `X-Azure-Ref` header from Front Door for cross-layer request correlation.
+- Backend should log `Cf-Ray` for request correlation and `CF-Connecting-IP` as the original client IP when available.
+- ACA custom domains should use uploaded certificates in this topology. Do not rely on ACA managed certificates behind Cloudflare proxying.

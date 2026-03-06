@@ -67,6 +67,9 @@ def _parse_cors_origins(raw_origins: str) -> list[str]:
 
 
 def _client_ip(request: Request) -> str:
+    cf_connecting_ip = request.headers.get("cf-connecting-ip")
+    if cf_connecting_ip:
+        return cf_connecting_ip.strip()
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
         first = forwarded_for.split(",")[0].strip()
@@ -183,7 +186,8 @@ _rate_limiter = InMemoryRateLimiter(settings.rate_limit_requests_per_minute)
 @app.middleware("http")
 async def security_and_logging_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or uuid4().hex
-    azure_ref = request.headers.get("x-azure-ref")
+    cf_ray = request.headers.get("cf-ray")
+    cf_connecting_ip = request.headers.get("cf-connecting-ip")
     client_ip = _client_ip(request)
     path = request.url.path
     method = request.method
@@ -202,9 +206,9 @@ async def security_and_logging_middleware(request: Request, call_next):
                     response.headers["Retry-After"] = str(retry_after)
 
             if response is None:
-                expected_secret = settings.afd_origin_secret.strip()
+                expected_secret = settings.edge_origin_secret.strip()
                 if expected_secret:
-                    provided_secret = request.headers.get("x-afd-secret", "")
+                    provided_secret = request.headers.get("x-edge-secret", "")
                     if provided_secret != expected_secret:
                         response = JSONResponse(
                             status_code=403,
@@ -237,7 +241,8 @@ async def security_and_logging_middleware(request: Request, call_next):
                     "latency_ms": latency_ms,
                     "request_id": request_id,
                     "client_ip": client_ip,
-                    "x_azure_ref": azure_ref,
+                    "cf_ray": cf_ray,
+                    "cf_connecting_ip": cf_connecting_ip,
                 }
             )
         )

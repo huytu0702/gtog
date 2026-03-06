@@ -5,13 +5,35 @@ function normalizeBaseUrl(value?: string): string {
     return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
-const APP_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://127.0.0.1:8000';
-const API_BASE_URL = `${APP_BASE_URL}/api`;
+const API_HOST_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://127.0.0.1:8000';
+const API_BASE_URL = `${API_HOST_BASE_URL}/api`;
+const EASY_AUTH_ME_URL = `${API_HOST_BASE_URL}/.auth/me`;
 
-export const EASY_AUTH_LOGIN_URL = `${APP_BASE_URL}/.auth/login/aad`;
-export const EASY_AUTH_LOGOUT_URL = `${APP_BASE_URL}/.auth/logout`;
+function normalizeRedirectUri(value?: string): string | null {
+    const normalized = normalizeBaseUrl(value);
+    return normalized || null;
+}
 
-const EASY_AUTH_ME_URL = `${APP_BASE_URL}/.auth/me`;
+export function buildEasyAuthLoginUrl(postLoginRedirectUri?: string): string {
+    const loginUrl = new URL(`${API_HOST_BASE_URL}/.auth/login/aad`);
+    const redirectUri = normalizeRedirectUri(postLoginRedirectUri);
+    if (redirectUri) {
+        loginUrl.searchParams.set('post_login_redirect_uri', redirectUri);
+    }
+    return loginUrl.toString();
+}
+
+export function buildEasyAuthLogoutUrl(postLogoutRedirectUri?: string): string {
+    const logoutUrl = new URL(`${API_HOST_BASE_URL}/.auth/logout`);
+    const redirectUri = normalizeRedirectUri(postLogoutRedirectUri);
+    if (redirectUri) {
+        logoutUrl.searchParams.set('post_logout_redirect_uri', redirectUri);
+    }
+    return logoutUrl.toString();
+}
+
+export const EASY_AUTH_LOGIN_URL = buildEasyAuthLoginUrl();
+export const EASY_AUTH_LOGOUT_URL = buildEasyAuthLogoutUrl();
 
 type EasyAuthState = {
     checked: boolean;
@@ -29,7 +51,7 @@ let tokenRequestPromise: Promise<string | null> | null = null;
 
 function redirectToLoginIfNeeded() {
     if (typeof window === 'undefined') return;
-    window.location.assign(EASY_AUTH_LOGIN_URL);
+    window.location.assign(buildEasyAuthLoginUrl(window.location.origin));
 }
 
 function extractTokenFromMeResponse(payload: unknown): string | null {

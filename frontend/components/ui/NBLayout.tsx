@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { EASY_AUTH_LOGIN_URL, EASY_AUTH_LOGOUT_URL } from '@/lib/api';
+
+import { AuthLinks } from '@/components/ui/AuthLinks';
 
 interface NBLayoutProps {
     children: React.ReactNode;
@@ -22,18 +23,7 @@ export function NBLayout({ children }: NBLayoutProps) {
                         <a href="https://microsoft.github.io/graphrag/" target="_blank" rel="noopener noreferrer" className="font-bold hover:underline decoration-2">
                             Docs
                         </a>
-                        <a
-                            href={EASY_AUTH_LOGIN_URL}
-                            className="px-3 py-2 border-3 border-black bg-main font-bold shadow-hard-sm hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-none transition-all"
-                        >
-                            Log In
-                        </a>
-                        <a
-                            href={EASY_AUTH_LOGOUT_URL}
-                            className="px-3 py-2 border-3 border-black bg-white font-bold shadow-hard-sm hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-none transition-all"
-                        >
-                            Log Out
-                        </a>
+                        <AuthLinks />
                     </nav>
                 </div>
             </header>

@@ -63,15 +63,16 @@ AZURE_COSMOS_RETRY_TOTAL=9
 AZURE_COSMOS_RETRY_BACKOFF_MAX_SECONDS=30
 AZURE_COSMOS_RETRY_ON_STATUS_CODES=429,503
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-AFD_ORIGIN_SECRET=
+EDGE_ORIGIN_SECRET=
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_REQUESTS_PER_MINUTE=120
 ```
 
 Notes:
-- Set `AFD_ORIGIN_SECRET` in staging/prod to enforce Front Door origin lock (`X-AFD-Secret`).
-- When `AFD_ORIGIN_SECRET` is configured, backend also requires `X-MS-CLIENT-PRINCIPAL` on `/api/*`.
-- Keep `AFD_ORIGIN_SECRET` empty for local development and tests.
+- Set `EDGE_ORIGIN_SECRET` in staging/prod to enforce edge-origin lock (`X-Edge-Secret`).
+- When `EDGE_ORIGIN_SECRET` is configured, backend also requires `X-MS-CLIENT-PRINCIPAL` on `/api/*`.
+- Keep `EDGE_ORIGIN_SECRET` empty for local development and tests.
+- Backward compatibility: the backend still accepts legacy `AFD_ORIGIN_SECRET` as an env alias during migration.
 
 ### 4. Verify Settings
 
@@ -213,9 +214,15 @@ The project follows standard Python conventions. Key packages:
 
 ### Logging
 
-Logs are written to stdout with the format:
+Logs are written to stdout as structured JSON. In cloud deployments, backend request logs should capture:
+
+- `cf_ray` for Cloudflare request correlation
+- `cf_connecting_ip` for original client IP when present
+- `request_id` for app-side tracing
+
+Local development still writes the same JSON envelope to stdout.
 ```
-%(asctime)s - %(name)s - %(levelname)s - %(message)s
+{"event":"http_request","method":"GET","path":"/health","status_code":200}
 ```
 
 ## Troubleshooting
