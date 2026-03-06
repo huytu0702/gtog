@@ -17,3 +17,10 @@ frontend/.next
 storage
 output
 eval_results
+
+docs/
+tests/
+examples_notebooks/
+.changes/
+*.md
+!README.md

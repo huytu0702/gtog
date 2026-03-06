@@ -2,33 +2,38 @@ FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
-FROM base AS builder
+# --- deps: install all dependencies (cached until requirements change) ---
+FROM base AS deps
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m venv /opt/venv
+RUN uv venv /opt/venv
 
 COPY backend/requirements.txt /tmp/backend-requirements.txt
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r /tmp/backend-requirements.txt
-
 COPY pyproject.toml README.md /app/
+RUN mkdir -p /app/graphrag && echo '__version__ = "0.0.0"' > /app/graphrag/__init__.py \
+    && uv pip install --python /opt/venv/bin/python . \
+    && uv pip install --python /opt/venv/bin/python -r /tmp/backend-requirements.txt
+
+# --- builder: install graphrag package + copy backend code ---
+FROM deps AS builder
+
 COPY graphrag /app/graphrag
+RUN uv pip install --python /opt/venv/bin/python --no-deps --reinstall-package graphrag .
+
 COPY backend/app /app/backend/app
 COPY backend/prompts /app/backend/prompts
 COPY backend/settings.yaml /app/backend/settings.yaml
 
-RUN pip install -e /app
-
+# --- runtime: minimal production image ---
 FROM base AS runtime
 
 WORKDIR /app/backend
@@ -39,8 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --create-home --shell /usr/sbin/nologin appuser
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /app/pyproject.toml /app/pyproject.toml
-COPY --from=builder /app/graphrag /app/graphrag
 COPY --from=builder /app/backend/app /app/backend/app
 COPY --from=builder /app/backend/prompts /app/backend/prompts
 COPY --from=builder /app/backend/settings.yaml /app/backend/settings.yaml

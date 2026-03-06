@@ -2,4 +2,13 @@ node_modules
 .next
 .env
 .env.local
+.env*.local
 npm-debug.log*
+Dockerfile
+docker-compose*
+.git
+.gitignore
+README.md
+*.md
+.vscode
+.idea
