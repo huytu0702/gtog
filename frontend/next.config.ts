@@ -15,6 +15,7 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   reactCompiler: true,
   async headers() {
     return [
