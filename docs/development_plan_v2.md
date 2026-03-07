@@ -4,8 +4,9 @@
 
 Deploy full stack to Azure using:
 
-- Azure Container Apps for frontend and backend
+- Azure Container Apps for frontend, API, worker, and tunnel connector
 - Cloudflare proxied DNS as the public edge
+- Cloudflare Tunnel for the API hostname private-origin path
 - Microsoft Entra ID (OIDC) via ACA Easy Auth on the backend
 - Azure DevOps YAML CI/CD
 
@@ -20,31 +21,33 @@ Data layer is already deployed and reused in this plan:
 
 This v2 plan focuses on:
 
-- Replacing Azure Front Door with a student-compatible edge design
+- Replacing Azure Front Door with a Cloudflare-based edge that does not leave the API origin public
 - Dual public hostnames instead of single-host path routing
-- Backend origin lock with a Cloudflare-injected header
+- Private API origin through Cloudflare Tunnel into a private ACA environment
 - Cloudflare rate limiting on `api.<domain>` + fallback limiter in backend
 - Clear auth pattern choice: public frontend, protected backend
-- Strong observability + bypass tests + request correlation
-- Per-environment secrets (staging/prod)
+- Strong observability + network-layer bypass tests + request correlation
+- Per-environment secrets and tunnel tokens
 - CSP headers on frontend
 - Distributed lock guardrail for indexing (Cosmos lease)
 - Frontend health probe route
 - Cloudflare WAF or custom rules depending selected plan
-- Alert thresholds in Azure Monitor / Log Analytics
+- Alert thresholds in Azure Monitor and Log Analytics
 - SSE compatibility through Cloudflare with heartbeat events
 - Frontend image built per environment (build-time env injection)
 
 ## Why the Architecture Changes
 
-Azure Front Door is not available in the target Azure Student setup. Cloudflare is used as the edge replacement.
+Azure Front Door is not available in the target Azure Student setup. Cloudflare remains the public edge replacement.
 
-To keep the design low-cost and avoid Cloudflare Enterprise or Worker-based reverse proxying, the public routing model changes from one hostname with path routing to two hostnames:
+The earlier public-origin design kept the API behind Cloudflare controls and an injected shared secret, but it still left the ACA API publicly reachable. This revision removes that gap by publishing `api.<domain>` through Cloudflare Tunnel into a private ACA environment, so origin isolation no longer depends on a shared header alone.
+
+The public routing model remains:
 
 - `app.<domain>` -> frontend ACA
-- `api.<domain>` -> backend ACA
+- `api.<domain>` -> Cloudflare Tunnel -> private ACA API
 
-This keeps the platform simple and preserves backend protection, rate limiting, and auth without introducing a custom proxy layer.
+This keeps the browser contract simple while moving origin trust to the network path instead of only the application layer.
 
 ## Fixed Decisions
 
@@ -53,12 +56,13 @@ This keeps the platform simple and preserves backend protection, rate limiting, 
 3. CI/CD: Azure DevOps YAML
 4. Public edge: Cloudflare proxied DNS
 5. Public host model: dual subdomains (`app.<domain>` and `api.<domain>`)
-6. Auth: Entra ID OIDC for backend API
-7. Auth pattern: ACA Managed Authentication (Easy Auth) on backend only
-8. Traffic profile (first 3 months): small (`<= 50 users/day`)
-9. API routing model: browser calls backend via `https://api.<domain>/api/*`
-10. Frontend managed identity: not required
-11. Cloudflare Worker and Enterprise-only routing features: out of scope
+6. API origin model: Cloudflare Tunnel into a private ACA environment
+7. Auth: Entra ID OIDC for backend API
+8. Auth pattern: ACA Managed Authentication (Easy Auth) on backend only
+9. Traffic profile (first 3 months): small (`<= 50 users/day`)
+10. API routing model: browser calls backend via `https://api.<domain>/api/*`
+11. Frontend managed identity: not required
+12. Cloudflare Worker and Enterprise-only routing features: out of scope
 
 ## Current State (Already Done)
 
@@ -66,25 +70,31 @@ Based on completed phases and validation report (`docs/plans/2026-03-02-phase5-b
 
 1. Data layer exists: Cosmos, Blob, Search, Key Vault
 2. Backend managed identity + Key Vault secret bootstrap is implemented
-3. Baseline hardening/alerts scripts for data layer already exist (`scripts/harden-azure-phase5.ps1/.sh`)
+3. Baseline hardening and alerts scripts for the data layer already exist (`scripts/harden-azure-phase5.ps1/.sh`)
 
 Out of scope for this doc: re-provision data layer from scratch.
 
 ## Target Architecture (v2)
 
 1. Frontend Container App (Next.js) serves the UI on `https://app.<domain>`
-2. Backend Container App (FastAPI) serves the API on `https://api.<domain>/api/*`
-3. Cloudflare is the public edge for both hostnames
-4. Cloudflare enforces:
-  - Proxied DNS for `app.<domain>` and `api.<domain>`
-  - Rate limiting on `api.<domain>`
+2. API Container App (FastAPI) serves the API on internal ingress only
+3. Worker Container App handles indexing and long-running graph jobs with no public ingress
+4. Tunnel Connector Container App (`cloudflared`) publishes `https://api.<domain>` through Cloudflare Tunnel to the private API origin
+5. Cloudflare is the public edge for both hostnames
+6. Cloudflare enforces:
+  - proxied DNS for `app.<domain>`
+  - Tunnel public hostname for `api.<domain>`
+  - rate limiting on `api.<domain>`
   - WAF or custom edge rules based on the chosen Cloudflare plan
-  - Header injection for backend origin lock (`X-Edge-Secret`)
-  - Cache bypass for `/api/*`, `/.auth/*`, and SSE routes
-5. Azure Container Registry stores frontend/backend images
-6. Backend reads runtime secrets from Key Vault via Managed Identity
-7. Backend connects to Cosmos, Blob, AI Search, and external LLM providers
-8. Logs/metrics are collected in Log Analytics + Azure Monitor
+  - optional header injection for a secondary backend guard (`X-Edge-Secret`)
+  - cache bypass for `/api/*`, `/.auth/*`, and SSE routes
+7. Backend plane runs inside a private ACA environment:
+  - delegated subnet
+  - private endpoint + private DNS
+  - public network access disabled
+8. Azure Container Registry stores frontend, API, and worker images
+9. Backend reads runtime secrets from Key Vault via Managed Identity
+10. Logs and metrics are collected in Log Analytics + Azure Monitor
 
 ## Required Application Changes
 
@@ -113,20 +123,21 @@ Out of scope for this doc: re-provision data layer from scratch.
   - Key Vault reachable
   - AI Search reachable
   - Blob Storage reachable
-  - Exclude external LLM/Tavily checks
+  - Exclude external LLM and Tavily checks
 3. Keep `/health` as liveness-only
 4. Easy Auth identity guard on `/api/*`:
   - Require `X-MS-CLIENT-PRINCIPAL`
   - Return `401` if missing
-5. Backend origin lock:
-  - Require `X-Edge-Secret: <value>`
-  - Validate before identity checks
+5. Secondary backend edge guard:
+  - Optionally require `X-Edge-Secret: <value>`
+  - Validate before identity checks when configured
+  - Do not treat this header as the primary origin lock
 6. Add basic backend rate-limit fallback (defense in depth)
 7. SSE response handling:
   - Set `Cache-Control: no-cache`
   - Keep no-buffering headers for streaming responses
   - Emit heartbeat events every 25-30 seconds to avoid idle proxy timeout
-8. Structured JSON logging with `Cf-Ray` and `CF-Connecting-IP` capture for request correlation across Cloudflare -> Backend
+8. Structured JSON logging with `Cf-Ray` and `CF-Connecting-IP` capture for request correlation across Cloudflare -> Tunnel -> Backend
 
 ## Auth Pattern Decision
 
@@ -135,14 +146,14 @@ Chosen: ACA Managed Authentication (Easy Auth) on backend only
 How it works:
 
 - Frontend ACA is public and serves the UI
-- Backend ACA requires authentication and returns `401` for unauthenticated API requests
+- API ACA requires authentication and returns `401` for unauthenticated API requests
 - Frontend starts login by redirecting users to `https://api.<domain>/.auth/login/aad`
 - Easy Auth validates the session before request reaches FastAPI
 - Frontend gets token from `https://api.<domain>/.auth/me` and sends Bearer token to `/api/*`
 
 What Easy Auth handles:
 
-- OIDC redirect/callback
+- OIDC redirect and callback
 - Session cookie on the backend host
 - Token validation and refresh
 - Logout flow
@@ -150,9 +161,9 @@ What Easy Auth handles:
 What app code still handles:
 
 - Frontend token retrieval + API header attachment
-- Frontend login/logout redirect URLs back to `app.<domain>`
+- Frontend login and logout redirect URLs back to `app.<domain>`
 - Frontend SSE: use Easy Auth session cookie (`EventSource` cannot set custom `Authorization` headers)
-- Backend header presence guards (`X-MS-CLIENT-PRINCIPAL`, `X-Edge-Secret`)
+- Backend header presence guards (`X-MS-CLIENT-PRINCIPAL` and optional `X-Edge-Secret`)
 
 SSE auth note: `EventSource` does not support custom `Authorization` headers. SSE endpoints rely on the Easy Auth session cookie stored for `api.<domain>`. Backend must accept both Bearer token and session cookie for `/api/*` routes (Easy Auth handles both transparently).
 
@@ -163,8 +174,11 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
   - Note: `NEXT_PUBLIC_` vars are inlined at build time. Frontend image must be built separately per environment.
 - Backend (runtime):
   - `CORS_ORIGINS=https://app.<domain>`
-  - `EDGE_ORIGIN_SECRET=<value>`
+  - `EDGE_ORIGIN_SECRET=<value>` only if the secondary backend guard is enabled
   - Existing `AZURE_*`, `GRAPHRAG_API_KEY`, `GOOGLE_API_KEY`, `TAVILY_API_KEY`
+- Tunnel connector (runtime):
+  - `CLOUDFLARE_TUNNEL_TOKEN=<value>`
+  - Optional `X-Edge-Secret` injection remains configured on the Cloudflare side if the backend secondary guard is enabled
 
 ## Containerization
 
@@ -181,17 +195,24 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
   - Non-root user (`nextjs`)
   - Build args: `NEXT_PUBLIC_API_BASE_URL` (injected at build time per environment)
   - `HEALTHCHECK CMD curl -f http://localhost:3000/api/health || exit 1`
-3. Add `.dockerignore` for backend (`__pycache__`, `.venv`, `.env`, `tests/`) and frontend (`node_modules`, `.next`, `.env`)
+3. Tunnel image:
+  - `cloudflare/cloudflared`
+  - command: `cloudflared tunnel --no-autoupdate run --token <token>`
+  - min replicas: `2`
+4. Add `.dockerignore` for backend (`__pycache__`, `.venv`, `.env`, `tests/`) and frontend (`node_modules`, `.next`, `.env`)
 
 ### Image Tags
 
 - `backend:<git-sha>` - single image works for all environments (runtime env vars)
 - `frontend:<git-sha>-<env>` - separate build per environment due to `NEXT_PUBLIC_` build-time injection
+- `worker:<git-sha>` - single image for the background job worker
+- `tunnel:managed` - Cloudflare provided `cloudflared` image pinned in deployment manifests or scripts
 - Aliases: `staging-latest`, `prod-latest`
 
 ### Local Validation
 
-- Add `docker-compose.dev.yml` for local testing of both containers before pushing to ACR
+- Add `docker-compose.dev.yml` for local testing of frontend and backend before pushing to ACR
+- Tunnel connector is not required for local development
 
 ## App-Layer Infrastructure Provisioning
 
@@ -200,37 +221,43 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 - Region: `southeastasia`
 - Resource groups: `rg-gtog-stg`, `rg-gtog-prod`
 - ACA environments: `cae-gtog-stg`, `cae-gtog-prod`
-- Apps: `ca-gtog-frontend-{env}`, `ca-gtog-backend-{env}`
+- Apps:
+  - `ca-gtog-frontend-{env}`
+  - `ca-gtog-api-{env}`
+  - `ca-gtog-worker-{env}`
+  - `ca-gtog-tunnel-{env}`
 - ACR: shared (example `acrgtogshared`)
 
 ### Cloudflare Edge
 
 1. Two public hosts per environment:
   - `app.<domain>` -> frontend ACA
-  - `api.<domain>` -> backend ACA
-2. Cloudflare proxied DNS enabled for both hosts
-3. Edge protections:
+  - `api.<domain>` -> Cloudflare Tunnel -> private ACA API
+2. Cloudflare proxied DNS enabled for `app.<domain>`
+3. Cloudflare Tunnel public hostname enabled for `api.<domain>`
+4. Edge protections:
   - Rate limiting on `api.<domain>`
   - WAF managed rules if plan supports them
   - Custom rules for low-cost plans when managed rules are unavailable
   - Optional rule to block missing `User-Agent`
-4. Add Request Header Transform Rule on `api.<domain>`:
+5. Optional Request Header Transform Rule on `api.<domain>`:
   - Inject `X-Edge-Secret: <value>` to origin requests
   - Use separate secret values per environment
-5. Disable caching for:
+6. Disable caching for:
   - `/api/*`
   - `/.auth/*`
   - SSE routes
-6. Do not use Cloudflare Worker or single-host path routing in v2
+7. Do not use Cloudflare Worker or single-host path routing in v2
 
 ### Custom Domains and Certificates
 
 1. Bind `app.<domain>` to the frontend ACA
-2. Bind `api.<domain>` to the backend ACA
-3. Do not use ACA managed certificates in this topology
-4. Use uploaded certificates for ACA custom domains
-5. If validation requires direct DNS resolution, temporarily disable Cloudflare proxy during domain validation
-6. Cloudflare SSL mode: `Full (strict)`
+2. Keep `api.<domain>` stable at the browser layer, but do not depend on direct public ACA DNS routing for the API
+3. Retain API custom domain binding on ACA only if required for Easy Auth redirect, cookie, or host-header behavior
+4. Do not rely on ACA managed certificates in this topology
+5. Use uploaded certificates where ACA custom domains are retained
+6. If validation requires direct DNS resolution, temporarily disable Cloudflare proxy during domain validation
+7. Cloudflare SSL mode: `Full (strict)`
 
 ### Identity and Secrets
 
@@ -238,27 +265,37 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 2. Frontend does not need Managed Identity
 3. Grant `Key Vault Secrets User` to backend MI
 4. Keep runtime secrets in Key Vault
-5. Enable Key Vault diagnostics to Log Analytics
-6. Configure Key Vault expiry alerts (30 days)
+5. Add `CLOUDFLARE_TUNNEL_TOKEN` secret per environment
+6. Enable Key Vault diagnostics to Log Analytics
+7. Configure Key Vault expiry alerts (30 days)
 
 ### Networking / Data Access
 
 - Reuse existing deployed data resources
-- Keep Cosmos/Blob/Search firewall restrictions aligned with current hardening phase
+- Keep Cosmos, Blob, and Search firewall restrictions aligned with current hardening phase
 - Key Vault access via Managed Identity
+- Provision a workload-profile ACA environment inside a dedicated VNet and delegated subnet
+- Create a private endpoint and private DNS zone for the ACA environment
+- Disable public network access on the ACA backend environment before production sign-off
+- Configure API app ingress as internal only
+- Configure worker app with no public ingress
 - AI Search Free SKU limitation: no private endpoint on Free (known gap if still on Free)
 
 ### Initial Scale (small traffic)
 
-1. Backend staging: min 1 / max 1, 1 vCPU, 2 GiB
-2. Backend prod: min 1 / max 1, 2 vCPU, 4 GiB
-3. Frontend staging: min 1 / max 1
-4. Frontend prod: min 1 / max 2
+1. API staging: min 1 / max 2, 1 vCPU, 2 GiB
+2. API prod: min 1 / max 2, 2 vCPU, 4 GiB
+3. Worker staging: min 1 / max 1, 1 vCPU, 2 GiB
+4. Worker prod: min 1 / max 2, 2 vCPU, 4 GiB
+5. Tunnel staging: min 2 / max 2, 0.5 vCPU, 1 GiB
+6. Tunnel prod: min 2 / max 2, 0.5 vCPU, 1 GiB
+7. Frontend staging: min 1 / max 1
+8. Frontend prod: min 1 / max 2
 
 ### Runtime Constraint
 
-- Current indexing is in-process; keep backend max replicas = 1 initially
-- Add distributed lock guardrail using Cosmos lease document (`indexing-lock`)
+- Current indexing is in-process; keep worker concurrency conservative initially
+- Keep distributed lock guardrail using Cosmos lease document (`indexing-lock`)
 
 ## Entra ID / Easy Auth Setup
 
@@ -277,11 +314,12 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 ### Pipeline Stages
 
 1. `Validate` (backend tests + static checks, frontend build)
-2. `BuildImages` (build/push frontend/backend to ACR)
-3. `DeployStaging` (new revisions)
+2. `BuildImages` (build and push frontend, API, and worker images to ACR)
+3. `DeployStaging` (new ACA revisions + tunnel connector)
 4. `SmokeStaging`:
-  - health/auth/CRUD/upload/index/query/SSE checks
-  - direct backend bypass test must fail
+  - health, auth, CRUD, upload, index, query, and SSE checks
+  - public direct-origin probe must fail at the network layer
+  - tunnel connector failover test
   - token isolation test
 5. `ManualApproval`
 6. `DeployProduction` (canary 10% -> full)
@@ -289,8 +327,9 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 ### Rollback
 
 1. Roll traffic to previous ACA revision
-2. Keep Cloudflare DNS/rules unchanged unless the incident is edge-specific
+2. Keep Cloudflare DNS and tunnel public hostname unchanged unless the incident is tunnel-specific
 3. Rollback target SLA: under 10 minutes
+4. Break-glass path must not re-enable public network access unless a documented incident override is approved
 
 ## Test Cases and Acceptance
 
@@ -299,7 +338,7 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 1. `GET /health` returns healthy
 2. `GET /health/readiness` returns ready
 3. Collection CRUD + upload + indexing + status polling
-4. Query methods: global/local/tog/drift
+4. Query methods: global, local, tog, drift
 5. SSE endpoint works through Cloudflare (including long-running streams > 60s) and sends heartbeat events before idle timeout
 
 ### Security
@@ -309,77 +348,102 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 3. Wrong audience token -> denied
 4. CORS allows only configured frontend origin
 5. ToG debug endpoint disabled by default
-6. Missing `X-Edge-Secret` -> denied
-7. Staging token rejected by prod backend
+6. Public direct-origin probes to the ACA API fail before reaching the app
+7. If `EDGE_ORIGIN_SECRET` is enabled, missing `X-Edge-Secret` -> denied
+8. Staging token rejected by prod backend
 
 ### Reliability
 
 1. Restart backend during indexing; verify recovery behavior
-2. Delete collection; verify metadata/artifact cleanup
+2. Delete collection; verify metadata and artifact cleanup
+3. Stop one tunnel connector replica; verify API traffic still succeeds
 
 ### Performance Baseline
 
 1. p95 `/api/collections` < 500 ms
 2. p95 `/health/readiness` < 1 s
-3. No sustained Cosmos/Search 429 storm in smoke run
+3. No sustained Cosmos and Search 429 storm in smoke run
 
 ### Observability and Logging
 
 1. Structured JSON logging (backend): use Python `logging` with JSON formatter
 2. Log `Cf-Ray` on every backend request for Cloudflare correlation
 3. Log `CF-Connecting-IP` as the original client IP when present
-4. Log retention: 30 days in Log Analytics (staging), 90 days (prod)
-5. Frontend: Next.js server logs forwarded to Log Analytics via ACA stdout
+4. Log tunnel connector health and reconnect events
+5. Log retention: 30 days in Log Analytics (staging), 90 days (prod)
+6. Frontend: Next.js server logs forwarded to Log Analytics via ACA stdout
 
 ### Observability Alerts
 
 1. 5xx error rate > 1% over 5 min -> Sev2
 2. p95 `/api/*` latency > 2 s over 10 min -> Sev3
-3. Cosmos/Search 429 > 5/min -> Sev3
+3. Cosmos or Search 429 > 5/min -> Sev3
 4. Key Vault secret expiry < 30 days -> Sev2
 5. ACA replica restarts > 2 in 15 min -> Sev2
+6. Tunnel connector healthy replicas < 2 -> Sev2
 
 ## Rollout Phases
 
-1. Phase A - Code readiness + containerization
-  - Implement all Required Application Changes (frontend + backend)
-  - Write Dockerfiles and `.dockerignore`
-  - Local validation: `docker-compose.dev.yml` - build and run both containers locally, verify health/CORS/basic flow
-2. Phase B - App-layer infra + Entra setup
-  - Provision ACA environments, ACR, Cloudflare DNS/rules, and custom domain bindings
-  - Upload certificates for ACA custom domains
-  - Entra app registrations + backend Easy Auth config
-  - Validate token flow with `az rest` / Postman before connecting frontend login UI
-3. Phase C - CI/CD with staging gate + prod canary
-  - Extend `.vsts-ci.yml` with Build, Deploy, Smoke stages
-  - Run full smoke suite on staging including SSE long-running test
-  - Execute rollback drill on staging to verify procedure
-4. Phase D - Go-live + post-release validation
-5. Phase E - hardening/scale improvements (optional)
-  - Secret rotation procedures documentation
-  - Worker split for indexing (separate container)
+1. Phase A - Application split + local readiness
+  - Implement all Required Application Changes for frontend and backend API
+  - Split backend responsibilities into `API` and `Worker` paths
+  - Introduce queue-based job dispatch for indexing and other long-running graph jobs
+  - Persist job state and distributed lock ownership in Cosmos
+  - Keep synchronous API path stateless and reserve SSE for read-side streaming only
+  - Update Dockerfiles and `.dockerignore` for frontend, API, and worker images
+  - Local validation with `docker-compose.dev.yml`: verify health, CORS, auth flow shape, queue dispatch, and basic worker execution
+2. Phase B - Private backend plane + identity
+  - Provision ACA private environment, API app, worker app, tunnel app, ACR, queue resource, private endpoint, private DNS, and Cloudflare Tunnel public hostname
+  - Upload certificates for retained ACA custom domains where required
+  - Configure Entra app registrations and backend Easy Auth
+  - Validate token flow with `az rest` or Postman before wiring frontend login UI
+  - Validate public direct-origin probes fail after private-origin cutover
+3. Phase C - Data protection + operational guardrails
+  - Finalize Cosmos lease and job containers and retention rules
+  - Enable Key Vault diagnostics, soft delete, purge protection, and expiry alerts
+  - Enable Blob soft delete and versioning where cost permits
+  - Define Cosmos backup policy and document restore procedure
+  - Document AI Search rebuild procedure from Blob and Cosmos source-of-truth data
+  - Define target `RPO` and `RTO` for metadata, uploaded documents, and serving indexes
+4. Phase D - CI/CD + release gates
+  - Extend `.vsts-ci.yml` with Validate, BuildImages, DeployStaging, SmokeStaging, ManualApproval, and DeployProduction stages
+  - Add IaC deployment and validation for ACA, Cloudflare, Entra, and alerting resources
+  - Add SBOM generation, image vulnerability scan, and image signing before publish
+  - Run full staging smoke suite including public direct-origin denial, audience isolation, queue-to-worker flow, tunnel failover, and SSE long-running test
+  - Execute rollback drill on staging and verify ACA revision rollback under the target SLA
+5. Phase E - Go-live + controlled production rollout
+  - Deploy production with canary traffic split before full promotion
+  - Monitor 5xx rate, latency, replica restarts, Cosmos and Search 429s, auth failures, and tunnel connector health during rollout
+  - Validate end-to-end logging correlation with `Cf-Ray`, client IP, tunnel events, and app request IDs
+  - Confirm backup and restore runbooks, on-call ownership, and secret rotation runbooks are in place before full cutover
+6. Phase F - Post-release hardening and scale improvements
+  - Rotate tunnel token and optional `X-Edge-Secret` on a documented schedule
+  - Add autoscaling policy for worker throughput once job patterns are stable
+  - Revisit search and index separation, cost controls, and provider fallback policies as traffic grows
 
 ## Public Interface / API Changes
 
 1. Frontend runtime requires `NEXT_PUBLIC_API_BASE_URL` pointing to `https://api.<domain>`
 2. Backend adds `GET /health/readiness`
-3. Backend settings add `CORS_ORIGINS` and `EDGE_ORIGIN_SECRET`
+3. Backend settings add `CORS_ORIGINS` and optionally `EDGE_ORIGIN_SECRET`
+4. Tunnel deployment adds `CLOUDFLARE_TUNNEL_TOKEN`
 
 ## Known Limitations
 
 1. Frontend ACA default domain may remain reachable outside Cloudflare unless additional ingress controls are introduced
-2. This is acceptable for student/dev scope because the backend remains protected by Easy Auth + `X-Edge-Secret`
-3. If strict edge-only frontend ingress becomes a hard requirement later, re-evaluate Azure Front Door, Application Gateway, or a Worker-based proxy design
+2. Azure AI Search Free SKU still prevents full private endpoint alignment on the data plane
+3. Cloudflare Tunnel public hostname and routing policy must be maintained outside Azure, so tunnel misconfiguration becomes a production dependency
 
 ## Assumptions and Defaults
 
 1. Subscription: `1095803e-80bf-47e0-961f-3d74cb4c605c`
 2. Region: `southeastasia`
-3. Existing data layer and phase5 hardening remain valid
-4. Worker split for indexing is out of this release scope
-5. Cloudflare-managed custom domains are available for initial go-live
-6. Cloudflare Enterprise-only origin routing features are intentionally not used
+3. Existing data layer and phase 5 hardening remain valid
+4. Cloudflare Tunnel is remotely managed and uses per-environment tokens stored in Key Vault
+5. Cloudflare Enterprise-only origin routing features are intentionally not used
 
 ## Topology Reference
 
-- See `docs/topo_v2.md`
+- Baseline topology: `docs/topo_v2.md`
+- Production-refined topology: `docs/topo_v3.md`
+- Private-origin runbook: `docs/runbooks/api-private-origin-cloudflare-tunnel.md`
