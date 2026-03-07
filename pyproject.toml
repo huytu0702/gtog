@@ -83,6 +83,7 @@ dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.24.0",
     "pytest-timeout>=2.3.1",
+    "ragas>=0.3,<0.4",
     "ruff>=0.8.2",
     "semversioner>=2.0.5",
     "update-toml>=0.2.1",
