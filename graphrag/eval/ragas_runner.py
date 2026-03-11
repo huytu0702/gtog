@@ -6,24 +6,35 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import inspect
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from string import Template
 from typing import TYPE_CHECKING, Any, Protocol
 
+import yaml
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from graphrag.config.models.language_model_config import LanguageModelConfig
+    from graphrag.language_model.protocol.base import EmbeddingModel
 
 DEFAULT_MODEL = "gpt-5.2"
 DEFAULT_BASE_URL = "http://127.0.0.1:8317/v1"
 DEFAULT_API_KEY = "proxypal-local"
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_MAX_RETRIES = 5
+DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[2] / "backend" / "settings.yaml"
+DEFAULT_GRAPH_RAG_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+DEFAULT_EMBEDDING_MODEL_ID = "default_embedding_model"
+RAGAS_EMBEDDING_MODEL_NAME = "ragas_semantic_similarity_embedding"
 REQUIRED_FIELDS = ("question", "response", "ground_truth", "context_text")
 
 logger = logging.getLogger(__name__)
@@ -164,29 +175,194 @@ def build_openai_client(
     )
 
 
+def build_ragas_llm(
+    *,
+    model: str,
+    api_key: str,
+    base_url: str,
+    timeout: float,
+    max_retries: int,
+) -> Any:
+    """Create a Ragas-compatible LLM wrapper backed by ChatOpenAI."""
+    from langchain_openai import ChatOpenAI
+    from ragas.llms.base import LangchainLLMWrapper
+
+    return LangchainLLMWrapper(
+        ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=max_retries,
+        )
+    )
+
+
+def resolve_settings_path(settings_path: str | Path | None = None) -> Path:
+    """Resolve the settings file used for embedding-based Ragas metrics."""
+    resolved_path = (
+        Path(settings_path) if settings_path is not None else DEFAULT_SETTINGS_PATH
+    ).resolve()
+    if not resolved_path.exists():
+        msg = f"GraphRAG settings file not found: {resolved_path}"
+        raise FileNotFoundError(msg)
+    return resolved_path
+
+
+def load_embedding_env(settings_path: str | Path | None = None) -> Path:
+    """Load environment variables needed by the embedding evaluator."""
+    resolved_path = resolve_settings_path(settings_path)
+    candidate_paths = [
+        DEFAULT_GRAPH_RAG_ENV_PATH,
+        resolved_path.parent / ".env",
+    ]
+
+    for env_path in candidate_paths:
+        if env_path.exists():
+            load_dotenv(env_path, override=False)
+
+    return resolved_path
+
+
+def load_embedding_model_config(
+    settings_path: str | Path | None = None,
+) -> "LanguageModelConfig":
+    """Load only the embedding model config needed by semantic similarity."""
+    from graphrag.config.models.language_model_config import LanguageModelConfig
+
+    resolved_path = load_embedding_env(settings_path)
+    raw_config = yaml.safe_load(resolved_path.read_text(encoding="utf-8")) or {}
+
+    if not isinstance(raw_config, dict):
+        msg = f"Expected a mapping in GraphRAG settings: {resolved_path}"
+        raise TypeError(msg)
+
+    models = raw_config.get("models")
+    if not isinstance(models, dict):
+        msg = f"Missing 'models' section in GraphRAG settings: {resolved_path}"
+        raise KeyError(msg)
+
+    model_data = models.get(DEFAULT_EMBEDDING_MODEL_ID)
+    if not isinstance(model_data, dict):
+        msg = (
+            f"Missing model '{DEFAULT_EMBEDDING_MODEL_ID}' in GraphRAG settings: "
+            f"{resolved_path}"
+        )
+        raise KeyError(msg)
+
+    model_json = json.dumps(model_data)
+    substituted_json = Template(model_json).substitute(os.environ)
+    return LanguageModelConfig(**json.loads(substituted_json))
+
+
+def build_graphrag_embedding_model(
+    settings_path: str | Path | None = None,
+) -> "EmbeddingModel":
+    """Create the GraphRAG embedding model used by semantic similarity."""
+    from graphrag.language_model.manager import ModelManager
+
+    model_settings = load_embedding_model_config(settings_path)
+
+    return ModelManager().get_or_create_embedding_model(
+        name=RAGAS_EMBEDDING_MODEL_NAME,
+        model_type=model_settings.type,
+        config=model_settings,
+    )
+
+
+def build_ragas_embeddings(settings_path: str | Path | None = None) -> Any:
+    """Wrap the GraphRAG embedder with a Ragas-compatible embeddings class."""
+    try:
+        ragas_embeddings_module = importlib.import_module("ragas.embeddings.base")
+    except ImportError:
+        ragas_embeddings_module = importlib.import_module("ragas.embeddings")
+
+    base_ragas_embeddings = getattr(
+        ragas_embeddings_module,
+        "BaseRagasEmbeddings",
+    )
+    embedding_model = build_graphrag_embedding_model(settings_path)
+
+    class GraphRAGRagasEmbeddings(base_ragas_embeddings):
+        """Ragas embeddings adapter backed by the configured GraphRAG embedder."""
+
+        def __init__(self, model: "EmbeddingModel") -> None:
+            super().__init__()
+            self.model = model
+            from ragas.run_config import RunConfig
+
+            self.set_run_config(RunConfig())
+
+        def embed_query(self, text: str) -> list[float]:
+            return self.model.embed(text)
+
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            return self.model.embed_batch(texts)
+
+        async def aembed_query(self, text: str) -> list[float]:
+            return await self.model.aembed(text)
+
+        async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+            return await self.model.aembed_batch(texts)
+
+    return GraphRAGRagasEmbeddings(embedding_model)
+
+
+def _import_ragas_metric(name: str) -> Any:
+    """Import a Ragas metric class across supported module layouts."""
+    for module_name in ("ragas.metrics", "ragas.metrics.collections"):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+
+        metric_class = getattr(module, name, None)
+        if metric_class is not None:
+            return metric_class
+
+    msg = f"Unable to import Ragas metric class: {name}"
+    raise ImportError(msg)
+
+
 def build_ragas_scorers(
     *,
     model: str,
-    client: Any,
+    api_key: str,
+    base_url: str,
+    timeout: float,
+    max_retries: int,
+    settings_path: str | Path | None = None,
 ) -> dict[str, MetricScorer]:
-    """Create the default set of Ragas scorers."""
-    from ragas.llms import llm_factory
-    from ragas.metrics.collections import (
-        AnswerCorrectness,
-        ContextPrecision,
-        ContextRecall,
-        Faithfulness,
+    """Create the default Ragas scorers."""
+    evaluator_llm = build_ragas_llm(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        timeout=timeout,
+        max_retries=max_retries,
     )
+    ragas_embeddings = build_ragas_embeddings(settings_path)
 
-    evaluator_llm = llm_factory(model=model, provider="openai", client=client)
+    context_precision_cls = _import_ragas_metric("ContextPrecision")
+    context_recall_cls = _import_ragas_metric("ContextRecall")
+    faithfulness_cls = _import_ragas_metric("Faithfulness")
+    answer_relevancy_cls = _import_ragas_metric("AnswerRelevancy")
+    answer_correctness_cls = _import_ragas_metric("AnswerCorrectness")
+    answer_similarity_cls = _import_ragas_metric("AnswerSimilarity")
+    answer_similarity = answer_similarity_cls(embeddings=ragas_embeddings)
 
     return {
-        "faithfulness": Faithfulness(llm=evaluator_llm),
-        "context_precision": ContextPrecision(llm=evaluator_llm),
-        "context_recall": ContextRecall(llm=evaluator_llm),
-        "answer_correctness": AnswerCorrectness(
+        "context_precision": context_precision_cls(llm=evaluator_llm),
+        "context_recall": context_recall_cls(llm=evaluator_llm),
+        "faithfulness": faithfulness_cls(llm=evaluator_llm),
+        "answer_relevancy": answer_relevancy_cls(
             llm=evaluator_llm,
-            weights=[1.0, 0.0],
+            embeddings=ragas_embeddings,
+        ),
+        "answer_correctness": answer_correctness_cls(
+            llm=evaluator_llm,
+            embeddings=ragas_embeddings,
+            answer_similarity=answer_similarity,
         ),
     }
 
@@ -197,10 +373,14 @@ def score_row(
 ) -> dict[str, float]:
     """Score a single normalized row across all configured metrics."""
     payload = row.to_sample_payload()
+    sample = build_single_turn_sample(row)
     scores: dict[str, float] = {}
     for metric_name, scorer in scorers.items():
-        score_kwargs = _build_metric_kwargs(scorer, payload)
-        metric_result = scorer.score(**score_kwargs)
+        if hasattr(scorer, "single_turn_score"):
+            metric_result = scorer.single_turn_score(sample)
+        else:
+            score_kwargs = _build_metric_kwargs(scorer, payload)
+            metric_result = scorer.score(**score_kwargs)
         metric_value = getattr(metric_result, "value", metric_result)
         scores[metric_name] = float(metric_value)
     return scores
@@ -211,7 +391,11 @@ def _build_metric_kwargs(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Filter the payload down to only the arguments accepted by a metric."""
-    score_target = getattr(scorer, "ascore", scorer.score)
+    score_target = getattr(scorer, "single_turn_ascore", None)
+    if score_target is None:
+        score_target = getattr(scorer, "ascore", None)
+    if score_target is None:
+        score_target = scorer.score
     signature = inspect.signature(score_target)
 
     if any(
@@ -243,6 +427,7 @@ def aggregate_ragas_results(
     model: str,
     base_url: str,
     input_path: str | Path,
+    settings_path: str | Path,
 ) -> dict[str, Any]:
     """Aggregate row-level Ragas outputs by method."""
     by_method: dict[str, dict[str, Any]] = {}
@@ -293,6 +478,7 @@ def aggregate_ragas_results(
             "input_file": str(Path(input_path).resolve()),
             "model": model,
             "base_url": base_url,
+            "settings_path": str(Path(settings_path).resolve()),
         },
         "overall": {
             "count": len(detailed_results),
@@ -313,11 +499,13 @@ def run_ragas_evaluation(
     api_key: str = DEFAULT_API_KEY,
     timeout: float = DEFAULT_TIMEOUT,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    settings_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Run Ragas evaluation over a simple-results JSON file."""
     input_path = Path(input_path)
     output_path = Path(output_dir) if output_dir is not None else input_path.parent
     output_path.mkdir(parents=True, exist_ok=True)
+    resolved_settings_path = resolve_settings_path(settings_path)
 
     raw_rows = load_simple_results(input_path)
     valid_rows, skipped_rows = parse_simple_results(raw_rows)
@@ -327,13 +515,14 @@ def run_ragas_evaluation(
     if skipped_rows:
         logger.info("Skipped rows before scoring: %s", len(skipped_rows))
 
-    client = build_openai_client(
+    scorers = build_ragas_scorers(
+        model=model,
         api_key=api_key,
         base_url=base_url,
         timeout=timeout,
         max_retries=max_retries,
+        settings_path=resolved_settings_path,
     )
-    scorers = build_ragas_scorers(model=model, client=client)
     logger.info("Metrics: %s", ", ".join(scorers.keys()))
 
     detailed_results = list(skipped_rows)
@@ -377,6 +566,7 @@ def run_ragas_evaluation(
         model=model,
         base_url=base_url,
         input_path=input_path,
+        settings_path=resolved_settings_path,
     )
 
     detailed_path = output_path / "eval_results_ragas_detailed.json"
@@ -435,6 +625,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_RETRIES,
         help=f"Retry count for OpenAI-compatible client. Defaults to {DEFAULT_MAX_RETRIES}.",
     )
+    parser.add_argument(
+        "--settings",
+        default=str(DEFAULT_SETTINGS_PATH),
+        help=(
+            "Path to the GraphRAG settings file used to construct the "
+            "embedding model for semantic similarity."
+        ),
+    )
     return parser
 
 
@@ -452,6 +650,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         api_key=args.api_key,
         timeout=args.timeout,
         max_retries=args.max_retries,
+        settings_path=args.settings,
     )
     return 0
 
