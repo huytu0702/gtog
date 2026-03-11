@@ -12,6 +12,7 @@ from typing import Deque
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -62,7 +63,20 @@ class InMemoryRateLimiter:
 
 
 def _parse_cors_origins(raw_origins: str) -> list[str]:
-    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    value = raw_origins.strip()
+    if not value:
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+    if value.startswith("["):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        if isinstance(parsed, list):
+            return [str(origin).strip() for origin in parsed if str(origin).strip()]
+        return []
+
+    origins = [origin.strip() for origin in value.split(",") if origin.strip()]
     return origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
@@ -192,10 +206,15 @@ async def security_and_logging_middleware(request: Request, call_next):
     path = request.url.path
     method = request.method
     started_at = monotonic()
-    response = None
+    response: Response | None = None
+    is_cors_preflight = (
+        method == "OPTIONS"
+        and "origin" in request.headers
+        and "access-control-request-method" in request.headers
+    )
 
     try:
-        if path.startswith("/api/"):
+        if path.startswith("/api/") and not is_cors_preflight:
             if settings.rate_limit_enabled:
                 is_allowed, retry_after = _rate_limiter.allow(client_ip)
                 if not is_allowed:
@@ -229,6 +248,11 @@ async def security_and_logging_middleware(request: Request, call_next):
             content={"detail": "Internal Server Error"},
         )
     finally:
+        if response is None:
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Internal Server Error"},
+            )
         latency_ms = round((monotonic() - started_at) * 1000, 2)
         response.headers["X-Request-Id"] = request_id
         logger.info(

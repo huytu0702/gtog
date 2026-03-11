@@ -1,5 +1,6 @@
 """Tests for search router endpoints."""
 
+import json
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import httpx
@@ -7,6 +8,11 @@ import pytest
 
 from backend.app.errors import ServingContextUnavailableError
 from backend.app.main import app
+from backend.app.models import AgentSearchRequest
+from backend.app.routers.search import (
+    SSE_HEARTBEAT_INTERVAL_SECONDS,
+    _build_agent_stream_response,
+)
 
 
 class TestAgentSearchEndpoint:
@@ -178,5 +184,21 @@ class TestAgentStreamEndpoint:
                     )
 
         assert response.status_code == 200
+        assert response.headers.get("content-type", "").startswith("text/event-stream")
         assert response.headers.get("cache-control") == "no-cache"
         assert response.headers.get("x-accel-buffering") == "no"
+
+    def test_build_agent_stream_response_configures_heartbeat_events(self):
+        response = _build_agent_stream_response(
+            "test-collection",
+            AgentSearchRequest(query="What changed?", stream=True),
+        )
+
+        assert response.media_type == "text/event-stream"
+        assert response.headers.get("Cache-Control") == "no-cache"
+        assert response.headers.get("X-Accel-Buffering") == "no"
+        assert response.ping_interval == SSE_HEARTBEAT_INTERVAL_SECONDS
+
+        heartbeat_event = response.ping_message_factory()
+        assert heartbeat_event.event == "heartbeat"
+        assert json.loads(heartbeat_event.data) == {"message": "keepalive"}

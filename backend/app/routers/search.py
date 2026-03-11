@@ -3,7 +3,7 @@
 import json
 import logging
 from fastapi import APIRouter, HTTPException, Query, status
-from sse_starlette.sse import EventSourceResponse
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
 from ..config import settings
 from ..errors import (
@@ -34,6 +34,8 @@ from ..services import (
 )
 
 logger = logging.getLogger(__name__)
+
+SSE_HEARTBEAT_INTERVAL_SECONDS = 25
 
 router = APIRouter(prefix="/api/collections/{collection_id}/search", tags=["search"])
 
@@ -283,6 +285,14 @@ async def web_search(collection_id: str, request: WebSearchRequest):
         raise _map_search_error(e)
 
 
+def _build_heartbeat_event() -> ServerSentEvent:
+    """Build a heartbeat event for long-lived SSE connections."""
+    return ServerSentEvent(
+        event="heartbeat",
+        data=json.dumps({"message": "keepalive"}),
+    )
+
+
 def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest) -> EventSourceResponse:
     """Build an SSE response for an agent-routed search stream."""
     async def event_generator():
@@ -408,6 +418,8 @@ def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest
 
     return EventSourceResponse(
         event_generator(),
+        ping=SSE_HEARTBEAT_INTERVAL_SECONDS,
+        ping_message_factory=_build_heartbeat_event,
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",

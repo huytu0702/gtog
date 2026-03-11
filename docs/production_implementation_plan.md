@@ -234,6 +234,57 @@ Never log:
 - Auth flow shape matches production host model
 - CORS and health behavior are validated
 
+**Implementation plan**
+
+1. **Confirm frontend dual-host boundaries**
+   - Verify `frontend/lib/api.ts` uses `NEXT_PUBLIC_API_BASE_URL` for all API and auth-facing paths.
+   - Verify login, logout, and session inspection target `https://api.<domain>/.auth/*`.
+   - Verify `frontend/components/ui/AuthLinks.tsx` and `frontend/components/ui/NBLayout.tsx` do not assume same-host API routing.
+   - Verify `frontend/next.config.ts` allows the backend origin in the deployed CSP/connect policy.
+
+2. **Lock backend boundary controls**
+   - Verify `backend/app/config.py` exposes `CORS_ORIGINS` and `backend/app/main.py` parses it into an explicit allowlist.
+   - Verify `backend/app/main.py` applies `CORSMiddleware` with the configured origins only.
+   - Verify `/health` remains liveness-only and `/health/readiness` checks Cosmos DB, Blob Storage, Key Vault, and Azure AI Search.
+   - Verify request logging captures the `Cf-Ray` and `CF-Connecting-IP` headers as structured fields such as `cf_ray` and `cf_connecting_ip` without logging secrets or tokens.
+
+3. **Close the SSE production gap**
+   - Update `backend/app/routers/search.py` SSE responses to emit heartbeat events on a fixed cadence during long-lived streams.
+   - Preserve anti-buffering and anti-caching headers for Cloudflare and proxy compatibility, including `Cache-Control: no-cache` and `X-Accel-Buffering: no`.
+   - Verify SSE endpoints continue to support the backend-auth-host cookie model.
+
+4. **Add validation coverage before phase sign-off**
+   - Extend backend tests to cover allowed-origin and rejected-origin CORS behavior.
+   - Extend readiness tests to preserve the 200/503 dependency contract.
+   - Add or update SSE tests to verify heartbeat events and buffering/cache headers.
+   - Add request logging assertions for `Cf-Ray` and `CF-Connecting-IP` when those headers are present.
+
+5. **Align deployment-facing configuration and docs**
+   - Verify frontend build/runtime configuration sets `NEXT_PUBLIC_API_BASE_URL` per environment.
+   - Verify backend environment examples and deployment manifests document `CORS_ORIGINS` and `EDGE_ORIGIN_SECRET` consistently.
+   - Record Phase 1 evidence in the release checklist and validation bundle.
+
+**Recommended execution order**
+
+1. Implement SSE heartbeat support and associated tests.
+2. Complete CORS, readiness, and logging validation coverage.
+3. Reconcile deployment configuration examples and documentation.
+4. Run Phase 1 smoke validation against the staging host split.
+
+**Phase 1 validation evidence**
+
+- Frontend login, logout, and `/.auth/me` flow evidence against `api.<domain>`
+- Backend CORS allowlist test evidence
+- `/health` and `/health/readiness` verification output
+- Structured log sample showing `Cf-Ray` and `CF-Connecting-IP`
+- SSE stream evidence showing heartbeat cadence and no-buffering headers
+
+**Phase 1 risks and focus points**
+
+- The primary remaining implementation risk is SSE idle-stream stability through Cloudflare without heartbeat traffic.
+- Configuration drift between local compose, environment examples, and deployed settings can reintroduce same-host assumptions.
+- Phase sign-off should be blocked if any auth path, CORS rule, or readiness dependency still depends on local-only defaults.
+
 ---
 
 ### Phase 2: Worker and job orchestration

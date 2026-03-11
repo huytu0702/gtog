@@ -1,9 +1,10 @@
 """Tests for Web Search service."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from backend.app.services.web_search import WebSearchService, WebSearchResult
+import pytest
+
+from backend.app.services.web_search import WebSearchResult, WebSearchService
 
 
 class TestWebSearchService:
@@ -12,13 +13,15 @@ class TestWebSearchService:
     @pytest.fixture
     def web_search_service(self):
         """Create WebSearchService instance with mocked clients."""
-        with patch("backend.app.services.web_search.TavilyClient"):
+        with patch("backend.app.services.web_search.AsyncTavilyClient") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.search = AsyncMock()
+            mock_client_cls.return_value = mock_client
             return WebSearchService()
 
     @pytest.mark.asyncio
     async def test_search_returns_web_search_result(self, web_search_service):
         """search() should return a WebSearchResult object."""
-        # Mock Tavily response
         mock_tavily_result = {
             "results": [
                 {
@@ -28,9 +31,8 @@ class TestWebSearchService:
                 }
             ]
         }
-        web_search_service.tavily.search = MagicMock(return_value=mock_tavily_result)
+        web_search_service.tavily.search = AsyncMock(return_value=mock_tavily_result)
 
-        # Mock LLM response
         mock_llm_response = MagicMock()
         mock_llm_response.choices = [MagicMock()]
         mock_llm_response.choices[0].message.content = "Synthesized response [1]"
@@ -42,14 +44,14 @@ class TestWebSearchService:
 
             result = await web_search_service.search("test query")
 
-            assert isinstance(result, WebSearchResult)
-            assert "Synthesized response" in result.response
-            assert len(result.sources) >= 1
+        assert isinstance(result, WebSearchResult)
+        assert "Synthesized response" in result.response
+        assert len(result.sources) >= 1
 
     @pytest.mark.asyncio
     async def test_search_handles_empty_results(self, web_search_service):
         """search() should handle empty Tavily results gracefully."""
-        web_search_service.tavily.search = MagicMock(return_value={"results": []})
+        web_search_service.tavily.search = AsyncMock(return_value={"results": []})
 
         result = await web_search_service.search("obscure query")
 
@@ -59,7 +61,7 @@ class TestWebSearchService:
     @pytest.mark.asyncio
     async def test_search_handles_tavily_error(self, web_search_service):
         """search() should handle Tavily API errors gracefully."""
-        web_search_service.tavily.search = MagicMock(side_effect=Exception("API Error"))
+        web_search_service.tavily.search = AsyncMock(side_effect=Exception("API Error"))
 
         result = await web_search_service.search("test query")
 
