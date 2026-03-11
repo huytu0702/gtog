@@ -8,6 +8,7 @@ Prove that the ACA API origin is not publicly reachable and that `api.<domain>` 
 
 This runbook covers:
 - public probe procedure
+- script-assisted validation for Phase 3 private-origin checks
 - expected failure modes
 - evidence capture format
 - pass/fail criteria
@@ -31,20 +32,43 @@ Do not use normal `api.<domain>` traffic as the proof of origin isolation. That 
 ### 1. Confirm normal public path still works
 As a control, verify that the expected public path works:
 - `https://api.<domain>/health`
+- `https://api.<domain>/.auth/me`
 
-This confirms the service is available through the intended route.
+This confirms the service is available through the intended route and that the Easy Auth host contract still resolves on the public hostname.
 
-### 2. Attempt direct-origin access from a public network
+### 2. Run the Phase 3 validation helper first
+Use one of:
+- `scripts/validate-aca-phase3-auth.sh`
+- `scripts/validate-aca-phase3-auth.ps1`
+
+Provide at minimum:
+- the environment API public hostname
+- expected Entra client ID
+- expected issuer URL
+- expected allowed audiences
+- one or more candidate direct-origin probe URLs when they are known
+
+If you also want backend evidence that no probe reached the app layer, provide the Log Analytics workspace and query inputs supported by the helper.
+
+The helper verifies the platform contract before manual evidence review:
+- API ingress stays internal-only
+- worker ingress stays disabled
+- Easy Auth is enabled on the API app
+- unauthenticated `https://api.<domain>/api/*` requests return `401`
+- `allowedAudiences` and login parameters match the environment-specific identity contract
+- direct-origin probes fail before they reach an HTTP handler
+
+### 3. Attempt direct-origin access from a public network
 From a public network path outside the private Azure boundary, attempt to reach the ACA API origin using known origin endpoints.
 
-### 3. Record the failure mode
+### 4. Record the failure mode
 Capture whether the probe fails due to:
 - DNS resolution failure
 - connection timeout
 - connection refused
 - platform-level inaccessibility before app handling
 
-### 4. Confirm the request did not reach the app layer
+### 5. Confirm the request did not reach the app layer
 Check backend logs to confirm the direct-origin probe did not generate application request handling for the attempted origin path.
 
 ## Expected Failure Modes
@@ -82,7 +106,7 @@ For each verification run, capture:
 - date and environment
 - operator name
 - tested origin identifiers
-- exact probe commands or tool output
+- exact probe commands or validation-helper output
 - observed failure mode
 - backend log check result
 - final pass/fail conclusion
@@ -90,6 +114,7 @@ For each verification run, capture:
 Preferred evidence artifacts:
 - terminal output
 - screenshots if useful
+- output from `scripts/validate-aca-phase3-auth.sh` or `.ps1`
 - log query output showing absence of app handling for the probe
 - pipeline artifact if run as part of release validation
 

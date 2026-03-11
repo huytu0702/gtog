@@ -32,6 +32,41 @@ Recommended flow:
    - `ca-gtog-api-{env}`
    - `ca-gtog-worker-{env}`
    - `ca-gtog-tunnel-{env}`
+7. Configure backend-only Easy Auth on the API app using the same script path, not a separate deployment path.
+
+### Phase 3 inputs
+
+Phase 3 freezes the identity contract per environment:
+
+- one Entra app registration per environment
+- callback host fixed to `https://api.<domain>/.auth/login/aad/callback`
+- audience fixed to the environment-specific API App ID URI (`api://<backend-app-id>`)
+- staging and production must not share allowed audiences
+
+The provisioning scripts support both pre-created and script-created Entra registrations. The runtime contract stays the same in either case.
+
+### Phase 3 script flags and environment variables
+
+Use the provisioning script with:
+
+- `CONFIGURE_EASY_AUTH=true` / `-ConfigureEasyAuth`
+- `API_PUBLIC_HOSTNAME=api.<domain>` / `-ApiPublicHostname`
+- either:
+  - `ENTRA_APP_ID`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_SECRET`, `API_APP_ID_URI`, `ALLOWED_AUDIENCES`
+  - or `CREATE_ENTRA_APP=true` / `-CreateEntraApp` with `ENTRA_APP_DISPLAY_NAME`
+
+Optional but recommended:
+
+- `RESET_ENTRA_CLIENT_SECRET=true` / `-ResetEntraClientSecret` when rotating the Easy Auth secret
+- `AAD_LOGIN_PARAMETERS_JSON` / `-AadLoginParametersJson` when you need to override the default login parameter payload
+
+The scripts reconcile these platform guarantees on every run:
+
+- API ingress stays internal-only
+- worker ingress stays disabled
+- Easy Auth stays enabled on the API app only
+- unauthenticated `api.<domain>/api/*` requests return `401`
+- the configured `allowedAudiences` exactly match the environment contract
 
 ## Cloudflare Configuration
 

@@ -192,6 +192,51 @@ async def test_cors_preflight_allows_configured_origin_when_edge_secret_enabled(
 
 
 @pytest.mark.asyncio
+async def test_cors_preflight_does_not_bypass_api_guards():
+    allowed_origin = main.allowed_origins[0]
+
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            preflight = await client.options(
+                "/api/collections/test-collection/search/web",
+                headers={
+                    "Origin": allowed_origin,
+                    "Access-Control-Request-Method": "POST",
+                },
+            )
+            request = await client.post(
+                "/api/collections/test-collection/search/web",
+                headers={"Origin": allowed_origin},
+                json={"query": "hello", "stream": False},
+            )
+
+    assert preflight.status_code == 200
+    assert request.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_public_health_endpoint_does_not_open_api_access():
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            health = await client.get("/health")
+            api_request = await client.post(
+                "/api/collections/test-collection/search/web",
+                json={"query": "hello", "stream": False},
+            )
+
+    assert health.status_code == 200
+    assert api_request.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_cors_preflight_rejects_unknown_origin():
     unknown_origin = "https://evil.example.com"
     assert unknown_origin not in main.allowed_origins

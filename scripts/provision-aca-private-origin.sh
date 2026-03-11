@@ -28,11 +28,51 @@ TUNNEL_TOKEN_SECRET_NAME="${TUNNEL_TOKEN_SECRET_NAME:-cloudflare-tunnel-token}"
 EDGE_ORIGIN_SECRET="${EDGE_ORIGIN_SECRET:-}"
 EDGE_ORIGIN_SECRET_NAME="${EDGE_ORIGIN_SECRET_NAME:-edge-origin-secret}"
 CREATE_APPS="${CREATE_APPS:-false}"
+CONFIGURE_EASY_AUTH="${CONFIGURE_EASY_AUTH:-false}"
+CREATE_ENTRA_APP="${CREATE_ENTRA_APP:-false}"
+RESET_ENTRA_CLIENT_SECRET="${RESET_ENTRA_CLIENT_SECRET:-false}"
+API_PUBLIC_HOSTNAME="${API_PUBLIC_HOSTNAME:-}"
+ENTRA_APP_DISPLAY_NAME="${ENTRA_APP_DISPLAY_NAME:-}"
+ENTRA_APP_ID="${ENTRA_APP_ID:-}"
+ENTRA_TENANT_ID="${ENTRA_TENANT_ID:-}"
+ENTRA_ISSUER_URL="${ENTRA_ISSUER_URL:-}"
+ENTRA_CLIENT_SECRET="${ENTRA_CLIENT_SECRET:-}"
+ENTRA_CLIENT_SECRET_NAME="${ENTRA_CLIENT_SECRET_NAME:-entra-client-secret}"
+ENTRA_CLIENT_SECRET_DISPLAY_NAME="${ENTRA_CLIENT_SECRET_DISPLAY_NAME:-${API_APP_NAME}-easy-auth}"
+API_APP_ID_URI="${API_APP_ID_URI:-}"
+ALLOWED_AUDIENCES="${ALLOWED_AUDIENCES:-}"
+ENTRA_SCOPE_NAME="${ENTRA_SCOPE_NAME:-access_as_user}"
+ENTRA_SCOPE_ADMIN_CONSENT_DISPLAY_NAME="${ENTRA_SCOPE_ADMIN_CONSENT_DISPLAY_NAME:-Access ${API_APP_NAME}}"
+ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION="${ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION:-Allow the signed-in user to access ${API_APP_NAME}.}"
+ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME="${ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME:-Access ${API_APP_NAME}}"
+ENTRA_SCOPE_USER_CONSENT_DESCRIPTION="${ENTRA_SCOPE_USER_CONSENT_DESCRIPTION:-Allow the app to access ${API_APP_NAME} on your behalf.}"
+AAD_LOGIN_PARAMETERS_JSON="${AAD_LOGIN_PARAMETERS_JSON:-}"
 
 if [[ -z "${AZURE_CONFIG_DIR:-}" ]]; then
   export AZURE_CONFIG_DIR="$(pwd)/.azure"
 fi
 mkdir -p "$AZURE_CONFIG_DIR"
+
+ACCOUNT_TENANT_ID=""
+IDENTITY_RESOURCE_ID=""
+IDENTITY_PRINCIPAL_ID=""
+EXPECTED_ALLOWED_AUDIENCES_JSON="[]"
+EXPECTED_LOGIN_PARAMETERS_JSON="[]"
+EXPECTED_SCOPE_VALUE=""
+EXPECTED_CALLBACK_URL=""
+
+bool_true() {
+  local value="${1:-}"
+  [[ "${value,,}" == "true" ]]
+}
+
+require_var() {
+  local name="$1"
+  if [[ -z "${!name:-}" ]]; then
+    echo "${name} is required for this operation" >&2
+    exit 1
+  fi
+}
 
 ensure_subnet() {
   local name="$1"
@@ -81,6 +121,483 @@ upsert_key_vault_secret() {
     --output none
 }
 
+container_app_exists() {
+  local app_name="$1"
+  az containerapp show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$app_name" \
+    --output none 2>/dev/null
+}
+
+ensure_container_app_identity() {
+  local app_name="$1"
+  if [[ -z "$IDENTITY_RESOURCE_ID" ]]; then
+    return 0
+  fi
+
+  az containerapp identity assign \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$app_name" \
+    --user-assigned "$IDENTITY_RESOURCE_ID" \
+    --output none
+}
+
+csv_to_json_array() {
+  local raw="$1"
+  RAW="$raw" python - <<'PY'
+import json
+import os
+
+raw = os.environ.get("RAW", "")
+values = [item.strip() for item in raw.split(",") if item.strip()]
+print(json.dumps(values))
+PY
+}
+
+json_array_to_lines() {
+  local raw_json="$1"
+  RAW_JSON="$raw_json" python - <<'PY'
+import json
+import os
+
+for item in json.loads(os.environ["RAW_JSON"]):
+    print(item)
+PY
+}
+
+build_default_login_parameters_json() {
+  local scope_value="$1"
+  SCOPE_VALUE="$scope_value" python - <<'PY'
+import json
+import os
+
+scope_value = os.environ["SCOPE_VALUE"]
+print(json.dumps([f"scope=openid profile email offline_access {scope_value}"]))
+PY
+}
+
+ensure_api_ingress_contract() {
+  az containerapp update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --set-env-vars "APP_ROLE=api" \
+    --output none
+
+  az containerapp ingress enable \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --type internal \
+    --target-port 8000 \
+    --transport auto \
+    --output none
+}
+
+ensure_worker_ingress_contract() {
+  az containerapp update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$WORKER_APP_NAME" \
+    --set-env-vars "APP_ROLE=worker" \
+    --output none
+
+  az containerapp ingress disable \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$WORKER_APP_NAME" \
+    --output none
+}
+
+ensure_entra_app_contract() {
+  require_var API_PUBLIC_HOSTNAME
+
+  if [[ -z "$ENTRA_APP_ID" && -n "$ENTRA_APP_DISPLAY_NAME" ]]; then
+    ENTRA_APP_ID="$(
+      az ad app list \
+        --display-name "$ENTRA_APP_DISPLAY_NAME" \
+        --query "[?displayName=='${ENTRA_APP_DISPLAY_NAME}'] | [0].appId" \
+        --output tsv
+    )"
+  fi
+
+  if [[ -z "$ENTRA_APP_ID" ]]; then
+    if ! bool_true "$CREATE_ENTRA_APP"; then
+      echo "ENTRA_APP_ID or ENTRA_APP_DISPLAY_NAME is required unless CREATE_ENTRA_APP=true" >&2
+      exit 1
+    fi
+    require_var ENTRA_APP_DISPLAY_NAME
+    echo ">>> Creating Entra app registration: ${ENTRA_APP_DISPLAY_NAME}"
+    ENTRA_APP_ID="$(
+      az ad app create \
+        --display-name "$ENTRA_APP_DISPLAY_NAME" \
+        --sign-in-audience AzureADMyOrg \
+        --query appId \
+        --output tsv
+    )"
+  fi
+
+  local entra_object_id
+  entra_object_id="$(
+    az ad app show \
+      --id "$ENTRA_APP_ID" \
+      --query id \
+      --output tsv
+  )"
+
+  if [[ -z "$API_APP_ID_URI" ]]; then
+    API_APP_ID_URI="api://${ENTRA_APP_ID}"
+  fi
+  if [[ -z "$ALLOWED_AUDIENCES" ]]; then
+    ALLOWED_AUDIENCES="$API_APP_ID_URI"
+  fi
+
+  EXPECTED_SCOPE_VALUE="${API_APP_ID_URI}/${ENTRA_SCOPE_NAME}"
+  EXPECTED_CALLBACK_URL="https://${API_PUBLIC_HOSTNAME}/.auth/login/aad/callback"
+  EXPECTED_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$ALLOWED_AUDIENCES")"
+
+  if [[ -n "$AAD_LOGIN_PARAMETERS_JSON" ]]; then
+    EXPECTED_LOGIN_PARAMETERS_JSON="$AAD_LOGIN_PARAMETERS_JSON"
+  else
+    EXPECTED_LOGIN_PARAMETERS_JSON="$(build_default_login_parameters_json "$EXPECTED_SCOPE_VALUE")"
+  fi
+
+  echo ">>> Reconciling Entra app registration contract"
+  az ad app update \
+    --id "$ENTRA_APP_ID" \
+    --identifier-uris "$API_APP_ID_URI" \
+    --web-home-page-url "https://${API_PUBLIC_HOSTNAME}" \
+    --web-redirect-uris "$EXPECTED_CALLBACK_URL" \
+    --enable-id-token-issuance true \
+    --requested-access-token-version 2 \
+    --sign-in-audience AzureADMyOrg \
+    --output none
+
+  local current_api_file
+  current_api_file="$(mktemp)"
+  local patch_file
+  patch_file="$(mktemp)"
+
+  az rest \
+    --method get \
+    --url "https://graph.microsoft.com/v1.0/applications/${entra_object_id}?\$select=api" \
+    --output json > "$current_api_file"
+
+  CURRENT_API_FILE="$current_api_file" \
+  PATCH_FILE="$patch_file" \
+  ENTRA_SCOPE_NAME="$ENTRA_SCOPE_NAME" \
+  ENTRA_SCOPE_ADMIN_CONSENT_DISPLAY_NAME="$ENTRA_SCOPE_ADMIN_CONSENT_DISPLAY_NAME" \
+  ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION="$ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION" \
+  ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME="$ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME" \
+  ENTRA_SCOPE_USER_CONSENT_DESCRIPTION="$ENTRA_SCOPE_USER_CONSENT_DESCRIPTION" \
+  python - <<'PY'
+import json
+import os
+import uuid
+
+with open(os.environ["CURRENT_API_FILE"], "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+api = payload.get("api") or {}
+scopes = api.get("oauth2PermissionScopes") or []
+value = os.environ["ENTRA_SCOPE_NAME"]
+updated = []
+found = False
+
+for scope in scopes:
+    if scope.get("value") == value:
+        merged = dict(scope)
+        merged.update(
+            {
+                "id": scope.get("id") or str(uuid.uuid4()),
+                "value": value,
+                "type": "User",
+                "isEnabled": True,
+                "adminConsentDisplayName": os.environ["ENTRA_SCOPE_ADMIN_CONSENT_DISPLAY_NAME"],
+                "adminConsentDescription": os.environ["ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION"],
+                "userConsentDisplayName": os.environ["ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME"],
+                "userConsentDescription": os.environ["ENTRA_SCOPE_USER_CONSENT_DESCRIPTION"],
+            }
+        )
+        updated.append(merged)
+        found = True
+    else:
+        updated.append(scope)
+
+if not found:
+    updated.append(
+        {
+            "id": str(uuid.uuid4()),
+            "value": value,
+            "type": "User",
+            "isEnabled": True,
+            "adminConsentDisplayName": os.environ["ENTRA_SCOPE_ADMIN_CONSENT_DISPLAY_NAME"],
+            "adminConsentDescription": os.environ["ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION"],
+            "userConsentDisplayName": os.environ["ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME"],
+            "userConsentDescription": os.environ["ENTRA_SCOPE_USER_CONSENT_DESCRIPTION"],
+        }
+    )
+
+api["requestedAccessTokenVersion"] = 2
+api["oauth2PermissionScopes"] = updated
+
+with open(os.environ["PATCH_FILE"], "w", encoding="utf-8") as handle:
+    json.dump({"api": api}, handle)
+PY
+
+  az rest \
+    --method patch \
+    --url "https://graph.microsoft.com/v1.0/applications/${entra_object_id}" \
+    --body @"$patch_file" \
+    --headers "Content-Type=application/json" \
+    --output none
+
+  rm -f "$current_api_file" "$patch_file"
+
+  if ! az ad sp show --id "$ENTRA_APP_ID" --output none 2>/dev/null; then
+    echo ">>> Creating Entra service principal for API app"
+    az ad sp create --id "$ENTRA_APP_ID" --output none
+  fi
+
+  if [[ -z "$ENTRA_TENANT_ID" ]]; then
+    ENTRA_TENANT_ID="$ACCOUNT_TENANT_ID"
+  fi
+  if [[ -z "$ENTRA_ISSUER_URL" ]]; then
+    ENTRA_ISSUER_URL="https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0"
+  fi
+
+  if [[ -z "$ENTRA_CLIENT_SECRET" ]]; then
+    if bool_true "$CREATE_ENTRA_APP" || bool_true "$RESET_ENTRA_CLIENT_SECRET"; then
+      echo ">>> Creating or rotating Entra client secret for Easy Auth"
+      ENTRA_CLIENT_SECRET="$(
+        az ad app credential reset \
+          --id "$ENTRA_APP_ID" \
+          --append \
+          --display-name "$ENTRA_CLIENT_SECRET_DISPLAY_NAME" \
+          --query password \
+          --output tsv
+      )"
+    else
+      echo "ENTRA_CLIENT_SECRET is required unless CREATE_ENTRA_APP=true or RESET_ENTRA_CLIENT_SECRET=true" >&2
+      exit 1
+    fi
+  fi
+
+  upsert_key_vault_secret "$KEY_VAULT_NAME" "$ENTRA_CLIENT_SECRET_NAME" "$ENTRA_CLIENT_SECRET"
+}
+
+configure_easy_auth() {
+  if ! container_app_exists "$API_APP_NAME"; then
+    echo "API app ${API_APP_NAME} must exist before Easy Auth can be configured" >&2
+    exit 1
+  fi
+
+  ensure_entra_app_contract
+
+  echo ">>> Storing Easy Auth client secret on API app"
+  az containerapp secret set \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --secrets "${ENTRA_CLIENT_SECRET_NAME}=${ENTRA_CLIENT_SECRET}" \
+    --output none
+
+  echo ">>> Configuring Container Apps authentication"
+  az containerapp auth update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --enabled true \
+    --unauthenticated-client-action Return401 \
+    --require-https true \
+    --proxy-convention Standard \
+    --token-store true \
+    --excluded-paths /health /health/readiness \
+    --set "identityProviders.azureActiveDirectory.login.loginParameters=${EXPECTED_LOGIN_PARAMETERS_JSON}" \
+    --yes \
+    --output none
+
+  mapfile -t allowed_audiences < <(json_array_to_lines "$EXPECTED_ALLOWED_AUDIENCES_JSON")
+  if [[ ${#allowed_audiences[@]} -eq 0 ]]; then
+    echo "At least one allowed audience is required" >&2
+    exit 1
+  fi
+
+  az containerapp auth microsoft update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --client-id "$ENTRA_APP_ID" \
+    --client-secret-name "$ENTRA_CLIENT_SECRET_NAME" \
+    --tenant-id "$ENTRA_TENANT_ID" \
+    --issuer "$ENTRA_ISSUER_URL" \
+    --allowed-audiences "${allowed_audiences[@]}" \
+    --yes \
+    --output none
+}
+
+verify_phase3_contract() {
+  if ! bool_true "$CONFIGURE_EASY_AUTH"; then
+    return 0
+  fi
+
+  echo ">>> Reading back final auth and ingress state"
+  local api_app_json
+  local worker_app_json
+  local auth_json
+  local microsoft_auth_json
+  local app_registration_json
+
+  api_app_json="$(
+    az containerapp show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$API_APP_NAME" \
+      --output json
+  )"
+  worker_app_json="$(
+    az containerapp show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$WORKER_APP_NAME" \
+      --output json
+  )"
+  auth_json="$(
+    az containerapp auth show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$API_APP_NAME" \
+      --output json
+  )"
+  microsoft_auth_json="$(
+    az containerapp auth microsoft show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$API_APP_NAME" \
+      --output json
+  )"
+  app_registration_json="$(
+    az ad app show \
+      --id "$ENTRA_APP_ID" \
+      --output json
+  )"
+
+  API_APP_JSON="$api_app_json" \
+  WORKER_APP_JSON="$worker_app_json" \
+  AUTH_JSON="$auth_json" \
+  MICROSOFT_AUTH_JSON="$microsoft_auth_json" \
+  APP_REGISTRATION_JSON="$app_registration_json" \
+  EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
+  EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
+  EXPECTED_CALLBACK_URL="$EXPECTED_CALLBACK_URL" \
+  ENTRA_APP_ID="$ENTRA_APP_ID" \
+  ENTRA_CLIENT_SECRET_NAME="$ENTRA_CLIENT_SECRET_NAME" \
+  ENTRA_ISSUER_URL="$ENTRA_ISSUER_URL" \
+  python - <<'PY'
+import json
+import os
+import sys
+
+api_app = json.loads(os.environ["API_APP_JSON"])
+worker_app = json.loads(os.environ["WORKER_APP_JSON"])
+auth = json.loads(os.environ["AUTH_JSON"])
+microsoft_auth = json.loads(os.environ["MICROSOFT_AUTH_JSON"])
+app_registration = json.loads(os.environ["APP_REGISTRATION_JSON"])
+expected_allowed = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
+expected_login_parameters = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])
+expected_callback_url = os.environ["EXPECTED_CALLBACK_URL"]
+expected_client_id = os.environ["ENTRA_APP_ID"]
+expected_secret_name = os.environ["ENTRA_CLIENT_SECRET_NAME"]
+expected_issuer = os.environ["ENTRA_ISSUER_URL"]
+
+
+def get(obj, *path):
+    current = obj
+    for key in path:
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        else:
+            return None
+    return current
+
+
+def ensure(condition, message, errors):
+    if not condition:
+        errors.append(message)
+
+
+errors = []
+
+auth_enabled = get(auth, "platform", "enabled")
+ensure(auth_enabled is True, "Easy Auth is not enabled on the API app", errors)
+
+unauthenticated_action = get(auth, "globalValidation", "unauthenticatedClientAction")
+ensure(
+    unauthenticated_action == "Return401",
+    f"Unexpected unauthenticated action: {unauthenticated_action!r}",
+    errors,
+)
+
+require_https = get(auth, "httpSettings", "requireHttps")
+if require_https is None:
+    require_https = get(auth, "httpSettings", "routes", "apiPrefix") is not None
+ensure(require_https is True, "Easy Auth HTTPS enforcement is not enabled", errors)
+
+proxy_convention = get(auth, "httpSettings", "forwardProxy", "convention")
+if proxy_convention is None:
+    proxy_convention = get(auth, "httpSettings", "forwardProxy", "proxyConvention")
+ensure(proxy_convention == "Standard", f"Unexpected proxy convention: {proxy_convention!r}", errors)
+
+excluded_paths = get(auth, "globalValidation", "excludedPaths") or []
+ensure(
+    set(excluded_paths) == {"/health", "/health/readiness"},
+    f"Unexpected excluded auth paths: {excluded_paths!r}",
+    errors,
+)
+
+login_parameters = get(auth, "identityProviders", "azureActiveDirectory", "login", "loginParameters") or []
+ensure(
+    login_parameters == expected_login_parameters,
+    f"Unexpected login parameters: {login_parameters!r}",
+    errors,
+)
+
+client_id = get(microsoft_auth, "registration", "clientId")
+ensure(client_id == expected_client_id, f"Unexpected Entra client ID: {client_id!r}", errors)
+
+client_secret_name = get(microsoft_auth, "registration", "clientSecretSettingName")
+ensure(
+    client_secret_name == expected_secret_name,
+    f"Unexpected Entra client secret setting name: {client_secret_name!r}",
+    errors,
+)
+
+issuer = get(microsoft_auth, "registration", "openIdIssuer")
+ensure(issuer == expected_issuer, f"Unexpected issuer URI: {issuer!r}", errors)
+
+allowed_audiences = get(microsoft_auth, "validation", "allowedAudiences") or []
+ensure(
+    sorted(allowed_audiences) == sorted(expected_allowed),
+    f"Unexpected allowed audiences: {allowed_audiences!r}",
+    errors,
+)
+
+redirect_uris = get(app_registration, "web", "redirectUris") or []
+ensure(
+    expected_callback_url in redirect_uris,
+    f"Expected callback URL {expected_callback_url!r} not found in app registration redirect URIs: {redirect_uris!r}",
+    errors,
+)
+
+api_ingress = get(api_app, "properties", "configuration", "ingress") or {}
+ensure(api_ingress.get("external") is False, "API app ingress is not internal-only", errors)
+ensure(api_ingress.get("targetPort") == 8000, f"Unexpected API target port: {api_ingress.get('targetPort')!r}", errors)
+
+worker_ingress = get(worker_app, "properties", "configuration", "ingress")
+ensure(worker_ingress in (None, {}), f"Worker app should not expose ingress: {worker_ingress!r}", errors)
+
+secrets = get(api_app, "properties", "configuration", "secrets") or []
+secret_names = sorted(secret.get("name") for secret in secrets if isinstance(secret, dict) and secret.get("name"))
+ensure(expected_secret_name in secret_names, f"Missing API secret setting {expected_secret_name!r}", errors)
+
+if errors:
+    for error in errors:
+        print(f"ERROR: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+
+  echo ">>> Phase 3 auth contract verified successfully"
+}
+
 echo ">>> Checking Azure login context"
 az account show --output none
 
@@ -89,6 +606,7 @@ az extension add --name containerapp --upgrade --allow-preview true --output non
 
 echo ">>> Setting subscription: ${SUBSCRIPTION}"
 az account set --subscription "$SUBSCRIPTION"
+ACCOUNT_TENANT_ID="$(az account show --query tenantId --output tsv)"
 
 echo ">>> Registering providers"
 az provider register --namespace Microsoft.App --wait --output none
@@ -269,7 +787,6 @@ fi
 upsert_key_vault_secret "$KEY_VAULT_NAME" "$TUNNEL_TOKEN_SECRET_NAME" "$TUNNEL_TOKEN"
 upsert_key_vault_secret "$KEY_VAULT_NAME" "$EDGE_ORIGIN_SECRET_NAME" "$EDGE_ORIGIN_SECRET"
 
-IDENTITY_RESOURCE_ID=""
 if [[ -n "$USER_ASSIGNED_IDENTITY_NAME" ]]; then
   IDENTITY_RESOURCE_ID="$(
     az identity show \
@@ -278,9 +795,16 @@ if [[ -n "$USER_ASSIGNED_IDENTITY_NAME" ]]; then
       --query id \
       --output tsv
   )"
+  IDENTITY_PRINCIPAL_ID="$(
+    az identity show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$USER_ASSIGNED_IDENTITY_NAME" \
+      --query principalId \
+      --output tsv
+  )"
 fi
 
-if [[ "$CREATE_APPS" == "true" ]]; then
+if bool_true "$CREATE_APPS"; then
   if [[ -z "$API_IMAGE" ]]; then
     echo "API_IMAGE is required when CREATE_APPS=true" >&2
     exit 1
@@ -295,10 +819,7 @@ if [[ "$CREATE_APPS" == "true" ]]; then
   fi
 
   echo ">>> Ensuring API app: ${API_APP_NAME}"
-  if ! az containerapp show \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$API_APP_NAME" \
-    --output none 2>/dev/null; then
+  if ! container_app_exists "$API_APP_NAME"; then
     API_ARGS=(
       containerapp create
       --resource-group "$RESOURCE_GROUP"
@@ -322,10 +843,7 @@ if [[ "$CREATE_APPS" == "true" ]]; then
   fi
 
   echo ">>> Ensuring worker app: ${WORKER_APP_NAME}"
-  if ! az containerapp show \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$WORKER_APP_NAME" \
-    --output none 2>/dev/null; then
+  if ! container_app_exists "$WORKER_APP_NAME"; then
     WORKER_ARGS=(
       containerapp create
       --resource-group "$RESOURCE_GROUP"
@@ -346,10 +864,7 @@ if [[ "$CREATE_APPS" == "true" ]]; then
   fi
 
   echo ">>> Ensuring tunnel connector app: ${TUNNEL_APP_NAME}"
-  if ! az containerapp show \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$TUNNEL_APP_NAME" \
-    --output none 2>/dev/null; then
+  if ! container_app_exists "$TUNNEL_APP_NAME"; then
     az containerapp create \
       --resource-group "$RESOURCE_GROUP" \
       --name "$TUNNEL_APP_NAME" \
@@ -367,17 +882,49 @@ if [[ "$CREATE_APPS" == "true" ]]; then
   fi
 fi
 
+if container_app_exists "$API_APP_NAME"; then
+  echo ">>> Reconciling API ingress and runtime role"
+  ensure_container_app_identity "$API_APP_NAME"
+  ensure_api_ingress_contract
+fi
+
+if container_app_exists "$WORKER_APP_NAME"; then
+  echo ">>> Reconciling worker ingress and runtime role"
+  ensure_container_app_identity "$WORKER_APP_NAME"
+  ensure_worker_ingress_contract
+fi
+
+if bool_true "$CONFIGURE_EASY_AUTH"; then
+  configure_easy_auth
+  verify_phase3_contract
+fi
+
 echo
+
 echo "=========================================="
 echo "Private-origin ACA provisioning complete."
 echo "=========================================="
 echo "ACA environment: ${CONTAINER_APP_ENVIRONMENT}"
 echo "Default private domain: ${DEFAULT_DOMAIN}"
 echo "Private DNS zone: ${PRIVATE_DNS_ZONE}"
+if bool_true "$CONFIGURE_EASY_AUTH"; then
+  echo "Easy Auth hostname: https://${API_PUBLIC_HOSTNAME}"
+  echo "Entra app id: ${ENTRA_APP_ID}"
+  echo "Entra audience: ${API_APP_ID_URI}"
+fi
 echo
-echo "Next Cloudflare steps:"
-echo "1. Create a remotely managed tunnel for this environment."
-echo "2. Add public hostname api.<domain> to the tunnel."
-echo "3. Point the tunnel service to the API private origin in ACA."
-echo "4. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
-echo "5. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
+if bool_true "$CONFIGURE_EASY_AUTH"; then
+  echo "Next validation steps:"
+  echo "1. Run scripts/validate-aca-phase3-auth.sh with the same environment inputs."
+  echo "2. Verify browser login reaches ${EXPECTED_CALLBACK_URL}."
+  echo "3. Verify /.auth/me returns identity after login and /api/* returns 401 when unauthenticated."
+  echo "4. Verify wrong-audience and staging tokens are rejected before promotion."
+  echo "5. Run docs/runbooks/origin-bypass-verification.md and confirm no FastAPI log entry exists for direct-origin probes."
+else
+  echo "Next Cloudflare steps:"
+  echo "1. Create a remotely managed tunnel for this environment."
+  echo "2. Add public hostname api.<domain> to the tunnel."
+  echo "3. Point the tunnel service to the API private origin in ACA."
+  echo "4. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
+  echo "5. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
+fi

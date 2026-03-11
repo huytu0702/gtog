@@ -10,8 +10,10 @@ Before requesting production promotion, confirm:
 - staging deployment completed through the approved pipeline path
 - required smoke tests passed
 - rollback drill evidence exists and is still relevant
+- Phase 3 validation helper passed in staging
 - direct-origin denial was verified
-- auth audience isolation was verified
+- auth audience isolation was verified, including cross-environment token rejection
+- `/.auth/me` and unauthenticated `/api/*` behavior were verified on `api.<domain>`
 - tunnel failover was verified
 - accepted risks are documented
 - required runbooks are current
@@ -20,8 +22,10 @@ Before requesting production promotion, confirm:
 
 Attach or reference the following before promotion:
 - staging smoke report
+- Phase 3 validation helper output (`scripts/validate-aca-phase3-auth.sh` or `.ps1`)
 - direct-origin denial evidence
-- auth audience isolation result
+- auth audience isolation result, including staging-token rejection by production
+- `/.auth/me` and unauthenticated `/api/*` verification result
 - SSE long-running stream evidence
 - tunnel failover evidence
 - rollback drill evidence
@@ -60,6 +64,8 @@ Proceed from canary to full production only when:
 - canary metrics are stable
 - no public-origin bypass path is present
 - auth works on `api.<domain>`
+- `/.auth/me` behavior is consistent with the environment contract
+- unauthenticated `/api/*` requests still return `401`
 - required alerts are active
 - rollback remains immediately available
 - release owner or approver explicitly approves full promotion

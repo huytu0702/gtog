@@ -19,7 +19,12 @@
       "Bash(sed:*)",
       "WebFetch(domain:microsoft.github.io)",
       "mcp__tilth__tilth_read",
-      "mcp__tilth__tilth_files"
+      "mcp__tilth__tilth_files",
+      "Bash(gh search:*)",
+      "mcp__tilth__tilth_search",
+      "Bash(az containerapp:*)",
+      "Bash(az ad:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
