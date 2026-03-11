@@ -17,7 +17,9 @@
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_type",
       "Bash(sed:*)",
-      "WebFetch(domain:microsoft.github.io)"
+      "WebFetch(domain:microsoft.github.io)",
+      "mcp__tilth__tilth_read",
+      "mcp__tilth__tilth_files"
     ],
     "deny": [],
     "ask": []

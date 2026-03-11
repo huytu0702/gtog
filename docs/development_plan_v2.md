@@ -31,10 +31,13 @@ This v2 plan focuses on:
 - CSP headers on frontend
 - Distributed lock guardrail for indexing (Cosmos lease)
 - Frontend health probe route
-- Cloudflare WAF or custom rules depending selected plan
+- Cloudflare Free-tier WAF and rate-limiting controls
 - Alert thresholds in Azure Monitor and Log Analytics
 - SSE compatibility through Cloudflare with heartbeat events
 - Frontend image built per environment (build-time env injection)
+
+This document is the architecture and deployment rationale reference.
+Use `docs/production_implementation_plan.md` as the source of truth for execution sequencing, frozen delivery decisions, validation evidence, and release gates.
 
 ## Why the Architecture Changes
 
@@ -85,7 +88,7 @@ Out of scope for this doc: re-provision data layer from scratch.
   - proxied DNS for `app.<domain>`
   - Tunnel public hostname for `api.<domain>`
   - rate limiting on `api.<domain>`
-  - WAF or custom edge rules based on the chosen Cloudflare plan
+  - Free Managed Ruleset with limited custom edge rules on Cloudflare Free
   - optional header injection for a secondary backend guard (`X-Edge-Secret`)
   - cache bypass for `/api/*`, `/.auth/*`, and SSE routes
 7. Backend plane runs inside a private ACA environment:
@@ -237,8 +240,8 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 3. Cloudflare Tunnel public hostname enabled for `api.<domain>`
 4. Edge protections:
   - Rate limiting on `api.<domain>`
-  - WAF managed rules if plan supports them
-  - Custom rules for low-cost plans when managed rules are unavailable
+  - Free Managed Ruleset on Cloudflare Free
+  - Limited custom rules within Cloudflare Free limits
   - Optional rule to block missing `User-Agent`
 5. Optional Request Header Transform Rule on `api.<domain>`:
   - Inject `X-Edge-Secret: <value>` to origin requests
@@ -252,10 +255,10 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 ### Custom Domains and Certificates
 
 1. Bind `app.<domain>` to the frontend ACA
-2. Keep `api.<domain>` stable at the browser layer, but do not depend on direct public ACA DNS routing for the API
-3. Retain API custom domain binding on ACA only if required for Easy Auth redirect, cookie, or host-header behavior
-4. Do not rely on ACA managed certificates in this topology
-5. Use uploaded certificates where ACA custom domains are retained
+2. Keep `api.<domain>` stable at the browser layer through Cloudflare, not through a direct public ACA API origin
+3. Do not expose the ACA API as a separate public custom-domain origin in this topology
+4. Do not rely on ACA managed certificates for the API path in this topology
+5. Use uploaded certificates only where retained ACA custom domains are required for the frontend or supporting platform behavior
 6. If validation requires direct DNS resolution, temporarily disable Cloudflare proxy during domain validation
 7. Cloudflare SSL mode: `Full (strict)`
 
@@ -311,117 +314,29 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 
 ## Azure DevOps CI/CD Plan
 
-### Pipeline Stages
+The target pipeline shape remains:
 
-1. `Validate` (backend tests + static checks, frontend build)
-2. `BuildImages` (build and push frontend, API, and worker images to ACR)
-3. `DeployStaging` (new ACA revisions + tunnel connector)
-4. `SmokeStaging`:
-  - health, auth, CRUD, upload, index, query, and SSE checks
-  - public direct-origin probe must fail at the network layer
-  - tunnel connector failover test
-  - token isolation test
+1. `Validate`
+2. `BuildImages`
+3. `DeployStaging`
+4. `SmokeStaging`
 5. `ManualApproval`
-6. `DeployProduction` (canary 10% -> full)
+6. `DeployProduction`
 
-### Rollback
+The detailed execution order, smoke requirements, release evidence, and rollback expectations are maintained in `docs/production_implementation_plan.md`.
 
-1. Roll traffic to previous ACA revision
-2. Keep Cloudflare DNS and tunnel public hostname unchanged unless the incident is tunnel-specific
-3. Rollback target SLA: under 10 minutes
-4. Break-glass path must not re-enable public network access unless a documented incident override is approved
+## Validation and Delivery Reference
 
-## Test Cases and Acceptance
+This document is not the source of truth for testing, release sequencing, or sign-off.
 
-### Functional
+Use `docs/production_implementation_plan.md` for:
+- delivery phases and exit criteria
+- validation matrix and evidence bundle
+- release checklist
+- rollback and runbook requirements
+- production sign-off rules
 
-1. `GET /health` returns healthy
-2. `GET /health/readiness` returns ready
-3. Collection CRUD + upload + indexing + status polling
-4. Query methods: global, local, tog, drift
-5. SSE endpoint works through Cloudflare (including long-running streams > 60s) and sends heartbeat events before idle timeout
-
-### Security
-
-1. Frontend is reachable at `app.<domain>`
-2. Unauthenticated backend `/api/*` request -> `401`
-3. Wrong audience token -> denied
-4. CORS allows only configured frontend origin
-5. ToG debug endpoint disabled by default
-6. Public direct-origin probes to the ACA API fail before reaching the app
-7. If `EDGE_ORIGIN_SECRET` is enabled, missing `X-Edge-Secret` -> denied
-8. Staging token rejected by prod backend
-
-### Reliability
-
-1. Restart backend during indexing; verify recovery behavior
-2. Delete collection; verify metadata and artifact cleanup
-3. Stop one tunnel connector replica; verify API traffic still succeeds
-
-### Performance Baseline
-
-1. p95 `/api/collections` < 500 ms
-2. p95 `/health/readiness` < 1 s
-3. No sustained Cosmos and Search 429 storm in smoke run
-
-### Observability and Logging
-
-1. Structured JSON logging (backend): use Python `logging` with JSON formatter
-2. Log `Cf-Ray` on every backend request for Cloudflare correlation
-3. Log `CF-Connecting-IP` as the original client IP when present
-4. Log tunnel connector health and reconnect events
-5. Log retention: 30 days in Log Analytics (staging), 90 days (prod)
-6. Frontend: Next.js server logs forwarded to Log Analytics via ACA stdout
-
-### Observability Alerts
-
-1. 5xx error rate > 1% over 5 min -> Sev2
-2. p95 `/api/*` latency > 2 s over 10 min -> Sev3
-3. Cosmos or Search 429 > 5/min -> Sev3
-4. Key Vault secret expiry < 30 days -> Sev2
-5. ACA replica restarts > 2 in 15 min -> Sev2
-6. Tunnel connector healthy replicas < 2 -> Sev2
-
-## Rollout Phases
-
-1. Phase A - Application split + local readiness
-  - Implement all Required Application Changes for frontend and backend API
-  - Split backend responsibilities into `API` and `Worker` paths
-  - Introduce queue-based job dispatch for indexing and other long-running graph jobs
-  - Persist job state and distributed lock ownership in Cosmos
-  - Keep synchronous API path stateless and reserve SSE for read-side streaming only
-  - Update Dockerfiles and `.dockerignore` for frontend, API, and worker images
-  - Local validation with `docker-compose.dev.yml`: verify health, CORS, auth flow shape, queue dispatch, and basic worker execution
-2. Phase B - Private backend plane + identity
-  - Provision ACA private environment, API app, worker app, tunnel app, ACR, queue resource, private endpoint, private DNS, and Cloudflare Tunnel public hostname
-  - Upload certificates for retained ACA custom domains where required
-  - Configure Entra app registrations and backend Easy Auth
-  - Validate token flow with `az rest` or Postman before wiring frontend login UI
-  - Validate public direct-origin probes fail after private-origin cutover
-3. Phase C - Data protection + operational guardrails
-  - Finalize Cosmos lease and job containers and retention rules
-  - Enable Key Vault diagnostics, soft delete, purge protection, and expiry alerts
-  - Enable Blob soft delete and versioning where cost permits
-  - Define Cosmos backup policy and document restore procedure
-  - Document AI Search rebuild procedure from Blob and Cosmos source-of-truth data
-  - Define target `RPO` and `RTO` for metadata, uploaded documents, and serving indexes
-4. Phase D - CI/CD + release gates
-  - Extend `.vsts-ci.yml` with Validate, BuildImages, DeployStaging, SmokeStaging, ManualApproval, and DeployProduction stages
-  - Add IaC deployment and validation for ACA, Cloudflare, Entra, and alerting resources
-  - Add SBOM generation, image vulnerability scan, and image signing before publish
-  - Run full staging smoke suite including public direct-origin denial, audience isolation, queue-to-worker flow, tunnel failover, and SSE long-running test
-  - Execute rollback drill on staging and verify ACA revision rollback under the target SLA
-5. Phase E - Go-live + controlled production rollout
-  - Deploy production with canary traffic split before full promotion
-  - Monitor 5xx rate, latency, replica restarts, Cosmos and Search 429s, auth failures, and tunnel connector health during rollout
-  - Validate end-to-end logging correlation with `Cf-Ray`, client IP, tunnel events, and app request IDs
-  - Confirm backup and restore runbooks, on-call ownership, and secret rotation runbooks are in place before full cutover
-6. Phase F - Post-release hardening and scale improvements
-  - Rotate tunnel token and optional `X-Edge-Secret` on a documented schedule
-  - Add autoscaling policy for worker throughput once job patterns are stable
-  - Revisit search and index separation, cost controls, and provider fallback policies as traffic grows
-
-## Public Interface / API Changes
+## Public Interface / API Summary
 
 1. Frontend runtime requires `NEXT_PUBLIC_API_BASE_URL` pointing to `https://api.<domain>`
 2. Backend adds `GET /health/readiness`
@@ -431,7 +346,7 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
 ## Known Limitations
 
 1. Frontend ACA default domain may remain reachable outside Cloudflare unless additional ingress controls are introduced
-2. Azure AI Search Free SKU still prevents full private endpoint alignment on the data plane
+2. Azure AI Search Free SKU remains a temporary accepted risk and still prevents full private endpoint alignment on the data plane
 3. Cloudflare Tunnel public hostname and routing policy must be maintained outside Azure, so tunnel misconfiguration becomes a production dependency
 
 ## Assumptions and Defaults

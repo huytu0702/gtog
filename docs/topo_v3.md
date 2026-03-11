@@ -9,7 +9,7 @@ flowchart TB
 
   subgraph EDGE[Cloudflare Edge Controls]
     E1[Proxied DNS]
-    E2[WAF managed or custom rules]
+    E2[Free Managed Ruleset and custom rules]
     E3[Rate limit and bot filtering on api host]
     E4[Cache bypass for API auth and SSE]
     E5[Optional header transform injects X-Edge-Secret]
@@ -32,7 +32,7 @@ flowchart TB
   subgraph PRIVATE[Private ACA Environment]
     API[ACA API - internal ingress - FastAPI - Easy Auth]
     WORKER[ACA Worker - indexing and long-running graph jobs]
-    QUEUE[Job Queue - Azure Storage Queue or Service Bus]
+    QUEUE[Job Queue - Azure Storage Queue]
     LEASE[Cosmos lease and job state]
     TUNNEL -->|Private origin route| API
     API --> LOCK[Identity guards and secondary edge guard]
@@ -122,7 +122,7 @@ flowchart TB
   - `ACA Worker`: indexing and long-running graph jobs
   - `Tunnel Connector`: private-origin connector for `api.<domain>`
 - Replaced public API origin routing with `Cloudflare Tunnel -> private ACA API`.
-- Added explicit private networking controls for the backend plane:
+- Added explicit private-networking controls for the backend plane:
   - delegated ACA subnet
   - private endpoint and private DNS
   - public network access disabled
@@ -164,7 +164,7 @@ flowchart TB
   - tunnel connector failover test
   - auth audience isolation test
   - SSE long-running stream test
-- Production deploy should use canary rollout with a fast ACA revision rollback path.
+- Production deploys should use canary rollout with a fast ACA revision rollback path.
 
 ## Minimum Acceptance for "Production Ready"
 
