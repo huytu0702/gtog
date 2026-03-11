@@ -102,14 +102,15 @@ async def test_fallback_rate_limiter_returns_429():
 async def test_readiness_returns_200_when_all_checks_pass():
     with patch("backend.app.main._check_cosmos_ready", return_value=(True, "ok")):
         with patch("backend.app.main._check_blob_ready", return_value=(True, "ok")):
-            with patch("backend.app.main._check_search_ready", return_value=(True, "ok")):
-                with patch("backend.app.main._check_key_vault_ready", return_value=(True, "ok")):
-                    transport = httpx.ASGITransport(app=app)
-                    async with httpx.AsyncClient(
-                        transport=transport,
-                        base_url="http://testserver",
-                    ) as client:
-                        response = await client.get("/health/readiness")
+            with patch("backend.app.main._check_queue_ready", return_value=(True, "ok")):
+                with patch("backend.app.main._check_search_ready", return_value=(True, "ok")):
+                    with patch("backend.app.main._check_key_vault_ready", return_value=(True, "ok")):
+                        transport = httpx.ASGITransport(app=app)
+                        async with httpx.AsyncClient(
+                            transport=transport,
+                            base_url="http://testserver",
+                        ) as client:
+                            response = await client.get("/health/readiness")
 
     assert response.status_code == 200
     body = response.json()
@@ -117,6 +118,7 @@ async def test_readiness_returns_200_when_all_checks_pass():
     assert body["checks"] == {
         "cosmos": {"ok": True, "detail": "ok"},
         "blob": {"ok": True, "detail": "ok"},
+        "queue": {"ok": True, "detail": "ok"},
         "search": {"ok": True, "detail": "ok"},
         "key_vault": {"ok": True, "detail": "ok"},
     }
@@ -126,20 +128,22 @@ async def test_readiness_returns_200_when_all_checks_pass():
 async def test_readiness_returns_503_when_any_check_fails():
     with patch("backend.app.main._check_cosmos_ready", return_value=(False, "cosmos down")):
         with patch("backend.app.main._check_blob_ready", return_value=(True, "ok")):
-            with patch("backend.app.main._check_search_ready", return_value=(True, "ok")):
-                with patch("backend.app.main._check_key_vault_ready", return_value=(True, "ok")):
-                    transport = httpx.ASGITransport(app=app)
-                    async with httpx.AsyncClient(
-                        transport=transport,
-                        base_url="http://testserver",
-                    ) as client:
-                        response = await client.get("/health/readiness")
+            with patch("backend.app.main._check_queue_ready", return_value=(True, "ok")):
+                with patch("backend.app.main._check_search_ready", return_value=(True, "ok")):
+                    with patch("backend.app.main._check_key_vault_ready", return_value=(True, "ok")):
+                        transport = httpx.ASGITransport(app=app)
+                        async with httpx.AsyncClient(
+                            transport=transport,
+                            base_url="http://testserver",
+                        ) as client:
+                            response = await client.get("/health/readiness")
 
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "not_ready"
     assert body["checks"]["cosmos"] == {"ok": False, "detail": "cosmos down"}
     assert body["checks"]["blob"] == {"ok": True, "detail": "ok"}
+    assert body["checks"]["queue"] == {"ok": True, "detail": "ok"}
     assert body["checks"]["search"] == {"ok": True, "detail": "ok"}
     assert body["checks"]["key_vault"] == {"ok": True, "detail": "ok"}
 

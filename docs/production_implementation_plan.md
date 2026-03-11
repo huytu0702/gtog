@@ -306,6 +306,78 @@ Never log:
 - Job state survives worker restart
 - Duplicate dispatch does not create duplicate final artifacts
 
+**Current readiness and gap assessment**
+
+- `backend/app/repositories/control_plane_repository.py` already provides Cosmos-backed control-plane persistence for indexing jobs, but Phase 2 still requires lease fields and a richer lifecycle transition model.
+- `backend/app/routers/indexing.py` and `backend/app/services/indexing_service.py` already expose indexing start and status behavior, but long-running work is still launched from the API process instead of a dedicated worker.
+- `frontend/lib/api.ts` and `frontend/components/collection-documents.tsx` already support the submit-and-poll interaction pattern, so Phase 2 can preserve the current frontend flow while strengthening backend job durability.
+- `scripts/provision-azure-db.sh` and `scripts/provision-azure-db.ps1` already provision Cosmos resources, but Cosmos must be reachable and contain the required control-plane containers before Phase 2 work can be validated.
+- No Azure Storage Queue integration, worker entrypoint, poison-message handling, or lease-recovery path is implemented yet.
+
+**Implementation plan**
+
+1. **Revalidate the Phase 2 control plane before coding**
+   - Confirm Cosmos DB is reachable from the backend and that the expected database and control-plane containers still exist.
+   - If Cosmos resources were removed or disabled, rerun `scripts/provision-azure-db.sh` or `scripts/provision-azure-db.ps1` and re-verify environment settings before continuing.
+   - Confirm current readiness behavior still surfaces Cosmos availability clearly so Phase 2 failures are not masked by stale local configuration.
+
+2. **Extend the durable job model in Cosmos DB**
+   - Update `backend/app/repositories/control_plane_repository.py` to support the required Phase 2 lifecycle states: `queued`, `running`, `retrying`, `failed`, `completed`, and `cancelled`.
+   - Add durable lease metadata to each job record, including `lease_owner_id`, `lease_acquired_at`, `lease_expires_at`, and `heartbeat_at`.
+   - Add repository operations for lease acquisition, heartbeat renewal, expiry-based lease reclamation, and direct lookup by `job_id`.
+
+3. **Add queue-backed dispatch as the API-side execution boundary**
+   - Extend `backend/app/config.py` and `backend/.env.example` with Azure Storage Queue configuration, including queue name, visibility timeout, polling interval, and retry limits.
+   - Introduce a queue service module under `backend/app/services/` that can enqueue minimal dispatch messages containing `job_id`, `job_type`, and `attempt`.
+   - Refactor `backend/app/services/indexing_service.py` so the API path creates the Cosmos job record first, enqueues a dispatch message second, and returns immediately without starting long-running work in-process.
+
+4. **Create a dedicated worker runtime for indexing jobs**
+   - Add a worker entrypoint under `backend/app/` that continuously polls Azure Storage Queue and processes indexing work outside the API server lifecycle.
+   - Split worker execution concerns from request-handling concerns so the worker is responsible for dequeueing, acquiring the Cosmos lease, transitioning lifecycle state, running indexing, renewing heartbeat, and finalizing the job state.
+   - Ensure the queue message is deleted only after Cosmos reflects the durable final or retry state for that processing attempt.
+
+5. **Implement retry, poison, and idempotency controls**
+   - Add worker-side retry logic that transitions jobs into `retrying` on transient failures and preserves a sanitized error summary in Cosmos.
+   - Mark jobs as `failed` after the configured retry threshold and document how poison-message conditions are detected and surfaced operationally.
+   - Guard the worker path against duplicate queue deliveries by making lease ownership and job-state transitions the source of truth for idempotency.
+
+6. **Strengthen API status contracts without breaking the frontend**
+   - Keep the current collection-oriented status flow in `backend/app/routers/indexing.py` for frontend compatibility.
+   - Add or formalize a canonical job-by-ID status endpoint backed by Cosmos so operations and automation can inspect worker progress directly.
+   - Update response models in `backend/app/models/` so new lifecycle states and retry metadata are visible to clients where appropriate.
+
+7. **Wire the worker into deployment and runtime configuration**
+   - Update `backend/Dockerfile` and the ACA provisioning scripts (`scripts/provision-aca-private-origin.sh` and `.ps1`) so the worker app runs a worker command instead of the API server command.
+   - Ensure both API and worker receive the required Cosmos, queue, storage, and secret configuration through the same environment and Key Vault patterns planned for staging and production.
+   - Preserve the Phase 1 boundary assumptions so the API remains stateless and the worker remains non-public.
+
+**Recommended execution order**
+
+1. Revalidate or reprovision Cosmos DB and confirm the control-plane containers are available.
+2. Extend the Cosmos job schema and repository transitions, including lease operations.
+3. Add queue configuration and a queue service abstraction.
+4. Refactor API indexing submission to dispatch-only semantics.
+5. Add the worker entrypoint and execution loop.
+6. Add retry, poison, and idempotency behavior.
+7. Finalize status API updates and deployment wiring.
+8. Run Phase 2 integration and restart-recovery validation.
+
+**Phase 2 validation evidence**
+
+- Evidence that job submission returns immediately while the job continues asynchronously.
+- Cosmos records showing lifecycle state transitions and lease metadata across a worker run.
+- Integration output demonstrating worker restart recovery without losing authoritative job state.
+- Duplicate-dispatch test evidence showing no duplicate final artifacts are produced.
+- Retry and poison-path evidence showing sanitized failures and correct terminal state handling.
+- Queue and worker deployment evidence showing the worker runtime is separate from the API runtime.
+
+**Phase 2 risks and focus points**
+
+- Phase 2 should not be signed off while Cosmos DB is unavailable, misconfigured, or missing the required control-plane containers.
+- A partial refactor that leaves `asyncio.create_task(...)` or equivalent in the API path would undermine the production durability goal.
+- Queue message deletion must remain downstream of durable Cosmos state updates or failures will become non-recoverable.
+- Idempotency must be enforced through durable state and lease ownership rather than assumptions about single delivery from Azure Storage Queue.
+
 ---
 
 ### Phase 3: Private networking and identity

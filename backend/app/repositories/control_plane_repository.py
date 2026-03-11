@@ -2,38 +2,65 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from azure.core import MatchConditions
 from azure.cosmos import CosmosClient
-from azure.cosmos.exceptions import CosmosResourceNotFoundError
+from azure.cosmos.exceptions import (
+    CosmosAccessConditionFailedError,
+    CosmosResourceNotFoundError,
+)
 from azure.cosmos.partition_key import PartitionKey
 
-from ..config import settings
 from ..azure_runtime import (
     bootstrap_runtime_secrets,
     cosmos_client_kwargs,
     cosmos_endpoint_credential,
     is_cosmos_configured,
 )
+from ..config import settings
 
 INDEX_JOB_QUEUED = "queued"
 INDEX_JOB_RUNNING = "running"
-INDEX_JOB_COMPLETED = "completed"
+INDEX_JOB_RETRYING = "retrying"
 INDEX_JOB_FAILED = "failed"
+INDEX_JOB_COMPLETED = "completed"
+INDEX_JOB_CANCELLED = "cancelled"
+
+ACTIVE_INDEX_JOB_STATUSES = (
+    INDEX_JOB_QUEUED,
+    INDEX_JOB_RUNNING,
+    INDEX_JOB_RETRYING,
+)
+TERMINAL_INDEX_JOB_STATUSES = (
+    INDEX_JOB_FAILED,
+    INDEX_JOB_COMPLETED,
+    INDEX_JOB_CANCELLED,
+)
 
 _ALLOWED_JOB_TRANSITIONS: dict[str, set[str]] = {
-    INDEX_JOB_QUEUED: {INDEX_JOB_RUNNING, INDEX_JOB_FAILED},
-    INDEX_JOB_RUNNING: {INDEX_JOB_QUEUED, INDEX_JOB_COMPLETED, INDEX_JOB_FAILED},
-    INDEX_JOB_FAILED: {INDEX_JOB_QUEUED},
+    INDEX_JOB_QUEUED: {INDEX_JOB_RUNNING, INDEX_JOB_FAILED, INDEX_JOB_CANCELLED},
+    INDEX_JOB_RUNNING: {INDEX_JOB_RETRYING, INDEX_JOB_COMPLETED, INDEX_JOB_FAILED, INDEX_JOB_CANCELLED},
+    INDEX_JOB_RETRYING: {INDEX_JOB_RUNNING, INDEX_JOB_FAILED, INDEX_JOB_CANCELLED},
+    INDEX_JOB_FAILED: set(),
     INDEX_JOB_COMPLETED: set(),
+    INDEX_JOB_CANCELLED: set(),
 }
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    return _utcnow().replace(tzinfo=None).isoformat()
+
+
+def _future_iso(*, seconds: int) -> str:
+    return (_utcnow() + timedelta(seconds=max(1, seconds))).replace(tzinfo=None).isoformat()
 
 
 def _document_item_id(collection_id: str, document_name: str) -> str:
@@ -41,7 +68,7 @@ def _document_item_id(collection_id: str, document_name: str) -> str:
 
 
 def _new_serving_version() -> str:
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    timestamp = _utcnow().strftime("%Y%m%d%H%M%S")
     suffix = uuid4().hex[:8]
     return f"v{timestamp}-{suffix}"
 
@@ -67,8 +94,10 @@ class CosmosControlPlaneRepository:
         kwargs = client_kwargs or {}
         if connection_string:
             self._client = CosmosClient.from_connection_string(connection_string, **kwargs)
-        elif endpoint and (key or credential):
-            self._client = CosmosClient(url=endpoint, credential=key or credential, **kwargs)
+        elif endpoint and key:
+            self._client = CosmosClient(url=endpoint, credential=key, **kwargs)
+        elif endpoint and credential is not None:
+            self._client = CosmosClient(url=endpoint, credential=credential, **kwargs)
         else:
             raise ValueError(
                 "Cosmos DB is not configured. Set AZURE_COSMOS_CONNECTION_STRING "
@@ -94,6 +123,21 @@ class CosmosControlPlaneRepository:
 
     def _container(self, logical_name: str):
         return self._containers[self._container_names[logical_name]]
+
+    def _replace_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {}
+        etag = job.get("_etag")
+        if etag:
+            kwargs["etag"] = etag
+            kwargs["match_condition"] = MatchConditions.IfNotModified
+        return self._container("indexing_jobs").replace_item(item=job["id"], body=job, **kwargs)
+
+    @staticmethod
+    def _clear_lease_fields(job: dict[str, Any]) -> None:
+        job["leaseOwnerId"] = None
+        job["leaseAcquiredAt"] = None
+        job["leaseExpiresAt"] = None
+        job["heartbeatAt"] = None
 
     def create_collection(self, collection_id: str, description: str | None = None) -> dict[str, Any]:
         if self.get_collection(collection_id) is not None:
@@ -238,13 +282,12 @@ class CosmosControlPlaneRepository:
                 query=(
                     "SELECT TOP 1 * FROM c "
                     "WHERE c.collectionId = @collectionId "
-                    "AND (c.status = @queued OR c.status = @running) "
+                    "AND ARRAY_CONTAINS(@activeStatuses, c.status) "
                     "ORDER BY c.requestedAt DESC"
                 ),
                 parameters=[
                     {"name": "@collectionId", "value": collection_id},
-                    {"name": "@queued", "value": INDEX_JOB_QUEUED},
-                    {"name": "@running", "value": INDEX_JOB_RUNNING},
+                    {"name": "@activeStatuses", "value": list(ACTIVE_INDEX_JOB_STATUSES)},
                 ],
                 partition_key=collection_id,
             )
@@ -256,6 +299,7 @@ class CosmosControlPlaneRepository:
         item = {
             "id": str(uuid4()),
             "collectionId": collection_id,
+            "jobType": "indexing",
             "status": INDEX_JOB_QUEUED,
             "targetVersion": _new_serving_version(),
             "attempt": 0,
@@ -264,6 +308,14 @@ class CosmosControlPlaneRepository:
             "startedAt": None,
             "finishedAt": None,
             "error": None,
+            "lastErrorAt": None,
+            "nextAttemptAt": None,
+            "leaseOwnerId": None,
+            "leaseAcquiredAt": None,
+            "leaseExpiresAt": None,
+            "heartbeatAt": None,
+            "progress": 0.0,
+            "message": "Indexing job queued",
             "updatedAt": now,
         }
         jobs_container.create_item(body=item)
@@ -275,6 +327,22 @@ class CosmosControlPlaneRepository:
             metadata={"reason": "enqueue"},
         )
         return item, True
+
+    def get_indexing_job(self, collection_id: str, job_id: str) -> dict[str, Any] | None:
+        try:
+            return self._container("indexing_jobs").read_item(item=job_id, partition_key=collection_id)
+        except CosmosResourceNotFoundError:
+            return None
+
+    def get_indexing_job_by_id(self, job_id: str) -> dict[str, Any] | None:
+        jobs = list(
+            self._container("indexing_jobs").query_items(
+                query="SELECT TOP 1 * FROM c WHERE c.id = @jobId",
+                parameters=[{"name": "@jobId", "value": job_id}],
+                enable_cross_partition_query=True,
+            )
+        )
+        return jobs[0] if jobs else None
 
     def get_latest_indexing_job(self, collection_id: str) -> dict[str, Any] | None:
         jobs = list(
@@ -291,20 +359,131 @@ class CosmosControlPlaneRepository:
         return jobs[0] if jobs else None
 
     def list_active_indexing_jobs(self) -> list[dict[str, Any]]:
-        """List queued/running jobs across all collections."""
+        """List active jobs across all collections."""
         return list(
             self._container("indexing_jobs").query_items(
                 query=(
-                    "SELECT * FROM c WHERE c.status = @queued OR c.status = @running "
+                    "SELECT * FROM c "
+                    "WHERE ARRAY_CONTAINS(@activeStatuses, c.status) "
                     "ORDER BY c.requestedAt DESC"
+                ),
+                parameters=[{"name": "@activeStatuses", "value": list(ACTIVE_INDEX_JOB_STATUSES)}],
+                enable_cross_partition_query=True,
+            )
+        )
+
+    def list_recoverable_indexing_jobs(self, *, now_iso: str | None = None) -> list[dict[str, Any]]:
+        """List jobs that should be re-dispatched by the worker."""
+        current_time = now_iso or _utcnow_iso()
+        return list(
+            self._container("indexing_jobs").query_items(
+                query=(
+                    "SELECT * FROM c WHERE "
+                    "c.status = @queued "
+                    "OR ("
+                    "  c.status = @retrying "
+                    "  AND (NOT IS_DEFINED(c.nextAttemptAt) OR IS_NULL(c.nextAttemptAt) OR c.nextAttemptAt <= @now)"
+                    ") "
+                    "OR ("
+                    "  ARRAY_CONTAINS(@leaseStatuses, c.status) "
+                    "  AND IS_DEFINED(c.leaseExpiresAt) "
+                    "  AND NOT IS_NULL(c.leaseExpiresAt) "
+                    "  AND c.leaseExpiresAt <= @now"
+                    ") "
+                    "ORDER BY c.updatedAt ASC"
                 ),
                 parameters=[
                     {"name": "@queued", "value": INDEX_JOB_QUEUED},
-                    {"name": "@running", "value": INDEX_JOB_RUNNING},
+                    {"name": "@retrying", "value": INDEX_JOB_RETRYING},
+                    {"name": "@now", "value": current_time},
+                    {"name": "@leaseStatuses", "value": [INDEX_JOB_RUNNING, INDEX_JOB_RETRYING]},
                 ],
                 enable_cross_partition_query=True,
             )
         )
+
+    def acquire_indexing_job_lease(
+        self,
+        *,
+        collection_id: str,
+        job_id: str,
+        lease_owner_id: str,
+        lease_duration_seconds: int,
+    ) -> dict[str, Any] | None:
+        job = self.get_indexing_job(collection_id, job_id)
+        if job is None:
+            return None
+
+        status = str(job.get("status", ""))
+        if status in TERMINAL_INDEX_JOB_STATUSES:
+            return None
+
+        now = _utcnow_iso()
+        current_owner = str(job.get("leaseOwnerId") or "")
+        lease_expires_at = str(job.get("leaseExpiresAt") or "")
+        has_active_other_owner = (
+            current_owner
+            and current_owner != lease_owner_id
+            and lease_expires_at
+            and lease_expires_at > now
+        )
+        if has_active_other_owner:
+            return None
+
+        job["leaseOwnerId"] = lease_owner_id
+        if current_owner != lease_owner_id:
+            job["leaseAcquiredAt"] = now
+        job["leaseExpiresAt"] = _future_iso(seconds=lease_duration_seconds)
+        job["heartbeatAt"] = now
+        job["updatedAt"] = now
+
+        try:
+            updated = self._replace_job(job)
+        except CosmosAccessConditionFailedError:
+            return None
+
+        self.record_job_event(
+            collection_id=collection_id,
+            job_id=job_id,
+            from_status=status,
+            to_status=status,
+            metadata={
+                "reason": "lease-acquired",
+                "leaseOwnerId": lease_owner_id,
+            },
+        )
+        return updated
+
+    def renew_indexing_job_lease(
+        self,
+        *,
+        collection_id: str,
+        job_id: str,
+        lease_owner_id: str,
+        lease_duration_seconds: int,
+        progress: float | None = None,
+        message: str | None = None,
+    ) -> dict[str, Any] | None:
+        job = self.get_indexing_job(collection_id, job_id)
+        if job is None:
+            return None
+
+        if str(job.get("leaseOwnerId") or "") != lease_owner_id:
+            return None
+
+        now = _utcnow_iso()
+        job["heartbeatAt"] = now
+        job["leaseExpiresAt"] = _future_iso(seconds=lease_duration_seconds)
+        job["updatedAt"] = now
+        if progress is not None:
+            job["progress"] = progress
+        if message is not None:
+            job["message"] = message
+
+        try:
+            return self._replace_job(job)
+        except CosmosAccessConditionFailedError:
+            return None
 
     def transition_indexing_job(
         self,
@@ -314,10 +493,19 @@ class CosmosControlPlaneRepository:
         to_status: str,
         error: str | None = None,
         metadata: dict[str, Any] | None = None,
+        expected_lease_owner: str | None = None,
+        next_attempt_at: str | None = None,
+        progress: float | None = None,
+        message: str | None = None,
     ) -> dict[str, Any]:
         jobs_container = self._container("indexing_jobs")
         job = jobs_container.read_item(item=job_id, partition_key=collection_id)
         from_status = str(job["status"])
+
+        if expected_lease_owner is not None and str(job.get("leaseOwnerId") or "") != expected_lease_owner:
+            raise ValueError(
+                f"Job {job_id} is not owned by lease holder '{expected_lease_owner}'"
+            )
 
         if from_status == to_status:
             return job
@@ -330,24 +518,68 @@ class CosmosControlPlaneRepository:
         now = _utcnow_iso()
         job["status"] = to_status
         job["updatedAt"] = now
+        if progress is not None:
+            job["progress"] = progress
+        if message is not None:
+            job["message"] = message
 
         if to_status == INDEX_JOB_RUNNING:
             job["attempt"] = int(job.get("attempt", 0)) + 1
             job["startedAt"] = now
             job["finishedAt"] = None
             job["error"] = None
-        elif to_status == INDEX_JOB_QUEUED:
-            job["startedAt"] = None
+            job["lastErrorAt"] = None
+            job["nextAttemptAt"] = None
+            if progress is None:
+                job["progress"] = 5.0
+            if message is None:
+                job["message"] = "Starting indexing..."
+        elif to_status == INDEX_JOB_RETRYING:
             job["finishedAt"] = None
-            job["error"] = None
+            job["error"] = error
+            job["lastErrorAt"] = now if error else job.get("lastErrorAt")
+            job["nextAttemptAt"] = next_attempt_at
+            self._clear_lease_fields(job)
+            if progress is None:
+                job["progress"] = 0.0
+            if message is None:
+                job["message"] = "Retry scheduled"
         elif to_status == INDEX_JOB_COMPLETED:
             job["finishedAt"] = now
             job["error"] = None
+            job["nextAttemptAt"] = None
+            self._clear_lease_fields(job)
+            if progress is None:
+                job["progress"] = 100.0
+            if message is None:
+                job["message"] = "Indexing completed successfully"
         elif to_status == INDEX_JOB_FAILED:
             job["finishedAt"] = now
             job["error"] = error
+            job["lastErrorAt"] = now if error else job.get("lastErrorAt")
+            job["nextAttemptAt"] = None
+            self._clear_lease_fields(job)
+            if progress is None:
+                job["progress"] = 100.0
+            if message is None:
+                job["message"] = "Indexing failed"
+        elif to_status == INDEX_JOB_CANCELLED:
+            job["finishedAt"] = now
+            job["nextAttemptAt"] = None
+            self._clear_lease_fields(job)
+            if message is None:
+                job["message"] = "Indexing cancelled"
+        elif to_status == INDEX_JOB_QUEUED:
+            job["finishedAt"] = None
+            job["error"] = None
+            job["nextAttemptAt"] = None
+            self._clear_lease_fields(job)
+            if progress is None:
+                job["progress"] = 0.0
+            if message is None:
+                job["message"] = "Indexing job queued"
 
-        updated = jobs_container.replace_item(item=job_id, body=job)
+        updated = self._replace_job(job)
         self.record_job_event(
             collection_id=collection_id,
             job_id=job_id,
@@ -429,7 +661,7 @@ def require_control_plane_repository() -> CosmosControlPlaneRepository:
     repository = get_control_plane_repository()
     if repository is None:
         raise ValueError(
-            "Azure Cosmos DB is required for control-plane metadata in Phase 1. "
+            "Azure Cosmos DB is required for control-plane metadata in Phase 2. "
             "Configure AZURE_COSMOS_CONNECTION_STRING or "
             "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
             "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."

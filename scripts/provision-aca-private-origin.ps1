@@ -333,6 +333,7 @@ if ($CreateApps) {
             "--memory", "2.0Gi",
             "--min-replicas", "1",
             "--max-replicas", "2",
+            "--env-vars", "APP_ROLE=api",
             "--output", "none"
         )
         if ($identityResourceId) {
@@ -358,6 +359,7 @@ if ($CreateApps) {
             "--memory", "2.0Gi",
             "--min-replicas", "1",
             "--max-replicas", "1",
+            "--env-vars", "APP_ROLE=worker",
             "--output", "none"
         )
         if ($identityResourceId) {

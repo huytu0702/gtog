@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     azure_storage_account_name: str = ""
     azure_storage_account_key: str = ""
     azure_storage_account_url: str = ""
+    azure_storage_queue_name: str = "indexing-jobs"
+    azure_storage_queue_visibility_timeout_seconds: int = 300
+    azure_storage_queue_poll_interval_seconds: int = 5
+    azure_storage_queue_dequeue_batch_size: int = 4
     azure_search_endpoint: str = ""
     azure_search_api_key: str = ""
     azure_use_managed_identity: bool = False
@@ -67,6 +71,12 @@ class Settings(BaseSettings):
     azure_cosmos_covariates_container: str = "covariates"
     azure_cosmos_conversation_sessions_container: str = "conversationSessions"
     azure_cosmos_conversation_turns_container: str = "conversationTurns"
+
+    # Indexing worker configuration
+    indexing_job_max_attempts: int = 3
+    indexing_worker_lease_duration_seconds: int = 300
+    indexing_worker_heartbeat_interval_seconds: int = 30
+    indexing_worker_recovery_interval_seconds: int = 30
 
     # Query serving mode
     query_context_mode: str = "cosmos_only"

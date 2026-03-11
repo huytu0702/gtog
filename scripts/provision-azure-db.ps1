@@ -80,6 +80,14 @@ Write-Host ">>> Ensuring blob containers"
         --output none
 }
 
+Write-Host ">>> Ensuring storage queues"
+@("indexing-jobs") | ForEach-Object {
+    az storage queue create `
+        --name $_ `
+        --connection-string $storageConnectionString `
+        --output none
+}
+
 Write-Host ">>> Ensuring Azure AI Search: $SearchService (sku=$SearchSku)"
 if (-not (Test-AzCommand { az search service show --name $SearchService --resource-group $ResourceGroup --output none 2>$null })) {
     az search service create `
@@ -194,6 +202,7 @@ Write-Host "Add these to backend/.env:"
 Write-Host "AZURE_STORAGE_CONNECTION_STRING=`"$storageConnectionString`""
 Write-Host "AZURE_STORAGE_ACCOUNT_NAME=`"$StorageAccount`""
 Write-Host "AZURE_STORAGE_ACCOUNT_KEY=`"$storageAccountKey`""
+Write-Host "AZURE_STORAGE_QUEUE_NAME=`"indexing-jobs`""
 Write-Host "AZURE_SEARCH_ENDPOINT=`"$searchEndpoint`""
 Write-Host "AZURE_SEARCH_API_KEY=`"$searchApiKey`""
 Write-Host "AZURE_COSMOS_CONNECTION_STRING=`"$cosmosConnectionString`""

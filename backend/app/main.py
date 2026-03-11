@@ -24,10 +24,11 @@ from .routers import (
     collections_router,
     conversation_router,
     documents_router,
+    indexing_jobs_router,
     indexing_router,
     search_router,
 )
-from .services import indexing_service
+from .services import queue_service
 from .utils import validate_graphrag_settings_compatibility
 from .utils.helpers import _blob_client, _search_index_client
 
@@ -116,6 +117,16 @@ def _check_blob_ready() -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _check_queue_ready() -> tuple[bool, str]:
+    try:
+        if not queue_service.is_configured():
+            return False, "Queue client is not configured"
+        queue_service.get_queue_properties()
+        return True, "ok"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def _check_search_ready() -> tuple[bool, str]:
     try:
         search_client = _search_index_client()
@@ -150,11 +161,6 @@ async def lifespan(app: FastAPI):
             "Using Azure Cosmos DB for control-plane metadata "
             f"(database={settings.azure_cosmos_database_name})"
         )
-        try:
-            indexing_service.recover_pending_jobs()
-            logger.info("Recovered pending indexing jobs from Cosmos")
-        except Exception:
-            logger.exception("Failed to recover pending indexing jobs")
     else:
         if settings.query_context_mode.lower() == "cosmos_only":
             raise RuntimeError(
@@ -277,6 +283,7 @@ async def security_and_logging_middleware(request: Request, call_next):
 app.include_router(collections_router)
 app.include_router(documents_router)
 app.include_router(indexing_router)
+app.include_router(indexing_jobs_router)
 app.include_router(search_router)
 app.include_router(conversation_router)
 
@@ -297,6 +304,9 @@ async def readiness_check():
 
     blob_ok, blob_detail = _check_blob_ready()
     checks["blob"] = {"ok": blob_ok, "detail": blob_detail}
+
+    queue_ok, queue_detail = _check_queue_ready()
+    checks["queue"] = {"ok": queue_ok, "detail": queue_detail}
 
     search_ok, search_detail = _check_search_ready()
     checks["search"] = {"ok": search_ok, "detail": search_detail}

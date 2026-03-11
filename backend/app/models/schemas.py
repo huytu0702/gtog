@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 from .enums import IndexStatus, SearchMethod
@@ -65,14 +66,42 @@ class IndexRequest(BaseModel):
 
 
 class IndexStatusResponse(BaseModel):
-    """Response model for indexing status."""
+    """Response model for collection-oriented indexing status."""
 
     collection_id: str
+    job_id: str
     status: IndexStatus
     progress: float = Field(0.0, ge=0.0, le=100.0)
     message: Optional[str] = None
+    attempt: int = Field(0, ge=0)
+    max_attempts: int = Field(0, ge=0)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    retry_at: Optional[datetime] = None
+    lease_owner_id: Optional[str] = None
+    heartbeat_at: Optional[datetime] = None
+    error: Optional[str] = None
+
+
+class IndexJobResponse(BaseModel):
+    """Canonical response model for one indexing job."""
+
+    job_id: str
+    collection_id: str
+    status: str
+    attempt: int = Field(0, ge=0)
+    max_attempts: int = Field(0, ge=0)
+    target_version: str
+    requested_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    retry_at: Optional[datetime] = None
+    lease_owner_id: Optional[str] = None
+    lease_acquired_at: Optional[datetime] = None
+    lease_expires_at: Optional[datetime] = None
+    heartbeat_at: Optional[datetime] = None
+    progress: float = Field(0.0, ge=0.0, le=100.0)
+    message: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -139,7 +168,7 @@ class ConversationTurn(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(..., min_length=1, max_length=4000)
     rewritten_query: str | None = Field(default=None, max_length=4000)  # user turns only
-    method_used: str | None = None      # user turns only
+    method_used: str | None = None  # user turns only
 
 
 class SummarizeRequest(BaseModel):

@@ -9,6 +9,8 @@ from .events import (
     StatusEvent,
 )
 from .schemas import (
+    AgentSearchRequest,
+    AgentSearchResponse,
     CollectionCreate,
     CollectionList,
     CollectionResponse,
@@ -17,19 +19,18 @@ from .schemas import (
     DriftSearchRequest,
     GlobalSearchRequest,
     HealthResponse,
+    IndexJobResponse,
     IndexRequest,
     IndexStatusResponse,
     LocalSearchRequest,
     SearchRequest,
     SearchResponse,
-    ToGSearchRequest,
-    AgentSearchRequest,
-    AgentSearchResponse,
-    WebSearchRequest,
-    SummarizeRequest,
-    SummarizeResponse,
     SessionCreateResponse,
     SessionDetailResponse,
+    SummarizeRequest,
+    SummarizeResponse,
+    ToGSearchRequest,
+    WebSearchRequest,
 )
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "DocumentList",
     # Indexing Models
     "IndexRequest",
+    "IndexJobResponse",
     "IndexStatusResponse",
     # Search Models
     "SearchRequest",

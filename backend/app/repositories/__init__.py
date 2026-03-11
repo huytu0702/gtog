@@ -1,11 +1,15 @@
 """Repository package exports."""
 
 from .control_plane_repository import (
+    ACTIVE_INDEX_JOB_STATUSES,
     CosmosControlPlaneRepository,
+    INDEX_JOB_CANCELLED,
     INDEX_JOB_COMPLETED,
     INDEX_JOB_FAILED,
     INDEX_JOB_QUEUED,
+    INDEX_JOB_RETRYING,
     INDEX_JOB_RUNNING,
+    TERMINAL_INDEX_JOB_STATUSES,
     get_control_plane_repository,
     require_control_plane_repository,
 )
@@ -21,11 +25,15 @@ from .conversation_repository import (
 )
 
 __all__ = [
+    "ACTIVE_INDEX_JOB_STATUSES",
     "CosmosControlPlaneRepository",
-    "INDEX_JOB_QUEUED",
-    "INDEX_JOB_RUNNING",
+    "INDEX_JOB_CANCELLED",
     "INDEX_JOB_COMPLETED",
     "INDEX_JOB_FAILED",
+    "INDEX_JOB_QUEUED",
+    "INDEX_JOB_RETRYING",
+    "INDEX_JOB_RUNNING",
+    "TERMINAL_INDEX_JOB_STATUSES",
     "get_control_plane_repository",
     "require_control_plane_repository",
     "CosmosServingRepository",

@@ -36,6 +36,9 @@ _SECRET_BINDINGS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+_QUEUE_ENDPOINT_SUFFIX = ".queue.core.windows.net"
+
+
 def _set_setting(setting_attr: str, env_name: str, value: str) -> None:
     setattr(settings, setting_attr, value)
     os.environ[env_name] = value
@@ -176,6 +179,19 @@ def blob_account_url() -> str:
     return ""
 
 
+def queue_account_url() -> str:
+    """Resolve queue account URL for managed identity auth."""
+    if settings.azure_storage_account_url:
+        base_url = settings.azure_storage_account_url.rstrip("/")
+        if base_url.endswith(".blob.core.windows.net"):
+            account_name = base_url.removeprefix("https://").removesuffix(".blob.core.windows.net")
+            return f"https://{account_name}{_QUEUE_ENDPOINT_SUFFIX}"
+        return base_url
+    if settings.azure_storage_account_name:
+        return f"https://{settings.azure_storage_account_name}{_QUEUE_ENDPOINT_SUFFIX}"
+    return ""
+
+
 def create_blob_service_client():
     """Create BlobServiceClient using connection string or managed identity."""
     from azure.storage.blob import BlobServiceClient
@@ -188,4 +204,19 @@ def create_blob_service_client():
         account_url = blob_account_url()
         if account_url:
             return BlobServiceClient(account_url=account_url, credential=get_default_credential())
+    return None
+
+
+def create_queue_service_client():
+    """Create QueueServiceClient using connection string or managed identity."""
+    from azure.storage.queue import QueueServiceClient
+
+    connection_string = resolve_storage_connection_string()
+    if connection_string:
+        return QueueServiceClient.from_connection_string(connection_string)
+
+    if is_managed_identity_enabled():
+        account_url = queue_account_url()
+        if account_url:
+            return QueueServiceClient(account_url=account_url, credential=get_default_credential())
     return None

@@ -312,6 +312,7 @@ if [[ "$CREATE_APPS" == "true" ]]; then
       --memory 2.0Gi
       --min-replicas 1
       --max-replicas 2
+      --env-vars "APP_ROLE=api"
       --output none
     )
     if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
@@ -335,6 +336,7 @@ if [[ "$CREATE_APPS" == "true" ]]; then
       --memory 2.0Gi
       --min-replicas 1
       --max-replicas 1
+      --env-vars "APP_ROLE=worker"
       --output none
     )
     if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then

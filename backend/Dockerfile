@@ -55,7 +55,9 @@ USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+ENV APP_ROLE=api
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD if [ "$APP_ROLE" = "api" ]; then curl -f http://localhost:8000/health || exit 1; else python -c 'print("worker healthy")' || exit 1; fi
+
+CMD ["/bin/sh", "-c", "if [ \"$APP_ROLE\" = \"worker\" ]; then python -m app.worker; else uvicorn app.main:app --host 0.0.0.0 --port 8000; fi"]

@@ -28,6 +28,7 @@ COMMUNITY_REPORTS_CONTAINER="${COMMUNITY_REPORTS_CONTAINER:-communityReports}"
 COVARIATES_CONTAINER="${COVARIATES_CONTAINER:-covariates}"
 
 BLOB_CONTAINERS=("gtog-input" "gtog-output" "gtog-cache" "gtog-logs")
+QUEUE_NAMES=("indexing-jobs")
 
 echo ">>> Setting subscription: ${SUBSCRIPTION}"
 az account set --subscription "${SUBSCRIPTION}"
@@ -62,6 +63,14 @@ echo ">>> Ensuring blob containers"
 for container in "${BLOB_CONTAINERS[@]}"; do
   az storage container create \
     --name "${container}" \
+    --connection-string "${STORAGE_CONNECTION_STRING}" \
+    --output none
+done
+
+echo ">>> Ensuring storage queues"
+for queue_name in "${QUEUE_NAMES[@]}"; do
+  az storage queue create \
+    --name "${queue_name}" \
     --connection-string "${STORAGE_CONNECTION_STRING}" \
     --output none
 done
@@ -176,6 +185,7 @@ echo "Add these to backend/.env:"
 echo "AZURE_STORAGE_CONNECTION_STRING=\"${STORAGE_CONNECTION_STRING}\""
 echo "AZURE_STORAGE_ACCOUNT_NAME=\"${STORAGE_ACCOUNT}\""
 echo "AZURE_STORAGE_ACCOUNT_KEY=\"${STORAGE_ACCOUNT_KEY}\""
+echo "AZURE_STORAGE_QUEUE_NAME=\"indexing-jobs\""
 echo "AZURE_SEARCH_ENDPOINT=\"${SEARCH_ENDPOINT}\""
 echo "AZURE_SEARCH_API_KEY=\"${SEARCH_API_KEY}\""
 echo "AZURE_COSMOS_CONNECTION_STRING=\"${COSMOS_CONNECTION_STRING}\""
