@@ -332,6 +332,7 @@ def get_tog_search_engine(
     config: GraphRagConfig,
     entities: list[Entity],
     relationships: list[Relationship],
+    text_units: list[TextUnit],
     response_type: str,
     callbacks: list[QueryCallbacks] | None = None,
     entity_text_embeddings: BaseVectorStore | None = None,
@@ -339,7 +340,9 @@ def get_tog_search_engine(
     """Create a ToG search engine based on data + configuration."""
     # Create entity embedding store if not provided
     if entity_text_embeddings is None:
-        vector_store_args = config.vector_store.model_dump()
+        vector_store_args = {
+            index: store.model_dump() for index, store in config.vector_store.items()
+        }
         entity_text_embeddings = get_embedding_store(
             config_args=vector_store_args,
             embedding_name=entity_description_embedding,
@@ -411,6 +414,7 @@ def get_tog_search_engine(
         model=chat_model,
         entities=entities,
         relationships=relationships,
+        text_units=text_units,
         tokenizer=tokenizer,
         pruning_strategy=pruning_strategy,
         reasoning_module=reasoning_module,

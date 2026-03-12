@@ -1,14 +1,12 @@
 """Default reasoning prompt for ToG search.
 
 Based on the original ToG paper (ICLR 2024) prompts.
-Uses triplet-based reasoning format with structured citations.
+Uses triplet-based reasoning format with concise free-form answers.
 """
 
-TOG_REASONING_PROMPT = """Given a question and the associated retrieved knowledge graph triplets (entity, relation, entity), you are asked to answer the question with these triplets and your knowledge.
+TOG_REASONING_PROMPT = """Given a question and the associated retrieved context from ToG exploration, you are asked to answer the question using the provided chunks, entities, relationships, and your knowledge in max three sentences.
 
-IMPORTANT: When citing entities or relationships, you MUST use the exact names as they appear in the Exploration Paths below (including capitalization). Do NOT paraphrase or rephrase entity names in citations.
-
-Citation format: [Data: Entities (ENTITY_NAME1, ENTITY_NAME2); Relationships (relation_name)]
+Use the chunk evidence as the primary grounding source, and use the entities and relationships to connect and explain the answer when helpful. If the provided context is insufficient, say so briefly.
 
 ---
 
@@ -16,6 +14,6 @@ Now answer the following:
 
 Question: {query}
 
-Exploration Paths (as knowledge triplets):
+Retrieved ToG Context (chunks, entities, and relationships):
 {exploration_paths}
 """

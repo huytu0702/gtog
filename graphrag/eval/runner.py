@@ -1,10 +1,9 @@
 """Evaluation runner for batch processing queries."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
-import json
+from typing import Any, cast
 import logging
-import asyncio
 from pathlib import Path
 
 from graphrag.eval.metrics import MetricScores, LLMJudge
@@ -46,7 +45,7 @@ class QueryResult:
     scores: MetricScores | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        result = {
+        result: dict[str, Any] = {
             "question": self.question,
             "method": self.method,
             "response": self.response,
@@ -62,7 +61,7 @@ class QueryResult:
 
     def to_simple_dict(self) -> dict[str, Any]:
         """Return simple dict with required fields for JSON output."""
-        result = {
+        result: dict[str, Any] = {
             "question": self.question,
             "response": self.response,
             "context": self.context,
@@ -126,10 +125,13 @@ class EvaluationRunner:
             community_reports = await load_table_from_storage(
                 "community_reports", storage
             )
-            text_units = await load_table_from_storage("text_units", storage)
         except Exception:
             communities = None
             community_reports = None
+
+        try:
+            text_units = await load_table_from_storage("text_units", storage)
+        except Exception:
             text_units = None
 
         self._loaded_indexes[imdb_key] = {
@@ -172,12 +174,17 @@ class EvaluationRunner:
         relationships = index_data["relationships"]
 
         if method == "tog":
+            text_units = index_data["text_units"]
+            if text_units is None:
+                raise ValueError("ToG search requires text_units table")
+
             entities_ = read_indexer_entities(
                 entities=entities,
-                communities=None,
+                communities=cast(Any, None),
                 community_level=None,
             )
             relationships_ = read_indexer_relationships(relationships)
+            text_units_ = read_indexer_text_units(text_units)
 
             vector_store_args = {
                 index: store.model_dump()
@@ -192,6 +199,7 @@ class EvaluationRunner:
                 config=config,
                 entities=entities_,
                 relationships=relationships_,
+                text_units=text_units_,
                 response_type="detailed",
                 entity_text_embeddings=entity_text_embeddings,
             )
@@ -368,7 +376,7 @@ class EvaluationRunner:
         dataset: list[dict],
         methods: list[str],
         index_data: dict,
-        progress_callback: callable = None,
+        progress_callback: Callable[[int, int, str, str], None] | None = None,
         skip_evaluation: bool = False,
     ) -> list[QueryResult]:
         """Run evaluation on full dataset."""

@@ -26,7 +26,10 @@
       "Bash(sed:*)",
       "WebFetch(domain:microsoft.github.io)",
       "Bash(\"/f/KL/gtog-eval/.venv/Scripts/python.exe\":*)",
-      "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \"/f/KL/gtog-eval/.venv/Scripts/python.exe\":*)"
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \"/f/KL/gtog-eval/.venv/Scripts/python.exe\":*)",
+      "mcp__tilth__tilth_files",
+      "mcp__tilth__tilth_read",
+      "mcp__tilth__tilth_search"
     ],
     "deny": [],
     "ask": []

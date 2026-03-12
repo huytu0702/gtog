@@ -6,9 +6,11 @@ and relation/entity retrieval.
 
 import logging
 from typing import List, Tuple, Optional
+
 import numpy as np
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
+from graphrag.data_model.text_unit import TextUnit
 from graphrag.language_model.protocol.base import EmbeddingModel
 from graphrag.vector_stores.base import BaseVectorStore
 from .state import ExplorationNode, ToGSearchState
@@ -26,6 +28,7 @@ class GraphExplorer:
         self,
         entities: List[Entity],
         relationships: List[Relationship],
+        text_units: List[TextUnit] | None = None,
         embedding_model: Optional[EmbeddingModel] = None,
         entity_embedding_store: Optional[BaseVectorStore] = None,
     ):
@@ -42,6 +45,7 @@ class GraphExplorer:
         self.entities = {e.title: e for e in entities}
         self.entity_list = entities  # Keep original list for embedding
         self.relationships = relationships
+        self.text_units = {text_unit.id: text_unit for text_unit in (text_units or [])}
         self.embedding_model = embedding_model
         self.entity_embedding_store = entity_embedding_store
 
@@ -326,3 +330,41 @@ class GraphExplorer:
         For semantic matching, use find_starting_entities_semantic() instead.
         """
         return self.find_starting_entities_keyword(query, top_k)
+
+    def get_text_units_for_nodes(self, nodes: List[ExplorationNode]) -> List[TextUnit]:
+        """Collect deduplicated text units linked to explored entities and relationships."""
+        collected: dict[str, TextUnit] = {}
+
+        for node in nodes:
+            current = node
+            while current is not None:
+                entity = self.entities.get(current.entity_id)
+                if entity and entity.text_unit_ids:
+                    for text_unit_id in entity.text_unit_ids:
+                        text_unit = self.text_units.get(text_unit_id)
+                        if text_unit:
+                            collected[text_unit.id] = text_unit
+
+                if current.parent is not None:
+                    relationship = self._relation_index.get(
+                        (
+                            current.parent.entity_id,
+                            current.entity_id,
+                            current.relation_from_parent,
+                        )
+                    ) or self._relation_index.get(
+                        (
+                            current.entity_id,
+                            current.parent.entity_id,
+                            current.relation_from_parent,
+                        )
+                    )
+                    if relationship and relationship.text_unit_ids:
+                        for text_unit_id in relationship.text_unit_ids:
+                            text_unit = self.text_units.get(text_unit_id)
+                            if text_unit:
+                                collected[text_unit.id] = text_unit
+
+                current = current.parent
+
+        return list(collected.values())

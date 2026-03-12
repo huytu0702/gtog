@@ -57,7 +57,7 @@ async def test_semantic_pruning_returns_metrics():
         ("rel2 description", "target2", "INCOMING", 0.5),
     ]
 
-    scored, metrics = await pruning.score_relations(
+    _, metrics = await pruning.score_relations(
         query="test query",
         entity_name="TestEntity",
         relations=relations,
@@ -84,6 +84,37 @@ async def test_bm25_pruning_returns_metrics():
     assert isinstance(metrics, PruningMetrics)
     assert metrics.llm_calls == 0  # BM25 uses lexical matching, not LLM
     assert len(scored) == 2
+
+
+@pytest.mark.asyncio
+async def test_semantic_pruning_reloads_embeddings_when_entity_set_changes():
+    """SemanticPruning should reload cached embeddings when candidate ids change."""
+    mock_embedding_model = MagicMock()
+    mock_embedding_model.aembed = AsyncMock(return_value=np.array([1.0, 0.0]))
+    mock_embedding_model.aembed_batch = AsyncMock(side_effect=[
+        [np.array([1.0, 0.0])],
+        [np.array([1.0, 0.0]), np.array([0.0, 1.0])],
+    ])
+
+    pruning = SemanticPruning(embedding_model=mock_embedding_model)
+
+    first_scores, _ = await pruning.score_entities(
+        query="test query",
+        current_path="Root",
+        entities=[("e1", "Entity 1", "Desc 1")],
+    )
+    second_scores, _ = await pruning.score_entities(
+        query="test query",
+        current_path="Root -> Next",
+        entities=[
+            ("e2", "Entity 2", "Desc 2"),
+            ("e3", "Entity 3", "Desc 3"),
+        ],
+    )
+
+    assert len(first_scores) == 1
+    assert len(second_scores) == 2
+    assert mock_embedding_model.aembed_batch.await_count == 2
 
 
 def test_llm_pruning_parse_scores_rescales_probability_outputs():

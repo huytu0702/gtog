@@ -260,6 +260,7 @@ class SemanticPruning(PruningStrategy):
         self.entity_embedding_store = entity_embedding_store
         self._entity_embeddings: Optional[np.ndarray] = None
         self._entity_texts: Optional[List[str]] = None
+        self._entity_ids: Optional[List[str]] = None
 
     async def score_relations(
         self,
@@ -342,8 +343,9 @@ class SemanticPruning(PruningStrategy):
         self, entities: List[Tuple[str, str, str]]
     ) -> None:
         """Load pre-computed embeddings for entities."""
-        if self._entity_embeddings is not None:
-            return  # Already cached
+        entity_ids = [entity_id for entity_id, _, _ in entities]
+        if self._entity_embeddings is not None and self._entity_ids == entity_ids:
+            return
 
         # Priority 1: Use pre-computed embeddings from vector store
         if self.entity_embedding_store:
@@ -370,6 +372,7 @@ class SemanticPruning(PruningStrategy):
                         embeddings[idx] = emb
 
                 self._entity_embeddings = np.array(embeddings)
+                self._entity_ids = entity_ids
                 logger.debug(
                     f"Loaded embeddings for {len(self._entity_texts)} entities from vector store"
                 )
@@ -384,6 +387,7 @@ class SemanticPruning(PruningStrategy):
         embeddings = await self.embedding_model.aembed_batch(text_list=entity_texts)
         self._entity_embeddings = np.array(embeddings)
         self._entity_texts = entity_texts
+        self._entity_ids = entity_ids
         logger.debug(f"Computed embeddings for {len(self._entity_texts)} entities")
 
 

@@ -1234,6 +1234,7 @@ async def tog_search(
     config: GraphRagConfig,
     entities: pd.DataFrame,
     relationships: pd.DataFrame,
+    text_units: pd.DataFrame,
     query: str,
     conversation_history: ConversationHistory | None = None,
     callbacks: list[QueryCallbacks] | None = None,
@@ -1261,6 +1262,7 @@ async def tog_search(
 
     entities_ = read_indexer_entities(entities, communities=None, community_level=None)
     relationships_ = read_indexer_relationships(relationships)
+    text_units_ = read_indexer_text_units(text_units)
 
     # Load entity description embedding store
     vector_store_args = {}
@@ -1276,6 +1278,7 @@ async def tog_search(
         config=config,
         entities=entities_,
         relationships=relationships_,
+        text_units=text_units_,
         response_type="detailed",  # ToG always provides detailed responses
         callbacks=callbacks,
         entity_text_embeddings=entity_text_embeddings,
@@ -1290,6 +1293,7 @@ def tog_search_streaming(
     config: GraphRagConfig,
     entities: pd.DataFrame,
     relationships: pd.DataFrame,
+    text_units: pd.DataFrame,
     query: str,
     conversation_history: ConversationHistory | None = None,
     callbacks: list[QueryCallbacks] | None = None,
@@ -1313,6 +1317,7 @@ def tog_search_streaming(
 
     entities_ = read_indexer_entities(entities, communities=None, community_level=None)
     relationships_ = read_indexer_relationships(relationships)
+    text_units_ = read_indexer_text_units(text_units)
 
     # Load entity description embedding store
     vector_store_args = {}
@@ -1328,6 +1333,7 @@ def tog_search_streaming(
         config=config,
         entities=entities_,
         relationships=relationships_,
+        text_units=text_units_,
         response_type="detailed",  # ToG always provides detailed responses
         callbacks=callbacks,
         entity_text_embeddings=entity_text_embeddings,

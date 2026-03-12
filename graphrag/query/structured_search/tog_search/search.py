@@ -1,10 +1,11 @@
 import time
 from dataclasses import dataclass
-from typing import AsyncGenerator, List, Optional, Tuple, Union
+from typing import Any, AsyncGenerator, List, Optional, Tuple, Union, cast
 from graphrag.callbacks.query_callbacks import QueryCallbacks
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
+from graphrag.data_model.text_unit import TextUnit
 from graphrag.tokenizer.tokenizer import Tokenizer
 from graphrag.vector_stores.base import BaseVectorStore
 from graphrag.query.structured_search.base import SearchResult
@@ -67,6 +68,7 @@ class ToGSearch:
         model: ChatModel,
         entities: List[Entity],
         relationships: List[Relationship],
+        text_units: List[TextUnit],
         tokenizer: Tokenizer,
         pruning_strategy: PruningStrategy,
         reasoning_module: ToGReasoning,
@@ -83,6 +85,7 @@ class ToGSearch:
         self.explorer = GraphExplorer(
             entities,
             relationships,
+            text_units=text_units,
             embedding_model=embedding_model,
             entity_embedding_store=entity_text_embeddings,
         )
@@ -106,6 +109,7 @@ class ToGSearch:
 
         response_chunks: List[str] = []
         context_paths: List[str] = []
+        chunk_ids: List[str] = []
         context_text = ""
 
         async for (
@@ -113,25 +117,25 @@ class ToGSearch:
             paths,
             chunk_metrics,
             ctx_text,
+            ctx_chunk_ids,
         ) in self._stream_search_with_metrics(query, conversation_history):
             if chunk:
                 response_chunks.append(chunk)
-            if paths:
-                context_paths = paths
+            context_paths = paths
+            chunk_ids = ctx_chunk_ids
             if chunk_metrics:
                 if isinstance(chunk_metrics, PruningMetrics):
                     metrics.add_pruning(chunk_metrics)
                 elif isinstance(chunk_metrics, ReasoningMetrics):
                     metrics.add_reasoning(chunk_metrics)
-            if ctx_text:
-                context_text = ctx_text
+            context_text = ctx_text
 
         response = "".join(response_chunks)
         completion_time = time.time() - start_time
 
         return SearchResult(
             response=response,
-            context_data={"exploration_paths": context_paths},
+            context_data={"exploration_paths": context_paths, "chunks": chunk_ids},
             context_text=context_text,
             completion_time=completion_time,
             llm_calls=metrics.llm_calls,
@@ -157,7 +161,9 @@ class ToGSearch:
         conversation_history: ConversationHistory | None = None,
     ) -> AsyncGenerator[str, None]:
         """Perform ToG search with streaming output (backward compatible)."""
-        async for chunk, _, _, _ in self._stream_search_with_metrics(query, conversation_history):
+        async for chunk, _, _, _, _ in self._stream_search_with_metrics(
+            query, conversation_history
+        ):
             if chunk:  # Only yield non-empty chunks
                 yield chunk
 
@@ -166,7 +172,14 @@ class ToGSearch:
         query: str,
         conversation_history: ConversationHistory | None = None,
     ) -> AsyncGenerator[
-        Tuple[str, List[str], Union[PruningMetrics, ReasoningMetrics, None], str], None
+        Tuple[
+            str,
+            List[str],
+            Union[PruningMetrics, ReasoningMetrics, None],
+            str,
+            List[str],
+        ],
+        None,
     ]:
         """Perform ToG search with streaming output."""
         # Enrich query for entity linking with previous user questions
@@ -204,6 +217,7 @@ class ToGSearch:
                 [],
                 None,
                 "",
+                [],
             )
             return
 
@@ -264,7 +278,7 @@ class ToGSearch:
                 )
 
                 # Yield pruning metrics
-                yield ("", [], pruning_metrics, "")
+                yield ("", [], pruning_metrics, "", [])
 
                 # Keep top entities based on scores
                 scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
@@ -317,7 +331,7 @@ class ToGSearch:
                     current_path=current_path,
                     entities=entity_candidates,
                 )
-                yield ("", [], entity_metrics, "")
+                yield ("", [], entity_metrics, "", [])
 
                 # Create new exploration nodes with combined score.
                 for idx, (
@@ -365,24 +379,35 @@ class ToGSearch:
                             "",
                         )
 
+            frontier_nodes = state.get_current_frontier()
+            frontier_text_units = self.explorer.get_text_units_for_nodes(frontier_nodes)
+            frontier_chunk_ids = [text_unit.id for text_unit in frontier_text_units]
+
             # Check for early termination
             (
                 should_terminate,
                 answer,
                 early_term_metrics,
             ) = await self.reasoning_module.check_early_termination(
-                query, state.get_current_frontier(), conversation_history_context=history_context
+                query,
+                frontier_nodes,
+                conversation_history_context=history_context,
+                text_units=frontier_text_units,
             )
 
             if should_terminate and answer:
-                reasoning_paths = self.reasoning_module.get_reasoning_paths(
-                    state.get_current_frontier()
-                )
-                # Generate context_text for early termination
+                reasoning_paths = self.reasoning_module.get_reasoning_paths(frontier_nodes)
                 early_context_text = self.reasoning_module._format_paths(
-                    state.get_current_frontier()
+                    frontier_nodes,
+                    text_units=frontier_text_units,
                 )
-                yield (answer, reasoning_paths, early_term_metrics, early_context_text)
+                yield (
+                    answer,
+                    reasoning_paths,
+                    early_term_metrics,
+                    early_context_text,
+                    frontier_chunk_ids,
+                )
                 # Disabled debug output for early termination
                 if False:
                     yield (f"=== ToG EARLY TERMINATION ===\n", [], None, "")
@@ -395,7 +420,7 @@ class ToGSearch:
                     yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
                 return
             # Yield early termination metrics (non-terminating case)
-            yield ("", [], early_term_metrics, "")
+            yield ("", [], early_term_metrics, "", frontier_chunk_ids)
 
         # Generate final answer from explored paths
         all_paths = []
@@ -408,11 +433,16 @@ class ToGSearch:
                 [],
                 None,
                 "",
+                [],
             )
             return
 
-        # Generate rich context text with entity and relation descriptions
-        context_text = self.reasoning_module._format_paths(all_paths)
+        final_text_units = self.explorer.get_text_units_for_nodes(all_paths)
+        final_chunk_ids = [text_unit.id for text_unit in final_text_units]
+        context_text = self.reasoning_module._format_paths(
+            all_paths,
+            text_units=final_text_units,
+        )
 
         # Use reasoning module to generate final answer
         try:
@@ -420,10 +450,15 @@ class ToGSearch:
                 answer,
                 reasoning_paths,
                 answer_metrics,
-            ) = await self.reasoning_module.generate_answer(query, all_paths, conversation_history_context=history_context)
+            ) = await self.reasoning_module.generate_answer(
+                query,
+                all_paths,
+                conversation_history_context=history_context,
+                text_units=final_text_units,
+            )
 
             # Yield answer metrics with context_text
-            yield ("", reasoning_paths, answer_metrics, context_text)
+            yield ("", reasoning_paths, answer_metrics, context_text, final_chunk_ids)
 
             # Show exploration paths before answer
             # Disabled to only show final answer
@@ -474,7 +509,7 @@ class ToGSearch:
                         yield ("\n", [], None, "")
 
                 yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
-            yield (answer, reasoning_paths, None, context_text)
+            yield (answer, reasoning_paths, None, context_text, final_chunk_ids)
         except Exception as e:
             # Fallback response if reasoning fails
             paths_summary = "\n".join([
@@ -491,6 +526,7 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
                 [],
                 None,
                 "",
+                final_chunk_ids,
             )
 
     def _node_to_path_string(self, node: ExplorationNode) -> str:

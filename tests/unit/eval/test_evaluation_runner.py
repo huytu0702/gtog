@@ -4,7 +4,9 @@ Tests for EvaluationRunner class.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
 from graphrag.eval.runner import EvaluationRunner, QueryResult
+from graphrag.query.structured_search.base import SearchResult
 
 
 class AsyncIteratorMock:
@@ -328,3 +330,120 @@ async def test_query_result_to_simple_dict():
     assert simple_dict["llm_calls"] == 5
     assert simple_dict["prompt_tokens"] == 1000
     assert simple_dict["output_tokens"] == 200
+
+
+@pytest.mark.asyncio
+async def test_run_search_tog_passes_text_units_to_factory():
+    """_run_search should adapt and forward text units for ToG."""
+    runner = EvaluationRunner(config=MagicMock(), judge=MagicMock())
+
+    mock_config = MagicMock()
+    mock_store = MagicMock()
+    mock_store.model_dump.return_value = {"type": "lancedb"}
+    mock_config.vector_store = {"default": mock_store}
+
+    raw_entities = MagicMock()
+    raw_relationships = MagicMock()
+    raw_text_units = MagicMock()
+    adapted_entities = [MagicMock()]
+    adapted_relationships = [MagicMock()]
+    adapted_text_units = [MagicMock()]
+
+    mock_result = SearchResult(
+        response="answer",
+        context_data={},
+        context_text="=== CHUNKS ===\nchunk text",
+        completion_time=1.0,
+        llm_calls=1,
+        prompt_tokens=10,
+        output_tokens=5,
+    )
+    mock_engine = MagicMock()
+    mock_engine.search = AsyncMock(return_value=mock_result)
+
+    index_data = {
+        "config": mock_config,
+        "entities": raw_entities,
+        "relationships": raw_relationships,
+        "text_units": raw_text_units,
+    }
+
+    with (
+        patch("graphrag.query.indexer_adapters.read_indexer_entities", return_value=adapted_entities) as read_entities,
+        patch("graphrag.query.indexer_adapters.read_indexer_relationships", return_value=adapted_relationships) as read_relationships,
+        patch("graphrag.query.indexer_adapters.read_indexer_text_units", return_value=adapted_text_units) as read_text_units,
+        patch("graphrag.utils.api.get_embedding_store", return_value=MagicMock()) as get_embedding_store,
+        patch("graphrag.query.factory.get_tog_search_engine", return_value=mock_engine) as get_tog_search_engine,
+    ):
+        result = await runner._run_search("tog", "test query", index_data)
+
+    assert result is mock_result
+    read_entities.assert_called_once()
+    read_relationships.assert_called_once_with(raw_relationships)
+    read_text_units.assert_called_once_with(raw_text_units)
+    get_tog_search_engine.assert_called_once_with(
+        config=mock_config,
+        entities=adapted_entities,
+        relationships=adapted_relationships,
+        text_units=adapted_text_units,
+        response_type="detailed",
+        entity_text_embeddings=get_embedding_store.return_value,
+    )
+    mock_engine.search.assert_awaited_once_with(query="test query")
+
+
+@pytest.mark.asyncio
+async def test_run_search_tog_requires_text_units():
+    """_run_search should fail clearly when ToG text units are missing."""
+    runner = EvaluationRunner(config=MagicMock(), judge=MagicMock())
+
+    index_data = {
+        "config": MagicMock(),
+        "entities": MagicMock(),
+        "relationships": MagicMock(),
+        "text_units": None,
+    }
+
+    with pytest.raises(ValueError, match="ToG search requires text_units table"):
+        await runner._run_search("tog", "test query", index_data)
+
+
+@pytest.mark.asyncio
+async def test_load_index_preserves_text_units_when_community_tables_fail():
+    """_load_index should still load text units when community tables are unavailable."""
+    runner = EvaluationRunner(
+        config=MagicMock(),
+        judge=MagicMock(),
+        index_roots={"movie": "F:/KL/gtog-eval/eval/test_run_cli"},
+    )
+
+    mock_loaded_config = MagicMock()
+    mock_loaded_config.output = MagicMock()
+    mock_storage = MagicMock()
+    entities = MagicMock(name="entities")
+    relationships = MagicMock(name="relationships")
+    text_units = MagicMock(name="text_units")
+
+    async def fake_load_table(name, _storage):
+        if name == "entities":
+            return entities
+        if name == "relationships":
+            return relationships
+        if name == "communities":
+            raise RuntimeError("communities unavailable")
+        if name == "text_units":
+            return text_units
+        raise AssertionError(f"Unexpected table request: {name}")
+
+    with (
+        patch("graphrag.config.load_config.load_config", return_value=mock_loaded_config),
+        patch("graphrag.utils.api.create_storage_from_config", return_value=mock_storage),
+        patch("graphrag.utils.storage.load_table_from_storage", side_effect=fake_load_table),
+    ):
+        index_data = await runner._load_index("movie")
+
+    assert index_data["entities"] is entities
+    assert index_data["relationships"] is relationships
+    assert index_data["communities"] is None
+    assert index_data["community_reports"] is None
+    assert index_data["text_units"] is text_units

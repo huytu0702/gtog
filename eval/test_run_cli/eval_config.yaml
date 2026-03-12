@@ -6,7 +6,6 @@ indexes:
 
 methods:
   - tog
-  - local
 
 output:
   dir: "eval_results"
