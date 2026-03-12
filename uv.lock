@@ -360,6 +360,21 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-storage-queue"
+version = "12.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "cryptography" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/23/e3b46de244a133675c8c20f3ef2be6cbaf22a41f03e04e1cb2acd609bf5f/azure_storage_queue-12.15.0.tar.gz", hash = "sha256:4e01dcae5aefd0c463f7bae5c75c8a91f955c893f14ed7590fc0cd447ac4666d", size = 197521, upload-time = "2026-01-07T00:18:03.616Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/22/5da115105c9fe7e2fc11804018649b394f60a62735e19642acf336e3807a/azure_storage_queue-12.15.0-py3-none-any.whl", hash = "sha256:056cfce0cd60458f0b7653d804f639098b14593f843899c6c0fc65b3ebe61210", size = 187547, upload-time = "2026-01-07T00:18:05.23Z" },
+]
+
+[[package]]
 name = "babel"
 version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1220,6 +1235,7 @@ dependencies = [
     { name = "azure-keyvault-secrets" },
     { name = "azure-search-documents" },
     { name = "azure-storage-blob" },
+    { name = "azure-storage-queue" },
     { name = "devtools" },
     { name = "environs" },
     { name = "fnllm", extra = ["azure", "openai"] },
@@ -1279,6 +1295,7 @@ requires-dist = [
     { name = "azure-keyvault-secrets", specifier = ">=4.9.0" },
     { name = "azure-search-documents", specifier = ">=11.5.2" },
     { name = "azure-storage-blob", specifier = ">=12.24.0" },
+    { name = "azure-storage-queue", specifier = ">=12.12.0" },
     { name = "devtools", specifier = ">=0.12.2" },
     { name = "environs", specifier = ">=11.0.0" },
     { name = "fnllm", extras = ["azure", "openai"], specifier = ">=0.4.1" },

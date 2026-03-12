@@ -13,6 +13,12 @@ REQUIRED_STAGES = [
     "SmokeStaging",
     "ManualApproval",
     "DeployProduction",
+    "SmokeProductionCanary",
+    "RollbackProductionCanary",
+    "ObserveProductionCanary",
+    "ManualApprovalCanary",
+    "PromoteProductionFull",
+    "SmokeProductionFull",
 ]
 
 
@@ -71,20 +77,47 @@ def test_stage_dependencies_form_release_gate_chain():
     assert stages["SmokeStaging"]["dependsOn"] == ["DeployStaging"]
     assert stages["ManualApproval"]["dependsOn"] == ["SmokeStaging"]
     assert stages["DeployProduction"]["dependsOn"] == ["ManualApproval"]
+    assert stages["SmokeProductionCanary"]["dependsOn"] == ["DeployProduction"]
+    assert stages["RollbackProductionCanary"]["dependsOn"] == ["SmokeProductionCanary"]
+    assert stages["ObserveProductionCanary"]["dependsOn"] == ["SmokeProductionCanary"]
+    assert stages["ManualApprovalCanary"]["dependsOn"] == ["ObserveProductionCanary"]
+    assert stages["PromoteProductionFull"]["dependsOn"] == ["ManualApprovalCanary"]
+    assert stages["SmokeProductionFull"]["dependsOn"] == ["PromoteProductionFull"]
 
 
 
 def test_smoke_stage_publishes_required_evidence_artifacts():
     stage = _stage_map()["SmokeStaging"]
     publish_artifacts: list[str] = []
+    download_steps: list[dict] = []
+    run_step_index: int | None = None
+
     for job in stage["jobs"]:
-        for step in job.get("steps", []):
+        for step_index, step in enumerate(job.get("steps", [])):
             artifact_name = step.get("artifact")
             if isinstance(artifact_name, str):
                 publish_artifacts.append(artifact_name)
+            if step.get("task") == "DownloadPipelineArtifact@2":
+                download_steps.append(step)
+            if step.get("displayName") == "Run staging smoke gates":
+                run_step_index = step_index
+                assert step.get("env", {}).get("ROLLOUT_STATE_FILE") == "$(Pipeline.Workspace)/deploy-staging-log/rollout-state.json"
 
     assert "$(smokeStagingArtifactName)" in publish_artifacts
     assert "phase3-auth-origin-validation" in publish_artifacts
+    assert run_step_index is not None
+    assert any(
+        step.get("inputs", {}).get("artifactName") == "$(stagingDeployArtifactName)"
+        and step.get("inputs", {}).get("targetPath") == "$(Pipeline.Workspace)/deploy-staging-log"
+        for step in download_steps
+    )
+    assert any(
+        job_step.get("task") == "DownloadPipelineArtifact@2"
+        and job_step.get("inputs", {}).get("artifactName") == "$(stagingDeployArtifactName)"
+        and step_index < run_step_index
+        for job in stage["jobs"]
+        for step_index, job_step in enumerate(job.get("steps", []))
+    )
 
 
 
@@ -96,3 +129,55 @@ def test_production_stage_uses_built_artifacts_and_not_rebuilds():
 
     assert "DownloadPipelineArtifact@2" in task_names
     assert "docker build" not in combined_scripts
+
+
+def test_phase6_production_rollout_stages_publish_canary_and_full_evidence():
+    stages = _stage_map()
+
+    canary_artifacts = [
+        step.get("artifact")
+        for job in stages["SmokeProductionCanary"]["jobs"]
+        for step in job.get("steps", [])
+        if isinstance(step.get("artifact"), str)
+    ]
+    observation_artifacts = [
+        step.get("artifact")
+        for job in stages["ObserveProductionCanary"]["jobs"]
+        for step in job.get("steps", [])
+        if isinstance(step.get("artifact"), str)
+    ]
+    rollback_artifacts = [
+        step.get("artifact")
+        for job in stages["RollbackProductionCanary"]["jobs"]
+        for step in job.get("steps", [])
+        if isinstance(step.get("artifact"), str)
+    ]
+    full_artifacts = [
+        step.get("artifact")
+        for job in stages["SmokeProductionFull"]["jobs"]
+        for step in job.get("steps", [])
+        if isinstance(step.get("artifact"), str)
+    ]
+
+    assert "$(smokeProductionCanaryArtifactName)" in canary_artifacts
+    assert "$(phase3ProductionCanaryValidationArtifactName)" in canary_artifacts
+    assert "$(productionCanaryObservationArtifactName)" in observation_artifacts
+    assert "$(productionRolloutStateArtifactName)" in observation_artifacts
+    assert "$(productionRollbackArtifactName)" in rollback_artifacts
+    assert "$(smokeProductionFullArtifactName)" in full_artifacts
+    assert "$(phase3ProductionFullValidationArtifactName)" in full_artifacts
+
+
+def test_phase6_rollout_reuses_release_artifacts_without_rebuilds():
+    deploy_stage = _stage_map()["DeployProduction"]
+    promote_stage = _stage_map()["PromoteProductionFull"]
+    rollback_stage = _stage_map()["RollbackProductionCanary"]
+
+    deploy_scripts = "\n".join(_iter_step_values(deploy_stage["jobs"], "script")).lower()
+    promote_scripts = "\n".join(_iter_step_values(promote_stage["jobs"], "script")).lower()
+    rollback_scripts = "\n".join(_iter_step_values(rollback_stage["jobs"], "script")).lower()
+
+    assert "docker build" not in deploy_scripts
+    assert "docker build" not in promote_scripts
+    assert "docker build" not in rollback_scripts
+    assert 'cp "$(pipeline.workspace)/production-rollout-state/rollout-state.json" "$(build.artifactstagingdirectory)/production-rollout-state/rollout-state.json"' in promote_scripts

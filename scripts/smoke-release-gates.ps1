@@ -13,6 +13,10 @@ param(
     [string]$WrongAudienceToken = "",
     [string]$ProductionRejectionToken = "",
     [string]$ProbeOriginUrls = "",
+    [string]$SmokeArtifactName = "smoke-staging-report",
+    [string]$Phase3ValidationArtifactName = "phase3-auth-origin-validation",
+    [string]$SmokePhaseLabel = "staging",
+    [string]$RolloutStateFile = "",
     [string]$EvidenceDir = "",
     [string]$CollectionId = "",
     [string]$SampleQuery = "What does this collection contain?",
@@ -22,14 +26,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $EvidenceDir) {
-    $EvidenceDir = Join-Path (Get-Location) "artifacts/smoke-staging-report"
+    $EvidenceDir = Join-Path (Get-Location) "artifacts/$SmokeArtifactName"
 }
 if (-not $CollectionId) {
     $CollectionId = "smoke-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
 }
 
-$phase3ArtifactName = "phase3-auth-origin-validation"
-$smokeArtifactName = "smoke-staging-report"
+$phase3ArtifactName = $Phase3ValidationArtifactName
+$smokeArtifactName = $SmokeArtifactName
 $phase3OutputFile = Join-Path $EvidenceDir "$phase3ArtifactName.txt"
 $smokeReportFile = Join-Path $EvidenceDir "$smokeArtifactName.json"
 $uploadFile = Join-Path $EvidenceDir "smoke-upload.txt"
@@ -198,11 +202,19 @@ Add-Result -Name "sse" -Status "$([int]$sseResponse.StatusCode)"
     -ProductionRejectionToken $ProductionRejectionToken `
     -ProbeOriginUrls $ProbeOriginUrls *> $phase3OutputFile
 
-@{
+$payload = [ordered]@{
     artifact = $smokeArtifactName
+    phase = $SmokePhaseLabel
     collection_id = $CollectionId
     checks = $results
-} | ConvertTo-Json -Depth 10 | Set-Content -Path $smokeReportFile
+}
+if ($RolloutStateFile) {
+    $payload.rollout_state_file = $RolloutStateFile
+    if (Test-Path -Path $RolloutStateFile) {
+        $payload.rollout_state = Get-Content -Path $RolloutStateFile -Raw | ConvertFrom-Json -Depth 20
+    }
+}
+$payload | ConvertTo-Json -Depth 10 | Set-Content -Path $smokeReportFile
 
 Write-Host "Smoke report written to $smokeReportFile"
 Write-Host "Phase 3 validation evidence written to $phase3OutputFile"

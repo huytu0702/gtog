@@ -15,12 +15,14 @@ EXPECTED_ALLOWED_AUDIENCES="${EXPECTED_ALLOWED_AUDIENCES:-}"
 WRONG_AUDIENCE_TOKEN="${WRONG_AUDIENCE_TOKEN:-}"
 PRODUCTION_REJECTION_TOKEN="${PRODUCTION_REJECTION_TOKEN:-}"
 PROBE_ORIGIN_URLS="${PROBE_ORIGIN_URLS:-}"
-EVIDENCE_DIR="${EVIDENCE_DIR:-$(pwd)/artifacts/smoke-staging-report}"
+SMOKE_ARTIFACT_NAME="${SMOKE_ARTIFACT_NAME:-smoke-staging-report}"
+PHASE3_VALIDATION_ARTIFACT_NAME="${PHASE3_VALIDATION_ARTIFACT_NAME:-phase3-auth-origin-validation}"
+SMOKE_PHASE_LABEL="${SMOKE_PHASE_LABEL:-staging}"
+ROLLOUT_STATE_FILE="${ROLLOUT_STATE_FILE:-}"
+EVIDENCE_DIR="${EVIDENCE_DIR:-$(pwd)/artifacts/${SMOKE_ARTIFACT_NAME}}"
 COLLECTION_ID="${COLLECTION_ID:-smoke-$(date +%s)}"
 SAMPLE_QUERY="${SAMPLE_QUERY:-What does this collection contain?}"
 TUNNEL_SECRET_REF_NAME="${TUNNEL_SECRET_REF_NAME:-tunnel-token}"
-PHASE3_VALIDATION_ARTIFACT="phase3-auth-origin-validation"
-SMOKE_STAGING_ARTIFACT="smoke-staging-report"
 
 require_var() {
   local name="$1"
@@ -105,8 +107,8 @@ api_status() {
 
 mkdir -p "$EVIDENCE_DIR"
 RESULTS=()
-PHASE3_OUTPUT_FILE="$EVIDENCE_DIR/${PHASE3_VALIDATION_ARTIFACT}.txt"
-SMOKE_REPORT_FILE="$EVIDENCE_DIR/${SMOKE_STAGING_ARTIFACT}.json"
+PHASE3_OUTPUT_FILE="$EVIDENCE_DIR/${PHASE3_VALIDATION_ARTIFACT_NAME}.txt"
+SMOKE_REPORT_FILE="$EVIDENCE_DIR/${SMOKE_ARTIFACT_NAME}.json"
 UPLOAD_FILE="$EVIDENCE_DIR/smoke-upload.txt"
 SSE_FILE="$EVIDENCE_DIR/sse-output.txt"
 
@@ -227,10 +229,35 @@ PROBE_ORIGIN_URLS="$PROBE_ORIGIN_URLS" \
 TUNNEL_SECRET_REF_NAME="$TUNNEL_SECRET_REF_NAME" \
 bash "$(dirname "$0")/validate-aca-phase3-auth.sh" > "$PHASE3_OUTPUT_FILE" 2>&1
 
-printf '{\n  "artifact": "%s",\n  "collection_id": "%s",\n  "checks": [\n    %s\n  ]\n}\n' \
-  "$SMOKE_STAGING_ARTIFACT" \
-  "$COLLECTION_ID" \
-  "$(IFS=,; echo "${RESULTS[*]}")" > "$SMOKE_REPORT_FILE"
+RESULTS_JSON="[$(IFS=,; echo "${RESULTS[*]}")]"
+export RESULTS_JSON
+python - "$SMOKE_REPORT_FILE" "$SMOKE_ARTIFACT_NAME" "$COLLECTION_ID" "$SMOKE_PHASE_LABEL" "$ROLLOUT_STATE_FILE" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+report_path = Path(sys.argv[1])
+artifact_name = sys.argv[2]
+collection_id = sys.argv[3]
+phase_label = sys.argv[4]
+rollout_state_file = sys.argv[5]
+results = json.loads(os.environ.get("RESULTS_JSON", "[]"))
+
+payload = {
+    "artifact": artifact_name,
+    "phase": phase_label,
+    "collection_id": collection_id,
+    "checks": results,
+}
+if rollout_state_file:
+    payload["rollout_state_file"] = rollout_state_file
+    rollout_path = Path(rollout_state_file)
+    if rollout_path.exists():
+        payload["rollout_state"] = json.loads(rollout_path.read_text(encoding="utf-8"))
+
+report_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
 
 echo "Smoke report written to $SMOKE_REPORT_FILE"
 echo "Phase 3 validation evidence written to $PHASE3_OUTPUT_FILE"

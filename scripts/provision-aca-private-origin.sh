@@ -22,6 +22,22 @@ TUNNEL_SECRET_REF_NAME="${TUNNEL_SECRET_REF_NAME:-tunnel-token}"
 API_IMAGE="${API_IMAGE:-}"
 WORKER_IMAGE="${WORKER_IMAGE:-}"
 TUNNEL_IMAGE="${TUNNEL_IMAGE:-cloudflare/cloudflared:latest}"
+API_CPU="${API_CPU:-1.0}"
+API_MEMORY="${API_MEMORY:-2.0Gi}"
+API_MIN_REPLICAS="${API_MIN_REPLICAS:-1}"
+API_MAX_REPLICAS="${API_MAX_REPLICAS:-2}"
+WORKER_CPU="${WORKER_CPU:-1.0}"
+WORKER_MEMORY="${WORKER_MEMORY:-2.0Gi}"
+WORKER_MIN_REPLICAS="${WORKER_MIN_REPLICAS:-1}"
+WORKER_MAX_REPLICAS="${WORKER_MAX_REPLICAS:-1}"
+TUNNEL_CPU="${TUNNEL_CPU:-0.5}"
+TUNNEL_MEMORY="${TUNNEL_MEMORY:-1.0Gi}"
+TUNNEL_MIN_REPLICAS="${TUNNEL_MIN_REPLICAS:-2}"
+TUNNEL_MAX_REPLICAS="${TUNNEL_MAX_REPLICAS:-2}"
+ROLLOUT_MODE="${ROLLOUT_MODE:-reconcile}"
+CANARY_TRAFFIC_PERCENT="${CANARY_TRAFFIC_PERCENT:-10}"
+STABLE_TRAFFIC_PERCENT="${STABLE_TRAFFIC_PERCENT:-90}"
+ROLLOUT_STATE_FILE="${ROLLOUT_STATE_FILE:-}"
 USER_ASSIGNED_IDENTITY_NAME="${USER_ASSIGNED_IDENTITY_NAME:-}"
 KEY_VAULT_NAME="${KEY_VAULT_NAME:-}"
 TUNNEL_TOKEN="${TUNNEL_TOKEN:-}"
@@ -178,11 +194,21 @@ PY
 }
 
 ensure_api_ingress_contract() {
-  az containerapp update \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$API_APP_NAME" \
-    --set-env-vars "APP_ROLE=api" \
+  local api_args=(
+    containerapp update
+    --resource-group "$RESOURCE_GROUP"
+    --name "$API_APP_NAME"
+    --cpu "$API_CPU"
+    --memory "$API_MEMORY"
+    --min-replicas "$API_MIN_REPLICAS"
+    --max-replicas "$API_MAX_REPLICAS"
+    --set-env-vars "APP_ROLE=api"
     --output none
+  )
+  if [[ -n "$API_IMAGE" ]]; then
+    api_args+=(--image "$API_IMAGE")
+  fi
+  az "${api_args[@]}"
 
   az containerapp ingress enable \
     --resource-group "$RESOURCE_GROUP" \
@@ -194,11 +220,21 @@ ensure_api_ingress_contract() {
 }
 
 ensure_worker_ingress_contract() {
-  az containerapp update \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$WORKER_APP_NAME" \
-    --set-env-vars "APP_ROLE=worker" \
+  local worker_args=(
+    containerapp update
+    --resource-group "$RESOURCE_GROUP"
+    --name "$WORKER_APP_NAME"
+    --cpu "$WORKER_CPU"
+    --memory "$WORKER_MEMORY"
+    --min-replicas "$WORKER_MIN_REPLICAS"
+    --max-replicas "$WORKER_MAX_REPLICAS"
+    --set-env-vars "APP_ROLE=worker"
     --output none
+  )
+  if [[ -n "$WORKER_IMAGE" ]]; then
+    worker_args+=(--image "$WORKER_IMAGE")
+  fi
+  az "${worker_args[@]}"
 
   az containerapp ingress disable \
     --resource-group "$RESOURCE_GROUP" \
@@ -223,10 +259,10 @@ ensure_tunnel_connector_contract() {
     --resource-group "$RESOURCE_GROUP" \
     --name "$TUNNEL_APP_NAME" \
     --image "$TUNNEL_IMAGE" \
-    --cpu 0.5 \
-    --memory 1.0Gi \
-    --min-replicas 2 \
-    --max-replicas 2 \
+    --cpu "$TUNNEL_CPU" \
+    --memory "$TUNNEL_MEMORY" \
+    --min-replicas "$TUNNEL_MIN_REPLICAS" \
+    --max-replicas "$TUNNEL_MAX_REPLICAS" \
     --set-env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
     --command /bin/sh \
     --args "-c" "cloudflared tunnel --no-autoupdate run --token \"\$TUNNEL_TOKEN\"" \
@@ -236,6 +272,184 @@ ensure_tunnel_connector_contract() {
     --resource-group "$RESOURCE_GROUP" \
     --name "$TUNNEL_APP_NAME" \
     --output none
+}
+
+write_rollout_state() {
+  local rollout_mode="$1"
+  local stable_revision="$2"
+  local candidate_revision="$3"
+
+  if [[ -z "$ROLLOUT_STATE_FILE" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$ROLLOUT_STATE_FILE")"
+  python - "$ROLLOUT_STATE_FILE" "$rollout_mode" "$stable_revision" "$candidate_revision" "$CANARY_TRAFFIC_PERCENT" "$STABLE_TRAFFIC_PERCENT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+state_path = Path(sys.argv[1])
+state_path.write_text(
+    json.dumps(
+        {
+            "rollout_mode": sys.argv[2],
+            "stable_revision": sys.argv[3],
+            "candidate_revision": sys.argv[4],
+            "canary_traffic_percent": int(sys.argv[5]),
+            "stable_traffic_percent": int(sys.argv[6]),
+        },
+        indent=2,
+    ) + "\n",
+    encoding="utf-8",
+)
+PY
+}
+
+latest_revision_name() {
+  az containerapp revision list \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --query "sort_by([].{name:name, created:properties.createdTime}, &created)[-1].name" \
+    --output tsv
+}
+
+stable_revision_name() {
+  local candidate_revision="$1"
+  local stable_revision
+  stable_revision="$({
+    az containerapp revision list \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$API_APP_NAME" \
+      --query "sort_by([?name!='${candidate_revision}'].{name:name, created:properties.createdTime}, &created)[-1].name" \
+      --output tsv
+  } || true)"
+  if [[ -n "$stable_revision" ]]; then
+    printf '%s' "$stable_revision"
+  else
+    printf '%s' "$candidate_revision"
+  fi
+}
+
+read_rollout_state_field() {
+  local field_name="$1"
+  if [[ -z "$ROLLOUT_STATE_FILE" || ! -f "$ROLLOUT_STATE_FILE" ]]; then
+    echo "ROLLOUT_STATE_FILE is required for ${ROLLOUT_MODE} rollout mode" >&2
+    exit 1
+  fi
+
+  python - "$ROLLOUT_STATE_FILE" "$field_name" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+print(payload.get(sys.argv[2], ""))
+PY
+}
+
+validate_rollout_percentages() {
+  if ! [[ "$CANARY_TRAFFIC_PERCENT" =~ ^[0-9]+$ ]]; then
+    echo "CANARY_TRAFFIC_PERCENT must be an integer between 0 and 100" >&2
+    exit 1
+  fi
+
+  if ! [[ "$STABLE_TRAFFIC_PERCENT" =~ ^[0-9]+$ ]]; then
+    echo "STABLE_TRAFFIC_PERCENT must be an integer between 0 and 100" >&2
+    exit 1
+  fi
+
+  if (( CANARY_TRAFFIC_PERCENT < 0 || CANARY_TRAFFIC_PERCENT > 100 )); then
+    echo "CANARY_TRAFFIC_PERCENT must be between 0 and 100" >&2
+    exit 1
+  fi
+
+  if (( STABLE_TRAFFIC_PERCENT < 0 || STABLE_TRAFFIC_PERCENT > 100 )); then
+    echo "STABLE_TRAFFIC_PERCENT must be between 0 and 100" >&2
+    exit 1
+  fi
+
+  if (( CANARY_TRAFFIC_PERCENT + STABLE_TRAFFIC_PERCENT != 100 )); then
+    echo "CANARY_TRAFFIC_PERCENT and STABLE_TRAFFIC_PERCENT must sum to 100" >&2
+    exit 1
+  fi
+}
+
+apply_canary_traffic_split() {
+  local candidate_revision="$1"
+  local stable_revision="$2"
+
+  validate_rollout_percentages
+
+  if [[ "$stable_revision" == "$candidate_revision" ]]; then
+    echo "No previous stable revision found for canary traffic split" >&2
+    exit 1
+  fi
+
+  az containerapp revision set-mode \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --mode multiple \
+    --output none
+  az containerapp revision activate \
+    --resource-group "$RESOURCE_GROUP" \
+    --revision "$stable_revision" \
+    --output none
+  az containerapp revision activate \
+    --resource-group "$RESOURCE_GROUP" \
+    --revision "$candidate_revision" \
+    --output none
+  az containerapp ingress traffic set \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --revision-weight "${stable_revision}=${STABLE_TRAFFIC_PERCENT}" "${candidate_revision}=${CANARY_TRAFFIC_PERCENT}" \
+    --output none
+
+  write_rollout_state "canary" "$stable_revision" "$candidate_revision"
+}
+
+promote_full_traffic() {
+  local stable_revision="$1"
+  local candidate_revision="$2"
+
+  az containerapp revision set-mode \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --mode multiple \
+    --output none
+  az containerapp revision activate \
+    --resource-group "$RESOURCE_GROUP" \
+    --revision "$candidate_revision" \
+    --output none
+  az containerapp ingress traffic set \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --revision-weight "${candidate_revision}=100" \
+    --output none
+
+  write_rollout_state "promote" "$stable_revision" "$candidate_revision"
+}
+
+rollback_to_stable() {
+  local stable_revision="$1"
+  local candidate_revision="$2"
+
+  az containerapp revision set-mode \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --mode multiple \
+    --output none
+  az containerapp revision activate \
+    --resource-group "$RESOURCE_GROUP" \
+    --revision "$stable_revision" \
+    --output none
+  az containerapp ingress traffic set \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --revision-weight "${stable_revision}=100" "${candidate_revision}=0" \
+    --output none
+
+  write_rollout_state "rollback" "$stable_revision" "$candidate_revision"
 }
 
 ensure_entra_app_contract() {
@@ -641,301 +855,328 @@ echo ">>> Setting subscription: ${SUBSCRIPTION}"
 az account set --subscription "$SUBSCRIPTION"
 ACCOUNT_TENANT_ID="$(az account show --query tenantId --output tsv)"
 
-echo ">>> Registering providers"
-az provider register --namespace Microsoft.App --wait --output none
-az provider register --namespace Microsoft.OperationalInsights --wait --output none
-az provider register --namespace Microsoft.Network --wait --output none
+if [[ "$ROLLOUT_MODE" == "promote" || "$ROLLOUT_MODE" == "rollback" ]]; then
+  STABLE_REVISION="$(read_rollout_state_field stable_revision)"
+  CANDIDATE_REVISION="$(read_rollout_state_field candidate_revision)"
+else
+  echo ">>> Registering providers"
+  az provider register --namespace Microsoft.App --wait --output none
+  az provider register --namespace Microsoft.OperationalInsights --wait --output none
+  az provider register --namespace Microsoft.Network --wait --output none
 
-echo ">>> Ensuring resource group: ${RESOURCE_GROUP}"
-az group create \
-  --name "$RESOURCE_GROUP" \
-  --location "$LOCATION" \
-  --output none
-
-echo ">>> Ensuring Log Analytics workspace: ${LOG_ANALYTICS_WORKSPACE}"
-if ! az monitor log-analytics workspace show \
-  --resource-group "$RESOURCE_GROUP" \
-  --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
-  --output none 2>/dev/null; then
-  az monitor log-analytics workspace create \
-    --resource-group "$RESOURCE_GROUP" \
-    --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
+  echo ">>> Ensuring resource group: ${RESOURCE_GROUP}"
+  az group create \
+    --name "$RESOURCE_GROUP" \
     --location "$LOCATION" \
     --output none
-fi
 
-WORKSPACE_ID="$(
-  az monitor log-analytics workspace show \
+  echo ">>> Ensuring Log Analytics workspace: ${LOG_ANALYTICS_WORKSPACE}"
+  if ! az monitor log-analytics workspace show \
     --resource-group "$RESOURCE_GROUP" \
     --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
-    --query customerId \
-    --output tsv
-)"
-WORKSPACE_KEY="$(
-  az monitor log-analytics workspace get-shared-keys \
-    --resource-group "$RESOURCE_GROUP" \
-    --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
-    --query primarySharedKey \
-    --output tsv
-)"
+    --output none 2>/dev/null; then
+    az monitor log-analytics workspace create \
+      --resource-group "$RESOURCE_GROUP" \
+      --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
+      --location "$LOCATION" \
+      --output none
+  fi
 
-echo ">>> Ensuring VNet: ${VNET_NAME}"
-if ! az network vnet show \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "$VNET_NAME" \
-  --output none 2>/dev/null; then
-  az network vnet create \
+  WORKSPACE_ID="$(
+    az monitor log-analytics workspace show \
+      --resource-group "$RESOURCE_GROUP" \
+      --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
+      --query customerId \
+      --output tsv
+  )"
+  WORKSPACE_KEY="$(
+    az monitor log-analytics workspace get-shared-keys \
+      --resource-group "$RESOURCE_GROUP" \
+      --workspace-name "$LOG_ANALYTICS_WORKSPACE" \
+      --query primarySharedKey \
+      --output tsv
+  )"
+
+  echo ">>> Ensuring VNet: ${VNET_NAME}"
+  if ! az network vnet show \
     --resource-group "$RESOURCE_GROUP" \
     --name "$VNET_NAME" \
-    --location "$LOCATION" \
-    --address-prefixes "10.30.0.0/16" \
-    --output none
-fi
+    --output none 2>/dev/null; then
+    az network vnet create \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$VNET_NAME" \
+      --location "$LOCATION" \
+      --address-prefixes "10.30.0.0/16" \
+      --output none
+  fi
 
-echo ">>> Ensuring infrastructure subnet"
-ensure_subnet "$INFRASTRUCTURE_SUBNET_NAME" "$INFRASTRUCTURE_SUBNET_PREFIX" "Microsoft.App/environments"
+  echo ">>> Ensuring infrastructure subnet"
+  ensure_subnet "$INFRASTRUCTURE_SUBNET_NAME" "$INFRASTRUCTURE_SUBNET_PREFIX" "Microsoft.App/environments"
 
-echo ">>> Ensuring private endpoint subnet"
-ensure_subnet "$PRIVATE_ENDPOINT_SUBNET_NAME" "$PRIVATE_ENDPOINT_SUBNET_PREFIX" ""
-az network vnet subnet update \
-  --resource-group "$RESOURCE_GROUP" \
-  --vnet-name "$VNET_NAME" \
-  --name "$PRIVATE_ENDPOINT_SUBNET_NAME" \
-  --disable-private-endpoint-network-policies true \
-  --output none
-
-INFRA_SUBNET_ID="$(
-  az network vnet subnet show \
-    --resource-group "$RESOURCE_GROUP" \
-    --vnet-name "$VNET_NAME" \
-    --name "$INFRASTRUCTURE_SUBNET_NAME" \
-    --query id \
-    --output tsv
-)"
-PRIVATE_ENDPOINT_SUBNET_ID="$(
-  az network vnet subnet show \
+  echo ">>> Ensuring private endpoint subnet"
+  ensure_subnet "$PRIVATE_ENDPOINT_SUBNET_NAME" "$PRIVATE_ENDPOINT_SUBNET_PREFIX" ""
+  az network vnet subnet update \
     --resource-group "$RESOURCE_GROUP" \
     --vnet-name "$VNET_NAME" \
     --name "$PRIVATE_ENDPOINT_SUBNET_NAME" \
-    --query id \
-    --output tsv
-)"
-
-echo ">>> Ensuring ACA environment: ${CONTAINER_APP_ENVIRONMENT}"
-if ! az containerapp env show \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "$CONTAINER_APP_ENVIRONMENT" \
-  --output none 2>/dev/null; then
-  az containerapp env create \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$CONTAINER_APP_ENVIRONMENT" \
-    --location "$LOCATION" \
-    --enable-workload-profiles true \
-    --infrastructure-resource-group "$INFRASTRUCTURE_RESOURCE_GROUP" \
-    --infrastructure-subnet-resource-id "$INFRA_SUBNET_ID" \
-    --internal-only true \
-    --logs-workspace-id "$WORKSPACE_ID" \
-    --logs-workspace-key "$WORKSPACE_KEY" \
+    --disable-private-endpoint-network-policies true \
     --output none
-fi
 
-ENVIRONMENT_ID="$(
-  az containerapp env show \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$CONTAINER_APP_ENVIRONMENT" \
-    --query id \
-    --output tsv
-)"
-DEFAULT_DOMAIN="$(
-  az containerapp env show \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$CONTAINER_APP_ENVIRONMENT" \
-    --query properties.defaultDomain \
-    --output tsv
-)"
-
-echo ">>> Disabling ACA public network access"
-az rest \
-  --method patch \
-  --uri "https://management.azure.com${ENVIRONMENT_ID}?api-version=2024-03-01" \
-  --body '{"properties":{"publicNetworkAccess":"Disabled"}}' \
-  --headers "Content-Type=application/json" \
-  --output none
-
-echo ">>> Ensuring private endpoint: ${PRIVATE_ENDPOINT_NAME}"
-if ! az network private-endpoint show \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "$PRIVATE_ENDPOINT_NAME" \
-  --output none 2>/dev/null; then
-  az network private-endpoint create \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$PRIVATE_ENDPOINT_NAME" \
-    --location "$LOCATION" \
-    --subnet "$PRIVATE_ENDPOINT_SUBNET_ID" \
-    --private-connection-resource-id "$ENVIRONMENT_ID" \
-    --group-id managedEnvironments \
-    --connection-name "${PRIVATE_ENDPOINT_NAME}-connection" \
-    --output none
-fi
-
-echo ">>> Ensuring private DNS zone: ${PRIVATE_DNS_ZONE}"
-if ! az network private-dns zone show \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "$PRIVATE_DNS_ZONE" \
-  --output none 2>/dev/null; then
-  az network private-dns zone create \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$PRIVATE_DNS_ZONE" \
-    --output none
-fi
-
-if ! az network private-dns link vnet show \
-  --resource-group "$RESOURCE_GROUP" \
-  --zone-name "$PRIVATE_DNS_ZONE" \
-  --name "$PRIVATE_DNS_LINK_NAME" \
-  --output none 2>/dev/null; then
-  az network private-dns link vnet create \
-    --resource-group "$RESOURCE_GROUP" \
-    --zone-name "$PRIVATE_DNS_ZONE" \
-    --name "$PRIVATE_DNS_LINK_NAME" \
-    --virtual-network "$VNET_NAME" \
-    --registration-enabled false \
-    --output none
-fi
-
-if ! az network private-endpoint dns-zone-group show \
-  --resource-group "$RESOURCE_GROUP" \
-  --endpoint-name "$PRIVATE_ENDPOINT_NAME" \
-  --name default \
-  --output none 2>/dev/null; then
-  az network private-endpoint dns-zone-group create \
-    --resource-group "$RESOURCE_GROUP" \
-    --endpoint-name "$PRIVATE_ENDPOINT_NAME" \
-    --name default \
-    --private-dns-zone "$PRIVATE_DNS_ZONE" \
-    --zone-name default \
-    --output none
-fi
-
-upsert_key_vault_secret "$KEY_VAULT_NAME" "$TUNNEL_TOKEN_SECRET_NAME" "$TUNNEL_TOKEN"
-upsert_key_vault_secret "$KEY_VAULT_NAME" "$EDGE_ORIGIN_SECRET_NAME" "$EDGE_ORIGIN_SECRET"
-
-if [[ -n "$USER_ASSIGNED_IDENTITY_NAME" ]]; then
-  IDENTITY_RESOURCE_ID="$(
-    az identity show \
+  INFRA_SUBNET_ID="$(
+    az network vnet subnet show \
       --resource-group "$RESOURCE_GROUP" \
-      --name "$USER_ASSIGNED_IDENTITY_NAME" \
+      --vnet-name "$VNET_NAME" \
+      --name "$INFRASTRUCTURE_SUBNET_NAME" \
       --query id \
       --output tsv
   )"
-  IDENTITY_PRINCIPAL_ID="$(
-    az identity show \
+  PRIVATE_ENDPOINT_SUBNET_ID="$(
+    az network vnet subnet show \
       --resource-group "$RESOURCE_GROUP" \
-      --name "$USER_ASSIGNED_IDENTITY_NAME" \
-      --query principalId \
+      --vnet-name "$VNET_NAME" \
+      --name "$PRIVATE_ENDPOINT_SUBNET_NAME" \
+      --query id \
       --output tsv
   )"
-fi
 
-if bool_true "$CREATE_APPS"; then
-  if [[ -z "$API_IMAGE" ]]; then
-    echo "API_IMAGE is required when CREATE_APPS=true" >&2
-    exit 1
-  fi
-  if [[ -z "$WORKER_IMAGE" ]]; then
-    echo "WORKER_IMAGE is required when CREATE_APPS=true" >&2
-    exit 1
-  fi
-  if [[ -z "$TUNNEL_TOKEN" ]]; then
-    echo "TUNNEL_TOKEN is required when CREATE_APPS=true" >&2
-    exit 1
-  fi
-
-  echo ">>> Ensuring API app: ${API_APP_NAME}"
-  if ! container_app_exists "$API_APP_NAME"; then
-    API_ARGS=(
-      containerapp create
-      --resource-group "$RESOURCE_GROUP"
-      --name "$API_APP_NAME"
-      --environment "$CONTAINER_APP_ENVIRONMENT"
-      --image "$API_IMAGE"
-      --ingress internal
-      --target-port 8000
-      --transport auto
-      --cpu 1.0
-      --memory 2.0Gi
-      --min-replicas 1
-      --max-replicas 2
-      --env-vars "APP_ROLE=api"
-      --output none
-    )
-    if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
-      API_ARGS+=(--user-assigned "$IDENTITY_RESOURCE_ID")
-    fi
-    az "${API_ARGS[@]}"
-  fi
-
-  echo ">>> Ensuring worker app: ${WORKER_APP_NAME}"
-  if ! container_app_exists "$WORKER_APP_NAME"; then
-    WORKER_ARGS=(
-      containerapp create
-      --resource-group "$RESOURCE_GROUP"
-      --name "$WORKER_APP_NAME"
-      --environment "$CONTAINER_APP_ENVIRONMENT"
-      --image "$WORKER_IMAGE"
-      --cpu 1.0
-      --memory 2.0Gi
-      --min-replicas 1
-      --max-replicas 1
-      --env-vars "APP_ROLE=worker"
-      --output none
-    )
-    if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
-      WORKER_ARGS+=(--user-assigned "$IDENTITY_RESOURCE_ID")
-    fi
-    az "${WORKER_ARGS[@]}"
-  fi
-
-  echo ">>> Ensuring tunnel connector app: ${TUNNEL_APP_NAME}"
-  if ! container_app_exists "$TUNNEL_APP_NAME"; then
-    az containerapp create \
+  echo ">>> Ensuring ACA environment: ${CONTAINER_APP_ENVIRONMENT}"
+  if ! az containerapp env show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$CONTAINER_APP_ENVIRONMENT" \
+    --output none 2>/dev/null; then
+    az containerapp env create \
       --resource-group "$RESOURCE_GROUP" \
-      --name "$TUNNEL_APP_NAME" \
-      --environment "$CONTAINER_APP_ENVIRONMENT" \
-      --image "$TUNNEL_IMAGE" \
-      --cpu 0.5 \
-      --memory 1.0Gi \
-      --min-replicas 2 \
-      --max-replicas 2 \
-      --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
-      --env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
-      --command /bin/sh \
-      --args -c 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"' \
+      --name "$CONTAINER_APP_ENVIRONMENT" \
+      --location "$LOCATION" \
+      --enable-workload-profiles true \
+      --infrastructure-resource-group "$INFRASTRUCTURE_RESOURCE_GROUP" \
+      --infrastructure-subnet-resource-id "$INFRA_SUBNET_ID" \
+      --internal-only true \
+      --logs-workspace-id "$WORKSPACE_ID" \
+      --logs-workspace-key "$WORKSPACE_KEY" \
       --output none
   fi
+
+  ENVIRONMENT_ID="$(
+    az containerapp env show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$CONTAINER_APP_ENVIRONMENT" \
+      --query id \
+      --output tsv
+  )"
+  DEFAULT_DOMAIN="$(
+    az containerapp env show \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$CONTAINER_APP_ENVIRONMENT" \
+      --query properties.defaultDomain \
+      --output tsv
+  )"
+
+  echo ">>> Disabling ACA public network access"
+  az rest \
+    --method patch \
+    --uri "https://management.azure.com${ENVIRONMENT_ID}?api-version=2024-03-01" \
+    --body '{"properties":{"publicNetworkAccess":"Disabled"}}' \
+    --headers "Content-Type=application/json" \
+    --output none
+
+  echo ">>> Ensuring private endpoint: ${PRIVATE_ENDPOINT_NAME}"
+  if ! az network private-endpoint show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$PRIVATE_ENDPOINT_NAME" \
+    --output none 2>/dev/null; then
+    az network private-endpoint create \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$PRIVATE_ENDPOINT_NAME" \
+      --location "$LOCATION" \
+      --subnet "$PRIVATE_ENDPOINT_SUBNET_ID" \
+      --private-connection-resource-id "$ENVIRONMENT_ID" \
+      --group-id managedEnvironments \
+      --connection-name "${PRIVATE_ENDPOINT_NAME}-connection" \
+      --output none
+  fi
+
+  echo ">>> Ensuring private DNS zone: ${PRIVATE_DNS_ZONE}"
+  if ! az network private-dns zone show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$PRIVATE_DNS_ZONE" \
+    --output none 2>/dev/null; then
+    az network private-dns zone create \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$PRIVATE_DNS_ZONE" \
+      --output none
+  fi
+
+  if ! az network private-dns link vnet show \
+    --resource-group "$RESOURCE_GROUP" \
+    --zone-name "$PRIVATE_DNS_ZONE" \
+    --name "$PRIVATE_DNS_LINK_NAME" \
+    --output none 2>/dev/null; then
+    az network private-dns link vnet create \
+      --resource-group "$RESOURCE_GROUP" \
+      --zone-name "$PRIVATE_DNS_ZONE" \
+      --name "$PRIVATE_DNS_LINK_NAME" \
+      --virtual-network "$VNET_NAME" \
+      --registration-enabled false \
+      --output none
+  fi
+
+  if ! az network private-endpoint dns-zone-group show \
+    --resource-group "$RESOURCE_GROUP" \
+    --endpoint-name "$PRIVATE_ENDPOINT_NAME" \
+    --name default \
+    --output none 2>/dev/null; then
+    az network private-endpoint dns-zone-group create \
+      --resource-group "$RESOURCE_GROUP" \
+      --endpoint-name "$PRIVATE_ENDPOINT_NAME" \
+      --name default \
+      --private-dns-zone "$PRIVATE_DNS_ZONE" \
+      --zone-name default \
+      --output none
+  fi
+
+  upsert_key_vault_secret "$KEY_VAULT_NAME" "$TUNNEL_TOKEN_SECRET_NAME" "$TUNNEL_TOKEN"
+  upsert_key_vault_secret "$KEY_VAULT_NAME" "$EDGE_ORIGIN_SECRET_NAME" "$EDGE_ORIGIN_SECRET"
+
+  if [[ -n "$USER_ASSIGNED_IDENTITY_NAME" ]]; then
+    IDENTITY_RESOURCE_ID="$(
+      az identity show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$USER_ASSIGNED_IDENTITY_NAME" \
+        --query id \
+        --output tsv
+    )"
+    IDENTITY_PRINCIPAL_ID="$(
+      az identity show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$USER_ASSIGNED_IDENTITY_NAME" \
+        --query principalId \
+        --output tsv
+    )"
+  fi
+
+  if bool_true "$CREATE_APPS"; then
+    if [[ -z "$API_IMAGE" ]]; then
+      echo "API_IMAGE is required when CREATE_APPS=true" >&2
+      exit 1
+    fi
+    if [[ -z "$WORKER_IMAGE" ]]; then
+      echo "WORKER_IMAGE is required when CREATE_APPS=true" >&2
+      exit 1
+    fi
+    if [[ -z "$TUNNEL_TOKEN" ]]; then
+      echo "TUNNEL_TOKEN is required when CREATE_APPS=true" >&2
+      exit 1
+    fi
+
+    echo ">>> Ensuring API app: ${API_APP_NAME}"
+    if ! container_app_exists "$API_APP_NAME"; then
+      API_ARGS=(
+        containerapp create
+        --resource-group "$RESOURCE_GROUP"
+        --name "$API_APP_NAME"
+        --environment "$CONTAINER_APP_ENVIRONMENT"
+        --image "$API_IMAGE"
+        --ingress internal
+        --target-port 8000
+        --transport auto
+        --cpu "$API_CPU"
+        --memory "$API_MEMORY"
+        --min-replicas "$API_MIN_REPLICAS"
+        --max-replicas "$API_MAX_REPLICAS"
+        --env-vars "APP_ROLE=api"
+        --output none
+      )
+      if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
+        API_ARGS+=(--user-assigned "$IDENTITY_RESOURCE_ID")
+      fi
+      az "${API_ARGS[@]}"
+    fi
+
+    echo ">>> Ensuring worker app: ${WORKER_APP_NAME}"
+    if ! container_app_exists "$WORKER_APP_NAME"; then
+      WORKER_ARGS=(
+        containerapp create
+        --resource-group "$RESOURCE_GROUP"
+        --name "$WORKER_APP_NAME"
+        --environment "$CONTAINER_APP_ENVIRONMENT"
+        --image "$WORKER_IMAGE"
+        --cpu "$WORKER_CPU"
+        --memory "$WORKER_MEMORY"
+        --min-replicas "$WORKER_MIN_REPLICAS"
+        --max-replicas "$WORKER_MAX_REPLICAS"
+        --env-vars "APP_ROLE=worker"
+        --output none
+      )
+      if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
+        WORKER_ARGS+=(--user-assigned "$IDENTITY_RESOURCE_ID")
+      fi
+      az "${WORKER_ARGS[@]}"
+    fi
+
+    echo ">>> Ensuring tunnel connector app: ${TUNNEL_APP_NAME}"
+    if ! container_app_exists "$TUNNEL_APP_NAME"; then
+      az containerapp create \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$TUNNEL_APP_NAME" \
+        --environment "$CONTAINER_APP_ENVIRONMENT" \
+        --image "$TUNNEL_IMAGE" \
+        --cpu "$TUNNEL_CPU" \
+        --memory "$TUNNEL_MEMORY" \
+        --min-replicas "$TUNNEL_MIN_REPLICAS" \
+        --max-replicas "$TUNNEL_MAX_REPLICAS" \
+        --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
+        --env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
+        --command /bin/sh \
+        --args -c 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"' \
+        --output none
+    fi
+  fi
+
+  if container_app_exists "$API_APP_NAME"; then
+    echo ">>> Reconciling API ingress and runtime role"
+    ensure_container_app_identity "$API_APP_NAME"
+    ensure_api_ingress_contract
+  fi
+
+  if container_app_exists "$WORKER_APP_NAME"; then
+    echo ">>> Reconciling worker ingress and runtime role"
+    ensure_container_app_identity "$WORKER_APP_NAME"
+    ensure_worker_ingress_contract
+  fi
+
+  if container_app_exists "$TUNNEL_APP_NAME"; then
+    echo ">>> Reconciling tunnel connector contract"
+    ensure_tunnel_connector_contract
+  fi
+
+  if bool_true "$CONFIGURE_EASY_AUTH"; then
+    configure_easy_auth
+    verify_phase3_contract
+  fi
+
+  CANDIDATE_REVISION="$(latest_revision_name)"
+  STABLE_REVISION="$(stable_revision_name "$CANDIDATE_REVISION")"
 fi
 
-if container_app_exists "$API_APP_NAME"; then
-  echo ">>> Reconciling API ingress and runtime role"
-  ensure_container_app_identity "$API_APP_NAME"
-  ensure_api_ingress_contract
-fi
-
-if container_app_exists "$WORKER_APP_NAME"; then
-  echo ">>> Reconciling worker ingress and runtime role"
-  ensure_container_app_identity "$WORKER_APP_NAME"
-  ensure_worker_ingress_contract
-fi
-
-if container_app_exists "$TUNNEL_APP_NAME"; then
-  echo ">>> Reconciling tunnel connector contract"
-  ensure_tunnel_connector_contract
-fi
-
-if bool_true "$CONFIGURE_EASY_AUTH"; then
-  configure_easy_auth
-  verify_phase3_contract
-fi
+case "$ROLLOUT_MODE" in
+  canary)
+    apply_canary_traffic_split "$CANDIDATE_REVISION" "$STABLE_REVISION"
+    ;;
+  promote)
+    promote_full_traffic "$STABLE_REVISION" "$CANDIDATE_REVISION"
+    ;;
+  rollback)
+    rollback_to_stable "$STABLE_REVISION" "$CANDIDATE_REVISION"
+    ;;
+  reconcile)
+    write_rollout_state "reconcile" "$STABLE_REVISION" "$CANDIDATE_REVISION"
+    ;;
+  *)
+    echo "Unsupported ROLLOUT_MODE: $ROLLOUT_MODE" >&2
+    exit 1
+    ;;
+esac
 
 echo
 

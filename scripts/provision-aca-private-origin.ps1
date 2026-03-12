@@ -20,6 +20,23 @@ param(
     [string]$ApiImage = "",
     [string]$WorkerImage = "",
     [string]$TunnelImage = "cloudflare/cloudflared:latest",
+    [string]$ApiCpu = "1.0",
+    [string]$ApiMemory = "2.0Gi",
+    [string]$ApiMinReplicas = "1",
+    [string]$ApiMaxReplicas = "2",
+    [string]$WorkerCpu = "1.0",
+    [string]$WorkerMemory = "2.0Gi",
+    [string]$WorkerMinReplicas = "1",
+    [string]$WorkerMaxReplicas = "1",
+    [string]$TunnelCpu = "0.5",
+    [string]$TunnelMemory = "1.0Gi",
+    [string]$TunnelMinReplicas = "2",
+    [string]$TunnelMaxReplicas = "2",
+    [ValidateSet("reconcile", "canary", "promote", "rollback")]
+    [string]$RolloutMode = "reconcile",
+    [int]$CanaryTrafficPercent = 10,
+    [int]$StableTrafficPercent = 90,
+    [string]$RolloutStateFile = "",
     [string]$UserAssignedIdentityName = "",
     [string]$KeyVaultName = "",
     [string]$TunnelToken = "",
@@ -192,11 +209,21 @@ function Ensure-ContainerAppIdentity {
 }
 
 function Ensure-ApiIngressContract {
-    az containerapp update `
-        --resource-group $ResourceGroup `
-        --name $ApiAppName `
-        --set-env-vars "APP_ROLE=api" `
-        --output none | Out-Null
+    $apiArgs = @(
+        "containerapp", "update",
+        "--resource-group", $ResourceGroup,
+        "--name", $ApiAppName,
+        "--cpu", $ApiCpu,
+        "--memory", $ApiMemory,
+        "--min-replicas", $ApiMinReplicas,
+        "--max-replicas", $ApiMaxReplicas,
+        "--set-env-vars", "APP_ROLE=api",
+        "--output", "none"
+    )
+    if ($ApiImage) {
+        $apiArgs += @("--image", $ApiImage)
+    }
+    az @apiArgs | Out-Null
 
     az containerapp ingress enable `
         --resource-group $ResourceGroup `
@@ -208,11 +235,21 @@ function Ensure-ApiIngressContract {
 }
 
 function Ensure-WorkerIngressContract {
-    az containerapp update `
-        --resource-group $ResourceGroup `
-        --name $WorkerAppName `
-        --set-env-vars "APP_ROLE=worker" `
-        --output none | Out-Null
+    $workerArgs = @(
+        "containerapp", "update",
+        "--resource-group", $ResourceGroup,
+        "--name", $WorkerAppName,
+        "--cpu", $WorkerCpu,
+        "--memory", $WorkerMemory,
+        "--min-replicas", $WorkerMinReplicas,
+        "--max-replicas", $WorkerMaxReplicas,
+        "--set-env-vars", "APP_ROLE=worker",
+        "--output", "none"
+    )
+    if ($WorkerImage) {
+        $workerArgs += @("--image", $WorkerImage)
+    }
+    az @workerArgs | Out-Null
 
     az containerapp ingress disable `
         --resource-group $ResourceGroup `
@@ -237,10 +274,10 @@ function Ensure-TunnelConnectorContract {
         --resource-group $ResourceGroup `
         --name $TunnelAppName `
         --image $TunnelImage `
-        --cpu "0.5" `
-        --memory "1.0Gi" `
-        --min-replicas "2" `
-        --max-replicas "2" `
+        --cpu $TunnelCpu `
+        --memory $TunnelMemory `
+        --min-replicas $TunnelMinReplicas `
+        --max-replicas $TunnelMaxReplicas `
         --set-env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
         --command "/bin/sh" `
         --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
@@ -250,6 +287,161 @@ function Ensure-TunnelConnectorContract {
         --resource-group $ResourceGroup `
         --name $TunnelAppName `
         --output none | Out-Null
+}
+
+function Write-RolloutState {
+    param(
+        [string]$StateMode,
+        [string]$StableRevision,
+        [string]$CandidateRevision
+    )
+
+    if (-not $RolloutStateFile) {
+        return
+    }
+
+    $rolloutStateDirectory = Split-Path -Path $RolloutStateFile -Parent
+    if ($rolloutStateDirectory) {
+        New-Item -ItemType Directory -Path $rolloutStateDirectory -Force | Out-Null
+    }
+
+    @{
+        rollout_mode = $StateMode
+        stable_revision = $StableRevision
+        candidate_revision = $CandidateRevision
+        canary_traffic_percent = $CanaryTrafficPercent
+        stable_traffic_percent = $StableTrafficPercent
+    } | ConvertTo-Json -Depth 10 | Set-Content -Path $RolloutStateFile
+}
+
+function Get-LatestRevisionName {
+    return az containerapp revision list `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --query "sort_by([].{name:name, created:properties.createdTime}, &created)[-1].name" `
+        --output tsv
+}
+
+function Get-StableRevisionName {
+    param([string]$CandidateRevision)
+
+    $stableRevision = az containerapp revision list `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --query "sort_by([?name!='${CandidateRevision}'].{name:name, created:properties.createdTime}, &created)[-1].name" `
+        --output tsv
+    if ($stableRevision) {
+        return $stableRevision
+    }
+
+    return $CandidateRevision
+}
+
+function Read-RolloutStateField {
+    param([string]$FieldName)
+
+    if (-not $RolloutStateFile -or -not (Test-Path -Path $RolloutStateFile)) {
+        throw "RolloutStateFile is required for $RolloutMode rollout mode."
+    }
+
+    $payload = Get-Content -Path $RolloutStateFile -Raw | ConvertFrom-Json -Depth 20
+    return [string]($payload.$FieldName)
+}
+
+function Assert-RolloutPercentages {
+    if ($CanaryTrafficPercent -lt 0 -or $CanaryTrafficPercent -gt 100) {
+        throw "CanaryTrafficPercent must be between 0 and 100."
+    }
+
+    if ($StableTrafficPercent -lt 0 -or $StableTrafficPercent -gt 100) {
+        throw "StableTrafficPercent must be between 0 and 100."
+    }
+
+    if (($CanaryTrafficPercent + $StableTrafficPercent) -ne 100) {
+        throw "CanaryTrafficPercent and StableTrafficPercent must sum to 100."
+    }
+}
+
+function Set-CanaryTrafficSplit {
+    param(
+        [string]$StableRevision,
+        [string]$CandidateRevision
+    )
+
+    Assert-RolloutPercentages
+
+    if ($StableRevision -eq $CandidateRevision) {
+        throw "No previous stable revision found for canary traffic split."
+    }
+
+    az containerapp revision set-mode `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --mode multiple `
+        --output none | Out-Null
+    az containerapp revision activate `
+        --resource-group $ResourceGroup `
+        --revision $StableRevision `
+        --output none | Out-Null
+    az containerapp revision activate `
+        --resource-group $ResourceGroup `
+        --revision $CandidateRevision `
+        --output none | Out-Null
+    az containerapp ingress traffic set `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --revision-weight "${StableRevision}=$StableTrafficPercent" "${CandidateRevision}=$CanaryTrafficPercent" `
+        --output none | Out-Null
+
+    Write-RolloutState -StateMode "canary" -StableRevision $StableRevision -CandidateRevision $CandidateRevision
+}
+
+function Promote-FullTraffic {
+    param(
+        [string]$StableRevision,
+        [string]$CandidateRevision
+    )
+
+    az containerapp revision set-mode `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --mode multiple `
+        --output none | Out-Null
+    az containerapp revision activate `
+        --resource-group $ResourceGroup `
+        --revision $CandidateRevision `
+        --output none | Out-Null
+    az containerapp ingress traffic set `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --revision-weight "${CandidateRevision}=100" `
+        --output none | Out-Null
+
+    Write-RolloutState -StateMode "promote" -StableRevision $StableRevision -CandidateRevision $CandidateRevision
+}
+
+function Rollback-ToStableTraffic {
+    param(
+        [string]$StableRevision,
+        [string]$CandidateRevision
+    )
+
+    az containerapp revision set-mode `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --mode multiple `
+        --output none | Out-Null
+    az containerapp revision activate `
+        --resource-group $ResourceGroup `
+        --revision $StableRevision `
+        --output none | Out-Null
+    az containerapp ingress traffic set `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --revision-weight "${StableRevision}=100" "${CandidateRevision}=0" `
+        --output none | Out-Null
+
+    Write-RolloutState -StateMode "rollback" -StableRevision $StableRevision -CandidateRevision $CandidateRevision
 }
 
 function Ensure-EntraAppContract {
@@ -539,300 +731,326 @@ Write-Host ">>> Setting subscription: $Subscription"
 az account set --subscription $Subscription --output none
 $AccountTenantId = az account show --query tenantId --output tsv
 
-Write-Host ">>> Registering providers"
-az provider register --namespace Microsoft.App --wait --output none
-az provider register --namespace Microsoft.OperationalInsights --wait --output none
-az provider register --namespace Microsoft.Network --wait --output none
+if ($RolloutMode -in @("promote", "rollback")) {
+    $StableRevision = Read-RolloutStateField -FieldName "stable_revision"
+    $CandidateRevision = Read-RolloutStateField -FieldName "candidate_revision"
+} else {
+    Write-Host ">>> Registering providers"
+    az provider register --namespace Microsoft.App --wait --output none
+    az provider register --namespace Microsoft.OperationalInsights --wait --output none
+    az provider register --namespace Microsoft.Network --wait --output none
 
-Write-Host ">>> Ensuring resource group: $ResourceGroup"
-az group create --name $ResourceGroup --location $Location --output none
+    Write-Host ">>> Ensuring resource group: $ResourceGroup"
+    az group create --name $ResourceGroup --location $Location --output none
 
-Write-Host ">>> Ensuring Log Analytics workspace: $LogAnalyticsWorkspace"
-if (-not (Test-AzCommand {
-    az monitor log-analytics workspace show `
-        --resource-group $ResourceGroup `
-        --workspace-name $LogAnalyticsWorkspace `
-        --output none 2>$null
-})) {
-    az monitor log-analytics workspace create `
-        --resource-group $ResourceGroup `
-        --workspace-name $LogAnalyticsWorkspace `
-        --location $Location `
-        --output none
-}
-
-$workspaceId = az monitor log-analytics workspace show `
-    --resource-group $ResourceGroup `
-    --workspace-name $LogAnalyticsWorkspace `
-    --query customerId `
-    --output tsv
-$workspaceKey = az monitor log-analytics workspace get-shared-keys `
-    --resource-group $ResourceGroup `
-    --workspace-name $LogAnalyticsWorkspace `
-    --query primarySharedKey `
-    --output tsv
-
-Write-Host ">>> Ensuring VNet: $VnetName"
-if (-not (Test-AzCommand {
-    az network vnet show `
-        --resource-group $ResourceGroup `
-        --name $VnetName `
-        --output none 2>$null
-})) {
-    az network vnet create `
-        --resource-group $ResourceGroup `
-        --name $VnetName `
-        --location $Location `
-        --address-prefixes "10.30.0.0/16" `
-        --output none
-}
-
-Write-Host ">>> Ensuring infrastructure subnet"
-Ensure-Subnet `
-    -Name $InfrastructureSubnetName `
-    -Prefix $InfrastructureSubnetPrefix `
-    -Delegation "Microsoft.App/environments"
-
-Write-Host ">>> Ensuring private endpoint subnet"
-Ensure-Subnet `
-    -Name $PrivateEndpointSubnetName `
-    -Prefix $PrivateEndpointSubnetPrefix `
-    -Delegation ""
-az network vnet subnet update `
-    --resource-group $ResourceGroup `
-    --vnet-name $VnetName `
-    --name $PrivateEndpointSubnetName `
-    --disable-private-endpoint-network-policies true `
-    --output none
-
-$infraSubnetId = az network vnet subnet show `
-    --resource-group $ResourceGroup `
-    --vnet-name $VnetName `
-    --name $InfrastructureSubnetName `
-    --query id `
-    --output tsv
-$privateEndpointSubnetId = az network vnet subnet show `
-    --resource-group $ResourceGroup `
-    --vnet-name $VnetName `
-    --name $PrivateEndpointSubnetName `
-    --query id `
-    --output tsv
-
-Write-Host ">>> Ensuring ACA environment: $ContainerAppEnvironment"
-if (-not (Test-AzCommand {
-    az containerapp env show `
-        --resource-group $ResourceGroup `
-        --name $ContainerAppEnvironment `
-        --output none 2>$null
-})) {
-    az containerapp env create `
-        --resource-group $ResourceGroup `
-        --name $ContainerAppEnvironment `
-        --location $Location `
-        --enable-workload-profiles true `
-        --infrastructure-resource-group $InfrastructureResourceGroup `
-        --infrastructure-subnet-resource-id $infraSubnetId `
-        --internal-only true `
-        --logs-workspace-id $workspaceId `
-        --logs-workspace-key $workspaceKey `
-        --output none
-}
-
-$environmentId = az containerapp env show `
-    --resource-group $ResourceGroup `
-    --name $ContainerAppEnvironment `
-    --query id `
-    --output tsv
-$defaultDomain = az containerapp env show `
-    --resource-group $ResourceGroup `
-    --name $ContainerAppEnvironment `
-    --query properties.defaultDomain `
-    --output tsv
-
-Write-Host ">>> Disabling ACA public network access"
-$patchBody = "{""properties"":{""publicNetworkAccess"":""Disabled""}}"
-az rest `
-    --method patch `
-    --uri "https://management.azure.com$environmentId?api-version=2024-03-01" `
-    --body $patchBody `
-    --headers "Content-Type=application/json" `
-    --output none
-
-Write-Host ">>> Ensuring private endpoint: $PrivateEndpointName"
-if (-not (Test-AzCommand {
-    az network private-endpoint show `
-        --resource-group $ResourceGroup `
-        --name $PrivateEndpointName `
-        --output none 2>$null
-})) {
-    az network private-endpoint create `
-        --resource-group $ResourceGroup `
-        --name $PrivateEndpointName `
-        --location $Location `
-        --subnet $privateEndpointSubnetId `
-        --private-connection-resource-id $environmentId `
-        --group-id managedEnvironments `
-        --connection-name "$PrivateEndpointName-connection" `
-        --output none
-}
-
-Write-Host ">>> Ensuring private DNS zone: $PrivateDnsZone"
-if (-not (Test-AzCommand {
-    az network private-dns zone show `
-        --resource-group $ResourceGroup `
-        --name $PrivateDnsZone `
-        --output none 2>$null
-})) {
-    az network private-dns zone create `
-        --resource-group $ResourceGroup `
-        --name $PrivateDnsZone `
-        --output none
-}
-
-if (-not (Test-AzCommand {
-    az network private-dns link vnet show `
-        --resource-group $ResourceGroup `
-        --zone-name $PrivateDnsZone `
-        --name $PrivateDnsLinkName `
-        --output none 2>$null
-})) {
-    az network private-dns link vnet create `
-        --resource-group $ResourceGroup `
-        --zone-name $PrivateDnsZone `
-        --name $PrivateDnsLinkName `
-        --virtual-network $VnetName `
-        --registration-enabled false `
-        --output none
-}
-
-$dnsGroupExists = Test-AzCommand {
-    az network private-endpoint dns-zone-group show `
-        --resource-group $ResourceGroup `
-        --endpoint-name $PrivateEndpointName `
-        --name "default" `
-        --output none 2>$null
-}
-if (-not $dnsGroupExists) {
-    az network private-endpoint dns-zone-group create `
-        --resource-group $ResourceGroup `
-        --endpoint-name $PrivateEndpointName `
-        --name "default" `
-        --private-dns-zone $PrivateDnsZone `
-        --zone-name "default" `
-        --output none
-}
-
-Upsert-KeyVaultSecret -VaultName $KeyVaultName -SecretName $TunnelTokenSecretName -SecretValue $TunnelToken
-Upsert-KeyVaultSecret -VaultName $KeyVaultName -SecretName $EdgeOriginSecretName -SecretValue $EdgeOriginSecret
-
-if ($UserAssignedIdentityName) {
-    $IdentityResourceId = az identity show `
-        --resource-group $ResourceGroup `
-        --name $UserAssignedIdentityName `
-        --query id `
-        --output tsv
-    $IdentityPrincipalId = az identity show `
-        --resource-group $ResourceGroup `
-        --name $UserAssignedIdentityName `
-        --query principalId `
-        --output tsv
-}
-
-if ($CreateApps) {
-    if (-not $ApiImage) {
-        throw "ApiImage is required when -CreateApps is used."
-    }
-    if (-not $WorkerImage) {
-        throw "WorkerImage is required when -CreateApps is used."
-    }
-    if (-not $TunnelToken) {
-        throw "TunnelToken is required when -CreateApps is used."
-    }
-
-    Write-Host ">>> Ensuring API app: $ApiAppName"
-    if (-not (Test-ContainerAppExists -Name $ApiAppName)) {
-        $apiArgs = @(
-            "containerapp", "create",
-            "--resource-group", $ResourceGroup,
-            "--name", $ApiAppName,
-            "--environment", $ContainerAppEnvironment,
-            "--image", $ApiImage,
-            "--ingress", "internal",
-            "--target-port", "8000",
-            "--transport", "auto",
-            "--cpu", "1.0",
-            "--memory", "2.0Gi",
-            "--min-replicas", "1",
-            "--max-replicas", "2",
-            "--env-vars", "APP_ROLE=api",
-            "--output", "none"
-        )
-        if ($IdentityResourceId) {
-            $apiArgs += @("--user-assigned", $IdentityResourceId)
-        }
-        az @apiArgs | Out-Null
-    }
-
-    Write-Host ">>> Ensuring worker app: $WorkerAppName"
-    if (-not (Test-ContainerAppExists -Name $WorkerAppName)) {
-        $workerArgs = @(
-            "containerapp", "create",
-            "--resource-group", $ResourceGroup,
-            "--name", $WorkerAppName,
-            "--environment", $ContainerAppEnvironment,
-            "--image", $WorkerImage,
-            "--cpu", "1.0",
-            "--memory", "2.0Gi",
-            "--min-replicas", "1",
-            "--max-replicas", "1",
-            "--env-vars", "APP_ROLE=worker",
-            "--output", "none"
-        )
-        if ($IdentityResourceId) {
-            $workerArgs += @("--user-assigned", $IdentityResourceId)
-        }
-        az @workerArgs | Out-Null
-    }
-
-    Write-Host ">>> Ensuring tunnel connector app: $TunnelAppName"
-    if (-not (Test-ContainerAppExists -Name $TunnelAppName)) {
-        az containerapp create `
+    Write-Host ">>> Ensuring Log Analytics workspace: $LogAnalyticsWorkspace"
+    if (-not (Test-AzCommand {
+        az monitor log-analytics workspace show `
             --resource-group $ResourceGroup `
-            --name $TunnelAppName `
-            --environment $ContainerAppEnvironment `
-            --image $TunnelImage `
-            --cpu "0.5" `
-            --memory "1.0Gi" `
-            --min-replicas "2" `
-            --max-replicas "2" `
-            --secrets "${TunnelSecretRefName}=$TunnelToken" `
-            --env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
-            --command "/bin/sh" `
-            --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
+            --workspace-name $LogAnalyticsWorkspace `
+            --output none 2>$null
+    })) {
+        az monitor log-analytics workspace create `
+            --resource-group $ResourceGroup `
+            --workspace-name $LogAnalyticsWorkspace `
+            --location $Location `
             --output none
     }
+
+    $workspaceId = az monitor log-analytics workspace show `
+        --resource-group $ResourceGroup `
+        --workspace-name $LogAnalyticsWorkspace `
+        --query customerId `
+        --output tsv
+    $workspaceKey = az monitor log-analytics workspace get-shared-keys `
+        --resource-group $ResourceGroup `
+        --workspace-name $LogAnalyticsWorkspace `
+        --query primarySharedKey `
+        --output tsv
+
+    Write-Host ">>> Ensuring VNet: $VnetName"
+    if (-not (Test-AzCommand {
+        az network vnet show `
+            --resource-group $ResourceGroup `
+            --name $VnetName `
+            --output none 2>$null
+    })) {
+        az network vnet create `
+            --resource-group $ResourceGroup `
+            --name $VnetName `
+            --location $Location `
+            --address-prefixes "10.30.0.0/16" `
+            --output none
+    }
+
+    Write-Host ">>> Ensuring infrastructure subnet"
+    Ensure-Subnet `
+        -Name $InfrastructureSubnetName `
+        -Prefix $InfrastructureSubnetPrefix `
+        -Delegation "Microsoft.App/environments"
+
+    Write-Host ">>> Ensuring private endpoint subnet"
+    Ensure-Subnet `
+        -Name $PrivateEndpointSubnetName `
+        -Prefix $PrivateEndpointSubnetPrefix `
+        -Delegation ""
+    az network vnet subnet update `
+        --resource-group $ResourceGroup `
+        --vnet-name $VnetName `
+        --name $PrivateEndpointSubnetName `
+        --disable-private-endpoint-network-policies true `
+        --output none
+
+    $infraSubnetId = az network vnet subnet show `
+        --resource-group $ResourceGroup `
+        --vnet-name $VnetName `
+        --name $InfrastructureSubnetName `
+        --query id `
+        --output tsv
+    $privateEndpointSubnetId = az network vnet subnet show `
+        --resource-group $ResourceGroup `
+        --vnet-name $VnetName `
+        --name $PrivateEndpointSubnetName `
+        --query id `
+        --output tsv
+
+    Write-Host ">>> Ensuring ACA environment: $ContainerAppEnvironment"
+    if (-not (Test-AzCommand {
+        az containerapp env show `
+            --resource-group $ResourceGroup `
+            --name $ContainerAppEnvironment `
+            --output none 2>$null
+    })) {
+        az containerapp env create `
+            --resource-group $ResourceGroup `
+            --name $ContainerAppEnvironment `
+            --location $Location `
+            --enable-workload-profiles true `
+            --infrastructure-resource-group $InfrastructureResourceGroup `
+            --infrastructure-subnet-resource-id $infraSubnetId `
+            --internal-only true `
+            --logs-workspace-id $workspaceId `
+            --logs-workspace-key $workspaceKey `
+            --output none
+    }
+
+    $environmentId = az containerapp env show `
+        --resource-group $ResourceGroup `
+        --name $ContainerAppEnvironment `
+        --query id `
+        --output tsv
+    $defaultDomain = az containerapp env show `
+        --resource-group $ResourceGroup `
+        --name $ContainerAppEnvironment `
+        --query properties.defaultDomain `
+        --output tsv
+
+    Write-Host ">>> Disabling ACA public network access"
+    $patchBody = "{""properties"":{""publicNetworkAccess"":""Disabled""}}"
+    az rest `
+        --method patch `
+        --uri "https://management.azure.com$environmentId?api-version=2024-03-01" `
+        --body $patchBody `
+        --headers "Content-Type=application/json" `
+        --output none
+
+    Write-Host ">>> Ensuring private endpoint: $PrivateEndpointName"
+    if (-not (Test-AzCommand {
+        az network private-endpoint show `
+            --resource-group $ResourceGroup `
+            --name $PrivateEndpointName `
+            --output none 2>$null
+    })) {
+        az network private-endpoint create `
+            --resource-group $ResourceGroup `
+            --name $PrivateEndpointName `
+            --location $Location `
+            --subnet $privateEndpointSubnetId `
+            --private-connection-resource-id $environmentId `
+            --group-id managedEnvironments `
+            --connection-name "$PrivateEndpointName-connection" `
+            --output none
+    }
+
+    Write-Host ">>> Ensuring private DNS zone: $PrivateDnsZone"
+    if (-not (Test-AzCommand {
+        az network private-dns zone show `
+            --resource-group $ResourceGroup `
+            --name $PrivateDnsZone `
+            --output none 2>$null
+    })) {
+        az network private-dns zone create `
+            --resource-group $ResourceGroup `
+            --name $PrivateDnsZone `
+            --output none
+    }
+
+    if (-not (Test-AzCommand {
+        az network private-dns link vnet show `
+            --resource-group $ResourceGroup `
+            --zone-name $PrivateDnsZone `
+            --name $PrivateDnsLinkName `
+            --output none 2>$null
+    })) {
+        az network private-dns link vnet create `
+            --resource-group $ResourceGroup `
+            --zone-name $PrivateDnsZone `
+            --name $PrivateDnsLinkName `
+            --virtual-network $VnetName `
+            --registration-enabled false `
+            --output none
+    }
+
+    $dnsGroupExists = Test-AzCommand {
+        az network private-endpoint dns-zone-group show `
+            --resource-group $ResourceGroup `
+            --endpoint-name $PrivateEndpointName `
+            --name "default" `
+            --output none 2>$null
+    }
+    if (-not $dnsGroupExists) {
+        az network private-endpoint dns-zone-group create `
+            --resource-group $ResourceGroup `
+            --endpoint-name $PrivateEndpointName `
+            --name "default" `
+            --private-dns-zone $PrivateDnsZone `
+            --zone-name "default" `
+            --output none
+    }
+
+    Upsert-KeyVaultSecret -VaultName $KeyVaultName -SecretName $TunnelTokenSecretName -SecretValue $TunnelToken
+    Upsert-KeyVaultSecret -VaultName $KeyVaultName -SecretName $EdgeOriginSecretName -SecretValue $EdgeOriginSecret
+
+    if ($UserAssignedIdentityName) {
+        $IdentityResourceId = az identity show `
+            --resource-group $ResourceGroup `
+            --name $UserAssignedIdentityName `
+            --query id `
+            --output tsv
+        $IdentityPrincipalId = az identity show `
+            --resource-group $ResourceGroup `
+            --name $UserAssignedIdentityName `
+            --query principalId `
+            --output tsv
+    }
+
+    if ($CreateApps) {
+        if (-not $ApiImage) {
+            throw "ApiImage is required when -CreateApps is used."
+        }
+        if (-not $WorkerImage) {
+            throw "WorkerImage is required when -CreateApps is used."
+        }
+        if (-not $TunnelToken) {
+            throw "TunnelToken is required when -CreateApps is used."
+        }
+
+        Write-Host ">>> Ensuring API app: $ApiAppName"
+        if (-not (Test-ContainerAppExists -Name $ApiAppName)) {
+            $apiArgs = @(
+                "containerapp", "create",
+                "--resource-group", $ResourceGroup,
+                "--name", $ApiAppName,
+                "--environment", $ContainerAppEnvironment,
+                "--image", $ApiImage,
+                "--ingress", "internal",
+                "--target-port", "8000",
+                "--transport", "auto",
+                "--cpu", $ApiCpu,
+                "--memory", $ApiMemory,
+                "--min-replicas", $ApiMinReplicas,
+                "--max-replicas", $ApiMaxReplicas,
+                "--env-vars", "APP_ROLE=api",
+                "--output", "none"
+            )
+            if ($IdentityResourceId) {
+                $apiArgs += @("--user-assigned", $IdentityResourceId)
+            }
+            az @apiArgs | Out-Null
+        }
+
+        Write-Host ">>> Ensuring worker app: $WorkerAppName"
+        if (-not (Test-ContainerAppExists -Name $WorkerAppName)) {
+            $workerArgs = @(
+                "containerapp", "create",
+                "--resource-group", $ResourceGroup,
+                "--name", $WorkerAppName,
+                "--environment", $ContainerAppEnvironment,
+                "--image", $WorkerImage,
+                "--cpu", $WorkerCpu,
+                "--memory", $WorkerMemory,
+                "--min-replicas", $WorkerMinReplicas,
+                "--max-replicas", $WorkerMaxReplicas,
+                "--env-vars", "APP_ROLE=worker",
+                "--output", "none"
+            )
+            if ($IdentityResourceId) {
+                $workerArgs += @("--user-assigned", $IdentityResourceId)
+            }
+            az @workerArgs | Out-Null
+        }
+
+        Write-Host ">>> Ensuring tunnel connector app: $TunnelAppName"
+        if (-not (Test-ContainerAppExists -Name $TunnelAppName)) {
+            az containerapp create `
+                --resource-group $ResourceGroup `
+                --name $TunnelAppName `
+                --environment $ContainerAppEnvironment `
+                --image $TunnelImage `
+                --cpu $TunnelCpu `
+                --memory $TunnelMemory `
+                --min-replicas $TunnelMinReplicas `
+                --max-replicas $TunnelMaxReplicas `
+                --secrets "${TunnelSecretRefName}=$TunnelToken" `
+                --env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
+                --command "/bin/sh" `
+                --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
+                --output none
+        }
+    }
+
+    if (Test-ContainerAppExists -Name $ApiAppName) {
+        Write-Host ">>> Reconciling API ingress and runtime role"
+        Ensure-ContainerAppIdentity -Name $ApiAppName
+        Ensure-ApiIngressContract
+    }
+
+    if (Test-ContainerAppExists -Name $WorkerAppName) {
+        Write-Host ">>> Reconciling worker ingress and runtime role"
+        Ensure-ContainerAppIdentity -Name $WorkerAppName
+        Ensure-WorkerIngressContract
+    }
+
+    if (Test-ContainerAppExists -Name $TunnelAppName) {
+        Write-Host ">>> Reconciling tunnel connector contract"
+        Ensure-TunnelConnectorContract
+    }
+
+    if ($ConfigureEasyAuth) {
+        Configure-EasyAuth
+        Verify-Phase3Contract
+    }
+
+    $CandidateRevision = Get-LatestRevisionName
+    $StableRevision = Get-StableRevisionName -CandidateRevision $CandidateRevision
 }
 
-if (Test-ContainerAppExists -Name $ApiAppName) {
-    Write-Host ">>> Reconciling API ingress and runtime role"
-    Ensure-ContainerAppIdentity -Name $ApiAppName
-    Ensure-ApiIngressContract
-}
-
-if (Test-ContainerAppExists -Name $WorkerAppName) {
-    Write-Host ">>> Reconciling worker ingress and runtime role"
-    Ensure-ContainerAppIdentity -Name $WorkerAppName
-    Ensure-WorkerIngressContract
-}
-
-if (Test-ContainerAppExists -Name $TunnelAppName) {
-    Write-Host ">>> Reconciling tunnel connector contract"
-    Ensure-TunnelConnectorContract
-}
-
-if ($ConfigureEasyAuth) {
-    Configure-EasyAuth
-    Verify-Phase3Contract
+switch ($RolloutMode) {
+    "canary" {
+        Set-CanaryTrafficSplit -StableRevision $StableRevision -CandidateRevision $CandidateRevision
+    }
+    "promote" {
+        Promote-FullTraffic -StableRevision $StableRevision -CandidateRevision $CandidateRevision
+    }
+    "rollback" {
+        Rollback-ToStableTraffic -StableRevision $StableRevision -CandidateRevision $CandidateRevision
+    }
+    "reconcile" {
+        Write-RolloutState -StateMode "reconcile" -StableRevision $StableRevision -CandidateRevision $CandidateRevision
+    }
+    default {
+        throw "Unsupported RolloutMode: $RolloutMode"
+    }
 }
 
 Write-Host ""

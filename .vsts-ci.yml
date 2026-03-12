@@ -18,7 +18,16 @@ variables:
   stagingDeployArtifactName: "deploy-staging-log"
   productionDeployArtifactName: "deploy-production-log"
   smokeStagingArtifactName: "smoke-staging-report"
+  smokeProductionCanaryArtifactName: "smoke-production-canary-report"
+  smokeProductionFullArtifactName: "smoke-production-full-report"
+  productionCanaryObservationArtifactName: "production-canary-observation"
+  productionRollbackArtifactName: "production-rollback-log"
+  productionCanaryTrafficPercent: "10"
+  productionStableTrafficPercent: "90"
   phase3ValidationArtifactName: "phase3-auth-origin-validation"
+  phase3ProductionCanaryValidationArtifactName: "phase3-auth-origin-validation-production-canary"
+  phase3ProductionFullValidationArtifactName: "phase3-auth-origin-validation-production-full"
+  productionRolloutStateArtifactName: "production-rollout-state"
   validateReportArtifactName: "validate-stage-report"
 
 stages:
@@ -140,6 +149,8 @@ stages:
               ENTRA_CLIENT_SECRET: $(stagingEntraClientSecret)
               ALLOWED_AUDIENCES: $(stagingAllowedAudiences)
               CONFIGURE_EASY_AUTH: "true"
+              ROLLOUT_MODE: "reconcile"
+              ROLLOUT_STATE_FILE: $(Build.ArtifactStagingDirectory)/deploy-staging-log/rollout-state.json
 
           - publish: $(Build.ArtifactStagingDirectory)/deploy-staging-log
             artifact: $(stagingDeployArtifactName)
@@ -155,6 +166,12 @@ stages:
         pool:
           vmImage: ubuntu-latest
         steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(stagingDeployArtifactName)
+              targetPath: $(Pipeline.Workspace)/deploy-staging-log
+
           - script: chmod +x ./scripts/smoke-release-gates.sh
             displayName: Make smoke script executable
 
@@ -177,6 +194,10 @@ stages:
               API_APP_NAME: $(stagingApiAppName)
               WORKER_APP_NAME: $(stagingWorkerAppName)
               TUNNEL_APP_NAME: $(stagingTunnelAppName)
+              SMOKE_ARTIFACT_NAME: $(smokeStagingArtifactName)
+              PHASE3_VALIDATION_ARTIFACT_NAME: $(phase3ValidationArtifactName)
+              SMOKE_PHASE_LABEL: staging
+              ROLLOUT_STATE_FILE: $(Pipeline.Workspace)/deploy-staging-log/rollout-state.json
               EVIDENCE_DIR: $(Build.ArtifactStagingDirectory)/smoke-staging-report
 
           - publish: $(Build.ArtifactStagingDirectory)/smoke-staging-report
@@ -250,7 +271,243 @@ stages:
               ENTRA_CLIENT_SECRET: $(productionEntraClientSecret)
               ALLOWED_AUDIENCES: $(productionAllowedAudiences)
               CONFIGURE_EASY_AUTH: "true"
+              ROLLOUT_MODE: "canary"
+              CANARY_TRAFFIC_PERCENT: $(productionCanaryTrafficPercent)
+              STABLE_TRAFFIC_PERCENT: $(productionStableTrafficPercent)
+              ROLLOUT_STATE_FILE: $(Build.ArtifactStagingDirectory)/deploy-production-log/rollout-state.json
 
           - publish: $(Build.ArtifactStagingDirectory)/deploy-production-log
             artifact: $(productionDeployArtifactName)
             displayName: Publish production deployment log
+
+  - stage: SmokeProductionCanary
+    dependsOn:
+      - DeployProduction
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: smoke_production_canary
+        displayName: Run production canary smoke and security gates
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(productionDeployArtifactName)
+              targetPath: $(Pipeline.Workspace)/deploy-production-log
+
+          - script: chmod +x ./scripts/smoke-release-gates.sh
+            displayName: Make smoke script executable
+
+          - script: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)/smoke-production-canary-report"
+              bash ./scripts/smoke-release-gates.sh
+            displayName: Run production canary smoke gates
+            env:
+              API_BASE_URL: https://$(productionApiPublicHostname)
+              API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
+              AUTH_BEARER_TOKEN: $(productionAuthBearerToken)
+              EXPECTED_CLIENT_ID: $(productionEntraClientId)
+              EXPECTED_ISSUER_URL: $(productionIssuerUrl)
+              EXPECTED_ALLOWED_AUDIENCES: $(productionAllowedAudiences)
+              WRONG_AUDIENCE_TOKEN: $(productionWrongAudienceToken)
+              PRODUCTION_REJECTION_TOKEN: $(productionRejectionToken)
+              PROBE_ORIGIN_URLS: $(productionProbeOriginUrls)
+              RESOURCE_GROUP: $(productionResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(productionApiAppName)
+              WORKER_APP_NAME: $(productionWorkerAppName)
+              TUNNEL_APP_NAME: $(productionTunnelAppName)
+              SMOKE_ARTIFACT_NAME: $(smokeProductionCanaryArtifactName)
+              PHASE3_VALIDATION_ARTIFACT_NAME: $(phase3ProductionCanaryValidationArtifactName)
+              SMOKE_PHASE_LABEL: production-canary
+              ROLLOUT_STATE_FILE: $(Pipeline.Workspace)/deploy-production-log/rollout-state.json
+              EVIDENCE_DIR: $(Build.ArtifactStagingDirectory)/smoke-production-canary-report
+
+          - publish: $(Build.ArtifactStagingDirectory)/smoke-production-canary-report
+            artifact: $(smokeProductionCanaryArtifactName)
+            displayName: Publish production canary smoke report
+
+          - publish: $(Build.ArtifactStagingDirectory)/smoke-production-canary-report
+            artifact: $(phase3ProductionCanaryValidationArtifactName)
+            displayName: Publish production canary auth and origin evidence
+
+  - stage: RollbackProductionCanary
+    dependsOn:
+      - SmokeProductionCanary
+    condition: and(failed('SmokeProductionCanary'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: rollback_production_canary
+        displayName: Roll back failed production canary
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(productionDeployArtifactName)
+              targetPath: $(Pipeline.Workspace)/deploy-production-log
+
+          - script: |
+              set -euo pipefail
+              mkdir -p "$(Build.ArtifactStagingDirectory)/production-rollback-log"
+              bash ./scripts/provision-aca-private-origin.sh > "$(Build.ArtifactStagingDirectory)/production-rollback-log/rollback-production.log" 2>&1
+            displayName: Roll back production canary traffic to stable revision
+            env:
+              RESOURCE_GROUP: $(productionResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(productionApiAppName)
+              WORKER_APP_NAME: $(productionWorkerAppName)
+              TUNNEL_APP_NAME: $(productionTunnelAppName)
+              ROLLOUT_MODE: "rollback"
+              ROLLOUT_STATE_FILE: $(Pipeline.Workspace)/deploy-production-log/rollout-state.json
+
+          - publish: $(Build.ArtifactStagingDirectory)/production-rollback-log
+            artifact: $(productionRollbackArtifactName)
+            displayName: Publish production rollback log
+
+  - stage: ObserveProductionCanary
+    dependsOn:
+      - SmokeProductionCanary
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: observe_production_canary
+        displayName: Observe production canary behavior
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(smokeProductionCanaryArtifactName)
+              targetPath: $(Pipeline.Workspace)/smoke-production-canary-report
+
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(productionDeployArtifactName)
+              targetPath: $(Pipeline.Workspace)/deploy-production-log
+
+          - script: |
+              set -euo pipefail
+              observation_dir="$(Build.ArtifactStagingDirectory)/production-canary-observation"
+              mkdir -p "$observation_dir"
+              cp "$(Pipeline.Workspace)/deploy-production-log/rollout-state.json" "$observation_dir/rollout-state.json"
+              curl --silent --show-error --fail "https://$(productionApiPublicHostname)/health" > "$observation_dir/health.json"
+              curl --silent --show-error --fail "https://$(productionApiPublicHostname)/health/readiness" > "$observation_dir/readiness.json"
+              cp "$(Pipeline.Workspace)/smoke-production-canary-report/$(smokeProductionCanaryArtifactName).json" "$observation_dir/canary-smoke-report.json"
+            displayName: Capture canary rollout state and health observation evidence
+
+          - publish: $(Build.ArtifactStagingDirectory)/production-canary-observation
+            artifact: $(productionCanaryObservationArtifactName)
+            displayName: Publish production canary observation evidence
+
+          - publish: $(Build.ArtifactStagingDirectory)/production-canary-observation
+            artifact: $(productionRolloutStateArtifactName)
+            displayName: Publish production rollout state
+
+  - stage: ManualApprovalCanary
+    dependsOn:
+      - ObserveProductionCanary
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: manual_approval_canary
+        displayName: Manual approval for full production promotion
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            inputs:
+              instructions: |
+                Review deploy-production-log, smoke-production-canary-report,
+                phase3-auth-origin-validation-production-canary, production-canary-observation,
+                and production-rollout-state artifacts before approving full production promotion or rollback.
+              notifyUsers: $(productionApprovers)
+              onTimeout: reject
+            timeoutInMinutes: 1440
+
+  - stage: PromoteProductionFull
+    dependsOn:
+      - ManualApprovalCanary
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: promote_production_full
+        displayName: Promote production canary to full traffic
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(productionRolloutStateArtifactName)
+              targetPath: $(Pipeline.Workspace)/production-rollout-state
+
+          - script: |
+              set -euo pipefail
+              mkdir -p "$(Build.ArtifactStagingDirectory)/production-rollout-state"
+              bash ./scripts/provision-aca-private-origin.sh > "$(Build.ArtifactStagingDirectory)/production-rollout-state/promote-production.log" 2>&1
+              cp "$(Pipeline.Workspace)/production-rollout-state/rollout-state.json" "$(Build.ArtifactStagingDirectory)/production-rollout-state/rollout-state.json"
+            displayName: Promote production revision to full traffic
+            env:
+              RESOURCE_GROUP: $(productionResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(productionApiAppName)
+              WORKER_APP_NAME: $(productionWorkerAppName)
+              TUNNEL_APP_NAME: $(productionTunnelAppName)
+              ROLLOUT_MODE: "promote"
+              ROLLOUT_STATE_FILE: $(Pipeline.Workspace)/production-rollout-state/rollout-state.json
+
+          - publish: $(Build.ArtifactStagingDirectory)/production-rollout-state
+            artifact: $(productionRolloutStateArtifactName)
+            displayName: Publish promoted rollout state
+
+  - stage: SmokeProductionFull
+    dependsOn:
+      - PromoteProductionFull
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: smoke_production_full
+        displayName: Run production post-promotion smoke and security gates
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(productionRolloutStateArtifactName)
+              targetPath: $(Pipeline.Workspace)/production-rollout-state
+
+          - script: chmod +x ./scripts/smoke-release-gates.sh
+            displayName: Make smoke script executable
+
+          - script: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)/smoke-production-full-report"
+              bash ./scripts/smoke-release-gates.sh
+            displayName: Run production post-promotion smoke gates
+            env:
+              API_BASE_URL: https://$(productionApiPublicHostname)
+              API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
+              AUTH_BEARER_TOKEN: $(productionAuthBearerToken)
+              EXPECTED_CLIENT_ID: $(productionEntraClientId)
+              EXPECTED_ISSUER_URL: $(productionIssuerUrl)
+              EXPECTED_ALLOWED_AUDIENCES: $(productionAllowedAudiences)
+              WRONG_AUDIENCE_TOKEN: $(productionWrongAudienceToken)
+              PRODUCTION_REJECTION_TOKEN: $(productionRejectionToken)
+              PROBE_ORIGIN_URLS: $(productionProbeOriginUrls)
+              RESOURCE_GROUP: $(productionResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(productionApiAppName)
+              WORKER_APP_NAME: $(productionWorkerAppName)
+              TUNNEL_APP_NAME: $(productionTunnelAppName)
+              SMOKE_ARTIFACT_NAME: $(smokeProductionFullArtifactName)
+              PHASE3_VALIDATION_ARTIFACT_NAME: $(phase3ProductionFullValidationArtifactName)
+              SMOKE_PHASE_LABEL: production-full
+              ROLLOUT_STATE_FILE: $(Pipeline.Workspace)/production-rollout-state/rollout-state.json
+              EVIDENCE_DIR: $(Build.ArtifactStagingDirectory)/smoke-production-full-report
+
+          - publish: $(Build.ArtifactStagingDirectory)/smoke-production-full-report
+            artifact: $(smokeProductionFullArtifactName)
+            displayName: Publish production full smoke report
+
+          - publish: $(Build.ArtifactStagingDirectory)/smoke-production-full-report
+            artifact: $(phase3ProductionFullValidationArtifactName)
+            displayName: Publish production full auth and origin evidence

@@ -21,8 +21,10 @@ def test_bash_script_requires_phase3_gate_inputs_and_emits_artifact_names():
     assert "WRONG_AUDIENCE_TOKEN" in content
     assert "PRODUCTION_REJECTION_TOKEN" in content
     assert "PROBE_ORIGIN_URLS" in content
-    assert "phase3-auth-origin-validation" in content
-    assert "smoke-staging-report" in content
+    assert "PHASE3_VALIDATION_ARTIFACT_NAME" in content
+    assert "SMOKE_ARTIFACT_NAME" in content
+    assert "SMOKE_PHASE_LABEL" in content
+    assert "ROLLOUT_STATE_FILE" in content
     assert "validate-aca-phase3-auth.sh" in content
 
 
@@ -45,6 +47,8 @@ def test_powershell_script_requires_phase3_gate_inputs_and_reuses_validator():
     assert "WrongAudienceToken" in content
     assert "ProductionRejectionToken" in content
     assert "ProbeOriginUrls" in content
-    assert "phase3-auth-origin-validation" in content
-    assert "smoke-staging-report" in content
+    assert "Phase3ValidationArtifactName" in content
+    assert "SmokeArtifactName" in content
+    assert "SmokePhaseLabel" in content
+    assert "RolloutStateFile" in content
     assert "validate-aca-phase3-auth.ps1" in content
