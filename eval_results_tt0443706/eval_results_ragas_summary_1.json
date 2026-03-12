@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "timestamp": "2026-03-12T03:56:10.290659+00:00",
+    "input_file": "F:\\KL\\gtog-eval\\eval_results_tt0443706\\eval_results_simple.json",
+    "model": "gpt-5.2",
+    "base_url": "http://127.0.0.1:8317/v1",
+    "settings_path": "F:\\KL\\gtog-eval\\eval\\tt0443706_tog_skip\\settings.yaml"
+  },
+  "overall": {
+    "count": 50,
+    "success_count": 50,
+    "fail_count": 0,
+    "skip_count": 0
+  },
+  "by_method": {
+    "tog": {
+      "count": 50,
+      "success_count": 50,
+      "fail_count": 0,
+      "skip_count": 0,
+      "context_precision": 0.68,
+      "context_recall": 0.48,
+      "faithfulness": 0.750528,
+      "answer_relevancy": 0.707331,
+      "answer_correctness": 0.368497
+    }
+  }
+}
