@@ -24,7 +24,12 @@
       "mcp__tilth__tilth_search",
       "Bash(az containerapp:*)",
       "Bash(az ad:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(az resource:*)",
+      "Bash(az monitor:*)",
+      "Bash(az group:*)",
+      "Bash(az network:*)",
+      "Bash(az acr:*)"
     ],
     "deny": [],
     "ask": []
