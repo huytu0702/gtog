@@ -10,7 +10,7 @@ Before requesting production promotion, confirm:
 - staging deployment completed through the approved pipeline path
 - required smoke tests passed
 - rollback drill evidence exists and is still relevant
-- Phase 3 validation helper passed in staging
+- Phase 3 validation helper passed in staging, including tunnel connector contract checks
 - direct-origin denial was verified
 - auth audience isolation was verified, including cross-environment token rejection
 - `/.auth/me` and unauthenticated `/api/*` behavior were verified on `api.<domain>`
@@ -22,7 +22,7 @@ Before requesting production promotion, confirm:
 
 Attach or reference the following before promotion:
 - staging smoke report
-- Phase 3 validation helper output (`scripts/validate-aca-phase3-auth.sh` or `.ps1`)
+- Phase 3 validation helper output (`scripts/validate-aca-phase3-auth.sh` or `.ps1`), including tunnel connector evidence
 - direct-origin denial evidence
 - auth audience isolation result, including staging-token rejection by production
 - `/.auth/me` and unauthenticated `/api/*` verification result

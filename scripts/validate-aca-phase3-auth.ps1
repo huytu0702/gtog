@@ -3,6 +3,8 @@ param(
     [string]$Subscription = "1095803e-80bf-47e0-961f-3d74cb4c605c",
     [string]$ApiAppName = "ca-gtog-api-prod",
     [string]$WorkerAppName = "ca-gtog-worker-prod",
+    [string]$TunnelAppName = "ca-gtog-tunnel-prod",
+    [string]$TunnelSecretRefName = "tunnel-token",
     [string]$ApiPublicHostname = "",
     [string]$ApiHealthUrl = "",
     [string]$AuthMeUrl = "",
@@ -81,6 +83,7 @@ function Write-Phase3Check {
 Require-Value -Name "ResourceGroup" -Value $ResourceGroup
 Require-Value -Name "ApiAppName" -Value $ApiAppName
 Require-Value -Name "WorkerAppName" -Value $WorkerAppName
+Require-Value -Name "TunnelAppName" -Value $TunnelAppName
 Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
 Require-Value -Name "ExpectedClientId" -Value $ExpectedClientId
 Require-Value -Name "ExpectedIssuerUrl" -Value $ExpectedIssuerUrl
@@ -102,9 +105,10 @@ if (-not $ExpectedLoginParametersJson) {
 Write-Phase3Check "Using subscription $Subscription"
 az account set --subscription $Subscription --output none | Out-Null
 
-Write-Phase3Check "Reading current API app, worker app, and auth settings"
+Write-Phase3Check "Reading current API app, worker app, tunnel app, and auth settings"
 $apiApp = az containerapp show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json -Depth 20
 $workerApp = az containerapp show --resource-group $ResourceGroup --name $WorkerAppName --output json | ConvertFrom-Json -Depth 20
+$tunnelApp = az containerapp show --resource-group $ResourceGroup --name $TunnelAppName --output json | ConvertFrom-Json -Depth 20
 $auth = az containerapp auth show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json -Depth 20
 $microsoftAuth = az containerapp auth microsoft show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json -Depth 20
 
@@ -144,6 +148,43 @@ if ($apiApp.properties.configuration.ingress.targetPort -ne 8000) {
 }
 if ($workerApp.properties.configuration.ingress) {
     $errors.Add("Worker app still exposes ingress.")
+}
+
+$tunnelContainers = @($tunnelApp.properties.template.containers)
+if ($tunnelContainers.Count -ne 1) {
+    $errors.Add("Tunnel app must define exactly one container.")
+} else {
+    $tunnelContainer = $tunnelContainers[0]
+    if (-not $tunnelContainer.image) {
+        $errors.Add("Tunnel app image is not configured.")
+    }
+
+    $command = @($tunnelContainer.command)
+    if (($command -join "|") -ne @("/bin/sh") -join "|") {
+        $errors.Add("Unexpected tunnel command: $($command -join ', ')")
+    }
+
+    $args = @($tunnelContainer.args)
+    $expectedArgs = @("-c", 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"')
+    if (($args -join "|") -ne ($expectedArgs -join "|")) {
+        $errors.Add("Unexpected tunnel args: $($args -join ', ')")
+    }
+
+    $tunnelTokenEnv = $tunnelContainer.env | Where-Object { $_.name -eq "TUNNEL_TOKEN" } | Select-Object -First 1
+    if (-not $tunnelTokenEnv -or $tunnelTokenEnv.secretRef -ne $TunnelSecretRefName) {
+        $errors.Add("Tunnel app TUNNEL_TOKEN must reference the $TunnelSecretRefName secret.")
+    }
+}
+
+$tunnelScale = $tunnelApp.properties.template.scale
+if ($tunnelScale.minReplicas -ne 2) {
+    $errors.Add("Tunnel app minReplicas is not 2.")
+}
+if ($tunnelScale.maxReplicas -ne 2) {
+    $errors.Add("Tunnel app maxReplicas is not 2.")
+}
+if ($tunnelApp.properties.configuration.ingress) {
+    $errors.Add("Tunnel app should not expose ingress.")
 }
 
 if ($errors.Count -gt 0) {

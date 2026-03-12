@@ -5,6 +5,8 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-rg-gtog-prod}"
 SUBSCRIPTION="${SUBSCRIPTION:-1095803e-80bf-47e0-961f-3d74cb4c605c}"
 API_APP_NAME="${API_APP_NAME:-ca-gtog-api-prod}"
 WORKER_APP_NAME="${WORKER_APP_NAME:-ca-gtog-worker-prod}"
+TUNNEL_APP_NAME="${TUNNEL_APP_NAME:-ca-gtog-tunnel-prod}"
+TUNNEL_SECRET_REF_NAME="${TUNNEL_SECRET_REF_NAME:-tunnel-token}"
 API_PUBLIC_HOSTNAME="${API_PUBLIC_HOSTNAME:-}"
 API_HEALTH_URL="${API_HEALTH_URL:-}"
 AUTH_ME_URL="${AUTH_ME_URL:-}"
@@ -73,6 +75,7 @@ print_check() {
 require_var RESOURCE_GROUP
 require_var API_APP_NAME
 require_var WORKER_APP_NAME
+require_var TUNNEL_APP_NAME
 require_var API_PUBLIC_HOSTNAME
 require_var EXPECTED_CLIENT_ID
 require_var EXPECTED_ISSUER_URL
@@ -96,20 +99,23 @@ fi
 print_check "Using subscription ${SUBSCRIPTION}"
 az account set --subscription "$SUBSCRIPTION"
 
-print_check "Reading current API app, worker app, and auth settings"
+print_check "Reading current API app, worker app, tunnel app, and auth settings"
 API_APP_JSON="$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$API_APP_NAME" --output json)"
 WORKER_APP_JSON="$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$WORKER_APP_NAME" --output json)"
+TUNNEL_APP_JSON="$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$TUNNEL_APP_NAME" --output json)"
 AUTH_JSON="$(az containerapp auth show --resource-group "$RESOURCE_GROUP" --name "$API_APP_NAME" --output json)"
 MICROSOFT_AUTH_JSON="$(az containerapp auth microsoft show --resource-group "$RESOURCE_GROUP" --name "$API_APP_NAME" --output json)"
 
 API_APP_JSON="$API_APP_JSON" \
 WORKER_APP_JSON="$WORKER_APP_JSON" \
+TUNNEL_APP_JSON="$TUNNEL_APP_JSON" \
 AUTH_JSON="$AUTH_JSON" \
 MICROSOFT_AUTH_JSON="$MICROSOFT_AUTH_JSON" \
 EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
 EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
 EXPECTED_CLIENT_ID="$EXPECTED_CLIENT_ID" \
 EXPECTED_ISSUER_URL="$EXPECTED_ISSUER_URL" \
+TUNNEL_SECRET_REF_NAME="$TUNNEL_SECRET_REF_NAME" \
 python - <<'PY'
 import json
 import os
@@ -117,12 +123,14 @@ import sys
 
 api_app = json.loads(os.environ["API_APP_JSON"])
 worker_app = json.loads(os.environ["WORKER_APP_JSON"])
+tunnel_app = json.loads(os.environ["TUNNEL_APP_JSON"])
 auth = json.loads(os.environ["AUTH_JSON"])
 microsoft_auth = json.loads(os.environ["MICROSOFT_AUTH_JSON"])
 expected_allowed = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
 expected_login_parameters = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])
 expected_client_id = os.environ["EXPECTED_CLIENT_ID"]
 expected_issuer_url = os.environ["EXPECTED_ISSUER_URL"]
+expected_tunnel_secret_ref_name = os.environ["TUNNEL_SECRET_REF_NAME"]
 
 errors = []
 
@@ -153,6 +161,37 @@ if api_app.get("properties", {}).get("configuration", {}).get("ingress", {}).get
     errors.append("API app target port is not 8000")
 if worker_app.get("properties", {}).get("configuration", {}).get("ingress") not in (None, {}):
     errors.append("Worker app still exposes ingress")
+
+tunnel_config = tunnel_app.get("properties", {}).get("template", {}).get("containers", [])
+if len(tunnel_config) != 1:
+    errors.append("Tunnel app must define exactly one container")
+else:
+    tunnel_container = tunnel_config[0]
+    if not tunnel_container.get("image"):
+        errors.append("Tunnel app image is not configured")
+    command = tunnel_container.get("command") or []
+    args = tunnel_container.get("args") or []
+    if command != ["/bin/sh"]:
+        errors.append(f"Unexpected tunnel command: {command!r}")
+    if args != ["-c", 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"']:
+        errors.append(f"Unexpected tunnel args: {args!r}")
+    env = {
+        item.get("name"): item.get("secretRef") or item.get("value")
+        for item in tunnel_container.get("env") or []
+        if isinstance(item, dict) and item.get("name")
+    }
+    if env.get("TUNNEL_TOKEN") != expected_tunnel_secret_ref_name:
+        errors.append(
+            f"Tunnel app TUNNEL_TOKEN must reference the {expected_tunnel_secret_ref_name!r} secret"
+        )
+
+scale = tunnel_app.get("properties", {}).get("template", {}).get("scale") or {}
+if scale.get("minReplicas") != 2:
+    errors.append(f"Tunnel app minReplicas is not 2: {scale.get('minReplicas')!r}")
+if scale.get("maxReplicas") != 2:
+    errors.append(f"Tunnel app maxReplicas is not 2: {scale.get('maxReplicas')!r}")
+if tunnel_app.get("properties", {}).get("configuration", {}).get("ingress") not in (None, {}):
+    errors.append("Tunnel app should not expose ingress")
 
 if errors:
     for error in errors:

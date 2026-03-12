@@ -16,6 +16,7 @@ param(
     [string]$ApiAppName = "ca-gtog-api-prod",
     [string]$WorkerAppName = "ca-gtog-worker-prod",
     [string]$TunnelAppName = "ca-gtog-tunnel-prod",
+    [string]$TunnelSecretRefName = "tunnel-token",
     [string]$ApiImage = "",
     [string]$WorkerImage = "",
     [string]$TunnelImage = "cloudflare/cloudflared:latest",
@@ -216,6 +217,38 @@ function Ensure-WorkerIngressContract {
     az containerapp ingress disable `
         --resource-group $ResourceGroup `
         --name $WorkerAppName `
+        --output none | Out-Null
+}
+
+function Ensure-TunnelConnectorContract {
+    if (-not (Test-ContainerAppExists -Name $TunnelAppName)) {
+        return
+    }
+
+    if ($TunnelToken) {
+        az containerapp secret set `
+            --resource-group $ResourceGroup `
+            --name $TunnelAppName `
+            --secrets "${TunnelSecretRefName}=$TunnelToken" `
+            --output none | Out-Null
+    }
+
+    az containerapp update `
+        --resource-group $ResourceGroup `
+        --name $TunnelAppName `
+        --image $TunnelImage `
+        --cpu "0.5" `
+        --memory "1.0Gi" `
+        --min-replicas "2" `
+        --max-replicas "2" `
+        --set-env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
+        --command "/bin/sh" `
+        --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
+        --output none | Out-Null
+
+    az containerapp ingress disable `
+        --resource-group $ResourceGroup `
+        --name $TunnelAppName `
         --output none | Out-Null
 }
 
@@ -772,8 +805,8 @@ if ($CreateApps) {
             --memory "1.0Gi" `
             --min-replicas "2" `
             --max-replicas "2" `
-            --secrets "tunnel-token=$TunnelToken" `
-            --env-vars "TUNNEL_TOKEN=secretref:tunnel-token" `
+            --secrets "${TunnelSecretRefName}=$TunnelToken" `
+            --env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
             --command "/bin/sh" `
             --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
             --output none
@@ -790,6 +823,11 @@ if (Test-ContainerAppExists -Name $WorkerAppName) {
     Write-Host ">>> Reconciling worker ingress and runtime role"
     Ensure-ContainerAppIdentity -Name $WorkerAppName
     Ensure-WorkerIngressContract
+}
+
+if (Test-ContainerAppExists -Name $TunnelAppName) {
+    Write-Host ">>> Reconciling tunnel connector contract"
+    Ensure-TunnelConnectorContract
 }
 
 if ($ConfigureEasyAuth) {

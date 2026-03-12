@@ -18,6 +18,7 @@ PRIVATE_DNS_LINK_NAME="${PRIVATE_DNS_LINK_NAME:-link-cae-gtog-prod}"
 API_APP_NAME="${API_APP_NAME:-ca-gtog-api-prod}"
 WORKER_APP_NAME="${WORKER_APP_NAME:-ca-gtog-worker-prod}"
 TUNNEL_APP_NAME="${TUNNEL_APP_NAME:-ca-gtog-tunnel-prod}"
+TUNNEL_SECRET_REF_NAME="${TUNNEL_SECRET_REF_NAME:-tunnel-token}"
 API_IMAGE="${API_IMAGE:-}"
 WORKER_IMAGE="${WORKER_IMAGE:-}"
 TUNNEL_IMAGE="${TUNNEL_IMAGE:-cloudflare/cloudflared:latest}"
@@ -202,6 +203,38 @@ ensure_worker_ingress_contract() {
   az containerapp ingress disable \
     --resource-group "$RESOURCE_GROUP" \
     --name "$WORKER_APP_NAME" \
+    --output none
+}
+
+ensure_tunnel_connector_contract() {
+  if ! container_app_exists "$TUNNEL_APP_NAME"; then
+    return 0
+  fi
+
+  if [[ -n "$TUNNEL_TOKEN" ]]; then
+    az containerapp secret set \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$TUNNEL_APP_NAME" \
+      --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
+      --output none
+  fi
+
+  az containerapp update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$TUNNEL_APP_NAME" \
+    --image "$TUNNEL_IMAGE" \
+    --cpu 0.5 \
+    --memory 1.0Gi \
+    --min-replicas 2 \
+    --max-replicas 2 \
+    --set-env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
+    --command /bin/sh \
+    --args "-c" "cloudflared tunnel --no-autoupdate run --token \"\$TUNNEL_TOKEN\"" \
+    --output none
+
+  az containerapp ingress disable \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$TUNNEL_APP_NAME" \
     --output none
 }
 
@@ -874,8 +907,8 @@ if bool_true "$CREATE_APPS"; then
       --memory 1.0Gi \
       --min-replicas 2 \
       --max-replicas 2 \
-      --secrets "tunnel-token=${TUNNEL_TOKEN}" \
-      --env-vars "TUNNEL_TOKEN=secretref:tunnel-token" \
+      --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
+      --env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
       --command /bin/sh \
       --args -c 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"' \
       --output none
@@ -892,6 +925,11 @@ if container_app_exists "$WORKER_APP_NAME"; then
   echo ">>> Reconciling worker ingress and runtime role"
   ensure_container_app_identity "$WORKER_APP_NAME"
   ensure_worker_ingress_contract
+fi
+
+if container_app_exists "$TUNNEL_APP_NAME"; then
+  echo ">>> Reconciling tunnel connector contract"
+  ensure_tunnel_connector_contract
 fi
 
 if bool_true "$CONFIGURE_EASY_AUTH"; then

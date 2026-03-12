@@ -82,12 +82,13 @@ The scripts reconcile these platform guarantees on every run:
 
 ## Validation
 
-1. From the public Internet, direct probes to the ACA API origin must fail at the network layer.
-2. `https://api.<domain>/.auth/me` must still work through Cloudflare.
-3. Browser login, logout, and token retrieval must remain on `api.<domain>`.
-4. CRUD, upload, indexing, query, and SSE flows must pass through the tunnel path.
-5. Stop one tunnel replica and confirm traffic still succeeds.
-6. Confirm logs include:
+1. Run `scripts/validate-aca-phase3-auth.sh` or `.ps1` with the environment inputs, including `TUNNEL_APP_NAME`, to verify the API, worker, and tunnel connector contracts together. If the tunnel app uses a non-default secret reference name, also pass `TUNNEL_SECRET_REF_NAME`.
+2. From the public Internet, direct probes to the ACA API origin must fail at the network layer.
+3. `https://api.<domain>/.auth/me` must still work through Cloudflare.
+4. Browser login, logout, and token retrieval must remain on `api.<domain>`.
+5. CRUD, upload, indexing, query, and SSE flows must pass through the tunnel path.
+6. Stop one tunnel replica and confirm traffic still succeeds.
+7. Confirm logs include:
    - `Cf-Ray`
    - app `request_id`
    - tunnel connector health and reconnect events
