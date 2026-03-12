@@ -52,20 +52,21 @@ def test_pipeline_contains_phase5_stage_sequence():
 
 
 
-def test_validate_stage_keeps_security_scanning_and_quality_checks():
+def test_validate_stage_keeps_current_quality_checks_and_disables_unavailable_compliance_tasks():
     stage = _stage_map()["Validate"]
-    jobs = stage["jobs"]
-    assert jobs
+    jobs = {job["job"]: job for job in stage["jobs"]}
 
-    task_names = _iter_step_values(jobs, "task")
-    scripts = _iter_step_values(jobs, "script")
+    quality_job = jobs["quality_checks"]
+    scripts = _iter_step_values([quality_job], "script")
     combined_scripts = "\n".join(scripts)
 
-    assert "CredScan@3" in task_names
-    assert "ComponentGovernanceComponentDetection@0" in task_names
-    assert "PublishSecurityAnalysisLogs@3" in task_names
+    assert "uv sync --dev" in combined_scripts
     assert "uv run poe check" in combined_scripts
     assert "pytest ./backend/tests/unit ./tests/unit" in combined_scripts
+
+    compliance_job = jobs["compliance"]
+    assert compliance_job["condition"] is False
+    assert compliance_job["pool"]["vmImage"] == "windows-latest"
 
 
 
