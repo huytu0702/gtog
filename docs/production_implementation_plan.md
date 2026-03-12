@@ -458,6 +458,141 @@ Never log:
 - Production requires explicit manual approval
 - Rollback path is tested and documented
 
+**Current readiness and gap assessment**
+
+- `.vsts-ci.yml` currently provides only a `Compliance` stage and does not yet implement the required release stages for validation, image build, staging deployment, smoke testing, approval, and production promotion.
+- `scripts/provision-aca-private-origin.sh` and `scripts/provision-aca-private-origin.ps1` already provide deploy-time controls for the private ACA API, worker, tunnel connector contract, Entra/Easy Auth setup, and environment-specific settings.
+- `scripts/validate-aca-phase3-auth.sh` and `scripts/validate-aca-phase3-auth.ps1` already validate key Phase 5 security gates, including unauthenticated API rejection, audience isolation, and tunnel connector configuration, and they also support direct-origin denial and cross-environment token-rejection checks when the required probe URLs and test tokens are supplied.
+- `scripts/harden-azure-phase5.sh` and `scripts/harden-azure-phase5.ps1` already cover baseline production hardening for managed identity, Key Vault, service settings, and alert creation, but they are not yet wired into a gated release workflow.
+- `backend/Dockerfile` and `frontend/Dockerfile` already define production container images, and the backend image already supports both API and worker runtime selection through `APP_ROLE`.
+- `docs/runbooks/release-promotion-checklist.md`, `docs/runbooks/rollback.md`, `docs/runbooks/origin-bypass-verification.md`, `docs/runbooks/backup-restore.md`, and `docs/runbooks/cloudflare-tunnel-rotation.md` already define the operational expectations for promotion, rollback, and evidence retention, but the pipeline still needs to enforce those expectations as release gates.
+- The main remaining gap is not architectural readiness; it is release automation, smoke coverage, evidence publication, and approval enforcement.
+
+**Implementation plan**
+
+1. **Expand Azure DevOps from compliance-only into a full release pipeline**
+   - Replace or extend `.vsts-ci.yml` so it defines the required stages:
+     - `Validate`
+     - `BuildImages`
+     - `DeployStaging`
+     - `SmokeStaging`
+     - `ManualApproval`
+     - `DeployProduction`
+   - Keep the existing compliance/security scanning work, but move it under the broader `Validate` stage so code-quality, security, and release validation live in a single promotion flow.
+   - Ensure stage dependencies make staging smoke success a hard prerequisite for approval and production deployment.
+
+2. **Define the Validate-stage contract before deployment is allowed**
+   - In `.vsts-ci.yml`, run the repository's required static and automated checks before any image build or deployment step.
+   - The Validate stage should include, at minimum:
+     - Python dependency sync or install
+     - backend and library tests
+     - frontend build validation where applicable
+     - linting and formatting checks
+     - type-checking or equivalent static analysis
+     - existing compliance/security scan tasks already present in `.vsts-ci.yml`
+   - Publish a retained validation artifact summarizing test, lint, and scan results for later release review.
+
+3. **Standardize image build and publish behavior for API, worker, and frontend**
+   - In `.vsts-ci.yml`, add a `BuildImages` stage that builds and publishes the deployable images used by staging and production.
+   - Use `backend/Dockerfile` for the backend image and preserve the `APP_ROLE` runtime split so the same backend image can serve both API and worker roles.
+   - Use `frontend/Dockerfile` for the frontend image and pass the environment-specific `NEXT_PUBLIC_API_BASE_URL` at build time.
+   - Publish image metadata, including commit SHA, tags, and digests, as release evidence so staging and production can be proven to use the same artifacts.
+
+4. **Wire deployment stages to the existing ACA provisioning scripts**
+   - Use `scripts/provision-aca-private-origin.sh` and `scripts/provision-aca-private-origin.ps1` as the deployment entrypoints for `DeployStaging` and `DeployProduction`.
+   - Keep environment-specific values separate for staging and production, including:
+     - tunnel token secret references
+     - Entra app registration values
+     - allowed audiences
+     - API public hostname
+     - `EDGE_ORIGIN_SECRET`
+     - Key Vault references
+   - Ensure the pipeline deploys the API, worker, and tunnel connector contract together so release gates verify the full private-origin topology rather than only the API app.
+
+5. **Add a release-smoke harness that maps directly to the Phase 5 deliverables**
+   - Add dedicated smoke scripts under `scripts/` for release-gate execution, with both Bash and PowerShell variants so the workflow remains operable from Linux and Windows runners.
+   - Reuse `scripts/validate-aca-phase3-auth.sh` and `scripts/validate-aca-phase3-auth.ps1` inside the smoke stage rather than duplicating the identity and origin-isolation logic.
+   - Treat the helper's optional inputs as mandatory pipeline inputs for the release-gate paths that validate wrong-audience rejection, cross-environment rejection, and direct-origin denial.
+   - The smoke suite should cover the full Phase 5 contract:
+     - health and readiness
+     - login and `/.auth/me`
+     - unauthenticated `/api/*` returns `401`
+     - CRUD flow
+     - upload flow
+     - indexing submission
+     - job status polling
+     - query methods
+     - SSE behavior
+     - direct-origin denial
+     - audience isolation
+     - tunnel failover
+   - Persist smoke outputs as pipeline artifacts so promotion is evidence-driven rather than based on console-only logs.
+
+6. **Turn runbook expectations into hard promotion gates**
+   - Align `.vsts-ci.yml` with `docs/runbooks/release-promotion-checklist.md` so the evidence bundle listed in the runbook is produced and published automatically.
+   - Require the staging deployment to retain or reference:
+     - validate-stage report
+     - image-build metadata
+     - staging deploy log
+     - smoke report
+     - Phase 3 validation helper output
+     - direct-origin denial evidence
+     - audience isolation evidence
+     - SSE evidence
+     - tunnel failover evidence
+     - rollback drill evidence
+     - restore drill evidence where required by release policy
+     - accepted-risk record for Azure AI Search Free SKU
+   - Block production promotion if any required artifact or validation result is missing.
+
+7. **Enforce manual approval and controlled production promotion**
+   - Configure the `ManualApproval` stage so production deployment cannot begin until an explicit approver reviews the staging evidence bundle.
+   - Require production deployment to consume the already-built artifacts from `BuildImages` rather than rebuilding from source.
+   - Record the approval event and attach it to the release record so production sign-off is auditable.
+
+8. **Run and retain a staging rollback drill before Phase 5 sign-off**
+   - Execute the rollback process described in `docs/runbooks/rollback.md` against staging after a pipeline-driven deployment.
+   - Verify that the previously known-good revision can be restored and that post-rollback smoke checks still pass.
+   - Attach rollback drill evidence to the same promotion record referenced by `docs/runbooks/release-promotion-checklist.md`.
+
+9. **Finalize alerting and operational evidence for promotion readiness**
+   - Use `scripts/harden-azure-phase5.sh` and `scripts/harden-azure-phase5.ps1` to ensure the baseline monitor and alert configuration exists before production promotion.
+   - Verify alert routing, Log Analytics availability, and the operational visibility required by the runbooks.
+   - Retain alert configuration evidence alongside the release artifacts so promotion approval includes both application and operational readiness.
+
+**Recommended execution order**
+
+1. Expand `.vsts-ci.yml` into the required multi-stage release pipeline.
+2. Define and stabilize the `Validate` stage artifact contract.
+3. Add `BuildImages` artifact publication for backend, worker, and frontend images.
+4. Wire staging deployment to `scripts/provision-aca-private-origin.sh` and `.ps1`.
+5. Add release-smoke scripts and integrate the Phase 3 validation helper.
+6. Add manual approval and artifact-presence gates for production.
+7. Run a full staging pipeline rehearsal and capture the evidence bundle.
+8. Execute and document the staging rollback drill.
+9. Use the validated pipeline path as the only promotion route going into Phase 6.
+
+**Phase 5 validation evidence**
+
+- Pipeline run showing successful execution of `Validate`, `BuildImages`, `DeployStaging`, and `SmokeStaging`.
+- Published validation artifact containing test, lint, and compliance/security scan output.
+- Image build artifact containing backend, worker, and frontend image tags and digests.
+- Staging deployment logs showing the API, worker, and tunnel connector contract was applied successfully.
+- Smoke report covering health, auth, CRUD, upload, indexing, status polling, query methods, and SSE.
+- `scripts/validate-aca-phase3-auth.sh` or `.ps1` output showing unauthenticated rejection, audience isolation, cross-environment rejection, and direct-origin denial.
+- Tunnel failover evidence showing continued availability through the Cloudflare-managed route.
+- Rollback drill evidence showing successful restoration of the last known-good staging revision.
+- Alert configuration or alert-routing evidence produced after hardening validation.
+- Manual approval record showing that production promotion required explicit human sign-off.
+
+**Phase 5 risks and focus points**
+
+- Phase 5 should not be signed off if production deployment can still occur outside the approved pipeline path.
+- A smoke suite that omits direct-origin denial, audience isolation, or rollback validation would create a false sense of release readiness.
+- Rebuilding images in production instead of promoting the exact staging artifacts would weaken release traceability and should be avoided.
+- Manual approval must review retained evidence, not just a green pipeline summary.
+- The AI Search Free SKU exception remains an accepted risk and must stay visible in Phase 5 artifacts and sign-off records.
+
 ---
 
 ### Phase 6: Production validation and controlled rollout

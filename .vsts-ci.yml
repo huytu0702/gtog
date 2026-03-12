@@ -1,6 +1,4 @@
 name: GraphRAG CI
-pool:
-  vmImage: ubuntu-latest
 
 trigger:
   batch: true
@@ -8,17 +6,56 @@ trigger:
     include:
       - main
 
+pr:
+  branches:
+    include:
+      - main
+
 variables:
-  isMain: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
   pythonVersion: "3.10"
-  poetryVersion: "1.6.1"
-  nodeVersion: "18.x"
-  artifactsFullFeedName: "Resilience/resilience_python"
+  nodeVersion: "20.x"
+  buildArtifactName: "image-metadata"
+  stagingDeployArtifactName: "deploy-staging-log"
+  productionDeployArtifactName: "deploy-production-log"
+  smokeStagingArtifactName: "smoke-staging-report"
+  phase3ValidationArtifactName: "phase3-auth-origin-validation"
+  validateReportArtifactName: "validate-stage-report"
 
 stages:
-  - stage: Compliance
+  - stage: Validate
     dependsOn: []
     jobs:
+      - job: quality_checks
+        displayName: Quality and tests
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "$(nodeVersion)"
+
+          - script: python -m pip install --upgrade pip uv
+            displayName: Install uv
+
+          - script: uv sync --dev
+            displayName: Sync dependencies
+
+          - script: |
+              set -euo pipefail
+              report_dir="$(Build.ArtifactStagingDirectory)/validate-stage-report"
+              mkdir -p "$report_dir"
+              uv run poe check 2>&1 | tee "$report_dir/check.log"
+              uv run pytest ./backend/tests/unit ./tests/unit 2>&1 | tee "$report_dir/unit-tests.log"
+            displayName: Run lint, type checks, and unit tests
+
+          - publish: $(Build.ArtifactStagingDirectory)/validate-stage-report
+            artifact: $(validateReportArtifactName)
+            displayName: Publish validate stage report
+
       - job: compliance
         displayName: Compliance
         pool:
@@ -31,11 +68,189 @@ stages:
 
           - task: ComponentGovernanceComponentDetection@0
             inputs:
-              scanType: "Register"
-              verbosity: "Verbose"
-              alertWarningLevel: "High"
+              scanType: Register
+              verbosity: Verbose
+              alertWarningLevel: High
 
           - task: PublishSecurityAnalysisLogs@3
             inputs:
-              ArtifactName: "CodeAnalysisLogs"
-              ArtifactType: "Container"
+              ArtifactName: CodeAnalysisLogs
+              ArtifactType: Container
+
+  - stage: BuildImages
+    dependsOn:
+      - Validate
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: build_images
+        displayName: Build backend and frontend images
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - script: |
+              set -euo pipefail
+              mkdir -p "$(Build.ArtifactStagingDirectory)/image-metadata"
+              docker build -f backend/Dockerfile -t "$(backendImageRepository):$(Build.BuildId)" .
+              docker build --build-arg NEXT_PUBLIC_API_BASE_URL="$(stagingApiBaseUrl)" -f frontend/Dockerfile -t "$(frontendImageRepository):$(Build.BuildId)" frontend
+              printf '%s\n' "commit=$(Build.SourceVersion)" > "$(Build.ArtifactStagingDirectory)/image-metadata/metadata.txt"
+              printf '%s\n' "backend_image=$(backendImageRepository):$(Build.BuildId)" >> "$(Build.ArtifactStagingDirectory)/image-metadata/metadata.txt"
+              printf '%s\n' "frontend_image=$(frontendImageRepository):$(Build.BuildId)" >> "$(Build.ArtifactStagingDirectory)/image-metadata/metadata.txt"
+              printf '%s\n' "worker_runtime=APP_ROLE=worker" >> "$(Build.ArtifactStagingDirectory)/image-metadata/metadata.txt"
+            displayName: Build release images and prepare metadata artifact
+
+          - publish: $(Build.ArtifactStagingDirectory)/image-metadata
+            artifact: $(buildArtifactName)
+            displayName: Publish image metadata
+
+  - stage: DeployStaging
+    dependsOn:
+      - BuildImages
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: deploy_staging
+        displayName: Deploy staging environment
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(buildArtifactName)
+              targetPath: $(Pipeline.Workspace)/image-metadata
+
+          - script: |
+              set -euo pipefail
+              mkdir -p "$(Build.ArtifactStagingDirectory)/deploy-staging-log"
+              bash ./scripts/provision-aca-private-origin.sh > "$(Build.ArtifactStagingDirectory)/deploy-staging-log/deploy-staging.log" 2>&1
+            displayName: Run staging deployment script
+            env:
+              RESOURCE_GROUP: $(stagingResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(stagingApiAppName)
+              WORKER_APP_NAME: $(stagingWorkerAppName)
+              TUNNEL_APP_NAME: $(stagingTunnelAppName)
+              API_PUBLIC_HOSTNAME: $(stagingApiPublicHostname)
+              API_IMAGE: $(backendImageRepository):$(Build.BuildId)
+              WORKER_IMAGE: $(backendImageRepository):$(Build.BuildId)
+              KEY_VAULT_NAME: $(stagingKeyVaultName)
+              EDGE_ORIGIN_SECRET: $(stagingEdgeOriginSecret)
+              TUNNEL_TOKEN: $(stagingTunnelToken)
+              ENTRA_APP_ID: $(stagingEntraAppId)
+              ENTRA_TENANT_ID: $(entraTenantId)
+              ENTRA_CLIENT_SECRET: $(stagingEntraClientSecret)
+              ALLOWED_AUDIENCES: $(stagingAllowedAudiences)
+              CONFIGURE_EASY_AUTH: "true"
+
+          - publish: $(Build.ArtifactStagingDirectory)/deploy-staging-log
+            artifact: $(stagingDeployArtifactName)
+            displayName: Publish staging deployment log
+
+  - stage: SmokeStaging
+    dependsOn:
+      - DeployStaging
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: smoke_staging
+        displayName: Run staging smoke and security gates
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - script: chmod +x ./scripts/smoke-release-gates.sh
+            displayName: Make smoke script executable
+
+          - script: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)/smoke-staging-report"
+              bash ./scripts/smoke-release-gates.sh
+            displayName: Run staging smoke gates
+            env:
+              API_BASE_URL: https://$(stagingApiPublicHostname)
+              API_PUBLIC_HOSTNAME: $(stagingApiPublicHostname)
+              AUTH_BEARER_TOKEN: $(stagingAuthBearerToken)
+              EXPECTED_CLIENT_ID: $(stagingEntraClientId)
+              EXPECTED_ISSUER_URL: $(stagingIssuerUrl)
+              EXPECTED_ALLOWED_AUDIENCES: $(stagingAllowedAudiences)
+              WRONG_AUDIENCE_TOKEN: $(stagingWrongAudienceToken)
+              PRODUCTION_REJECTION_TOKEN: $(stagingProductionRejectionToken)
+              PROBE_ORIGIN_URLS: $(stagingProbeOriginUrls)
+              RESOURCE_GROUP: $(stagingResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(stagingApiAppName)
+              WORKER_APP_NAME: $(stagingWorkerAppName)
+              TUNNEL_APP_NAME: $(stagingTunnelAppName)
+              EVIDENCE_DIR: $(Build.ArtifactStagingDirectory)/smoke-staging-report
+
+          - publish: $(Build.ArtifactStagingDirectory)/smoke-staging-report
+            artifact: $(smokeStagingArtifactName)
+            displayName: Publish smoke staging report
+
+          - publish: $(Build.ArtifactStagingDirectory)/smoke-staging-report
+            artifact: phase3-auth-origin-validation
+            displayName: Publish Phase 3 auth and origin validation evidence
+
+  - stage: ManualApproval
+    dependsOn:
+      - SmokeStaging
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: manual_approval
+        displayName: Manual approval for production
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            inputs:
+              instructions: |
+                Review validate-stage-report, image-metadata, deploy-staging-log,
+                smoke-staging-report, and phase3-auth-origin-validation artifacts
+                before approving production deployment.
+              notifyUsers: $(productionApprovers)
+              onTimeout: reject
+            timeoutInMinutes: 1440
+
+  - stage: DeployProduction
+    dependsOn:
+      - ManualApproval
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: deploy_production
+        displayName: Deploy production environment
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(buildArtifactName)
+              targetPath: $(Pipeline.Workspace)/image-metadata
+
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: current
+              artifactName: $(smokeStagingArtifactName)
+              targetPath: $(Pipeline.Workspace)/smoke-staging-report
+
+          - script: |
+              set -euo pipefail
+              mkdir -p "$(Build.ArtifactStagingDirectory)/deploy-production-log"
+              bash ./scripts/provision-aca-private-origin.sh > "$(Build.ArtifactStagingDirectory)/deploy-production-log/deploy-production.log" 2>&1
+            displayName: Run production deployment script
+            env:
+              RESOURCE_GROUP: $(productionResourceGroup)
+              SUBSCRIPTION: $(azureSubscriptionId)
+              API_APP_NAME: $(productionApiAppName)
+              WORKER_APP_NAME: $(productionWorkerAppName)
+              TUNNEL_APP_NAME: $(productionTunnelAppName)
+              API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
+              API_IMAGE: $(backendImageRepository):$(Build.BuildId)
+              WORKER_IMAGE: $(backendImageRepository):$(Build.BuildId)
+              KEY_VAULT_NAME: $(productionKeyVaultName)
+              EDGE_ORIGIN_SECRET: $(productionEdgeOriginSecret)
+              TUNNEL_TOKEN: $(productionTunnelToken)
+              ENTRA_APP_ID: $(productionEntraAppId)
+              ENTRA_TENANT_ID: $(entraTenantId)
+              ENTRA_CLIENT_SECRET: $(productionEntraClientSecret)
+              ALLOWED_AUDIENCES: $(productionAllowedAudiences)
+              CONFIGURE_EASY_AUTH: "true"
+
+          - publish: $(Build.ArtifactStagingDirectory)/deploy-production-log
+            artifact: $(productionDeployArtifactName)
+            displayName: Publish production deployment log
