@@ -5,38 +5,8 @@
     "context": "Victim's name is Paul Stine... Suspect fired one shot, back of the head... [5]"
   },
   {
-    "question": "Where are Ferrin and Mageau attacked?",
-    "ground_truth": "At a lovers' lane in Vallejo, California",
-    "context": "July 4th, 1969 - Summer of Love. Vallejo, California... EXT. BLUE ROCK SPRINGS -- PARKING LOT -- NIGHT... Make out point. [17], [21], [22]"
-  },
-  {
-    "question": "What is the gender of Darlene and Mike's attacker?",
-    "ground_truth": "He is male",
-    "context": "A MAN (O.S.) I want to a report a double murder... The Man FIRES TWO MORE SHOTS into Mike... [18], [19]"
-  },
-  {
-    "question": "What is Allen's job at the time Robert finds him?",
-    "ground_truth": "He is a sales clerk",
-    "context": "EXT. ACE HARDWARE -- PARKING LOT -- MORNING... INT. ACE HARDWARE -- MORNING... A HEAVY BALD CLERK, stocking... The clerk turns and flashes a smile. His nameplate reads \"LEE\"."
-  },
-  {
-    "question": "When does Robert track down Allen?",
-    "ground_truth": "December 1983",
-    "context": "They stand three feet apart. Graysmith stares at him. Looking him in the eye... Allen's smile fades... Graysmith turns and walks out of the store."
-  },
-  {
-    "question": "How does the killer find Paul?",
-    "ground_truth": "Paul gives the Zodiac killer a ride in his cab",
-    "context": "The Cabbie's HEAD SNAPS FORWARD. Shot by his PASSENGER, who we don't see."
-  },
-  {
-    "question": "What did the results of the DNA test conducted on Allen's DNA and the DNA from the Zodiac letter show?",
-    "ground_truth": "The DNA sample taken from the postage stamp on one of the Zodiac letters did not match Allan's DNA",
-    "context": "In 2001 DNA tests were run on several of the Zodiac envelopes. The San Francisco lab claimed DNA found under the stamps did not match Arthur Leigh Allen's."
-  },
-  {
-    "question": "Who does the Zodiac killer attack next?",
-    "ground_truth": "Bryan Hartnell and Cecelia Shepard",
-    "context": "Two college kids, BRYAN HARTNELL at the wheel, CECELIA SHEPHARD next to him... Lake Berryessa... The Man FIRES TWO MORE SHOTS into Mike... (wait, wrong attack)... Bryan and Cecelia lie side by side... The Man pulls the knife from the scabbard and STABS BRYAN IN THE BACK... He turns and STABS CECELIA."
+    "question": "Why does Graysmith's wife leave him?",
+    "ground_truth": "Because he is too immersed in the Zodiac case",
+    "context": "MELANIE What's it going to take for you to be done with this, Robert?... And that's more important than your family's safety... Took the kids to Mom's. Don't call. [13], [223C]"
   }
 ]
