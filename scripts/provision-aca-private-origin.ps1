@@ -13,13 +13,19 @@ param(
     [string]$PrivateEndpointName = "pe-cae-gtog-prod",
     [string]$PrivateDnsZone = "",
     [string]$PrivateDnsLinkName = "link-cae-gtog-prod",
+    [string]$FrontendAppName = "ca-gtog-frontend-prod",
     [string]$ApiAppName = "ca-gtog-api-prod",
     [string]$WorkerAppName = "ca-gtog-worker-prod",
     [string]$TunnelAppName = "ca-gtog-tunnel-prod",
     [string]$TunnelSecretRefName = "tunnel-token",
+    [string]$FrontendImage = "",
     [string]$ApiImage = "",
     [string]$WorkerImage = "",
     [string]$TunnelImage = "cloudflare/cloudflared:latest",
+    [string]$FrontendCpu = "1.0",
+    [string]$FrontendMemory = "2.0Gi",
+    [string]$FrontendMinReplicas = "1",
+    [string]$FrontendMaxReplicas = "2",
     [string]$ApiCpu = "1.0",
     [string]$ApiMemory = "2.0Gi",
     [string]$ApiMinReplicas = "1",
@@ -47,6 +53,7 @@ param(
     [switch]$ConfigureEasyAuth,
     [switch]$CreateEntraApp,
     [switch]$ResetEntraClientSecret,
+    [string]$AppPublicHostname = "",
     [string]$ApiPublicHostname = "",
     [string]$EntraAppDisplayName = "",
     [string]$EntraAppId = "",
@@ -118,6 +125,19 @@ function Require-Value {
     if ([string]::IsNullOrWhiteSpace($Value)) {
         throw "$Name is required for this operation."
     }
+}
+
+function Assert-FrontendRuntimeContractHostnames {
+    Require-Value -Name "AppPublicHostname" -Value $AppPublicHostname
+    Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
+}
+
+function Assert-ApiRuntimeContractHostname {
+    Require-Value -Name "AppPublicHostname" -Value $AppPublicHostname
+}
+
+function Assert-EasyAuthHostname {
+    Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
 }
 
 function Ensure-Subnet {
@@ -208,6 +228,32 @@ function Ensure-ContainerAppIdentity {
         --output none | Out-Null
 }
 
+function Ensure-FrontendIngressContract {
+    $frontendArgs = @(
+        "containerapp", "update",
+        "--resource-group", $ResourceGroup,
+        "--name", $FrontendAppName,
+        "--cpu", $FrontendCpu,
+        "--memory", $FrontendMemory,
+        "--min-replicas", $FrontendMinReplicas,
+        "--max-replicas", $FrontendMaxReplicas,
+        "--set-env-vars", "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname", "CORS_ORIGINS=https://$AppPublicHostname",
+        "--output", "none"
+    )
+    if ($FrontendImage) {
+        $frontendArgs += @("--image", $FrontendImage)
+    }
+    az @frontendArgs | Out-Null
+
+    az containerapp ingress enable `
+        --resource-group $ResourceGroup `
+        --name $FrontendAppName `
+        --type internal `
+        --target-port 3000 `
+        --transport auto `
+        --output none | Out-Null
+}
+
 function Ensure-ApiIngressContract {
     $apiArgs = @(
         "containerapp", "update",
@@ -217,7 +263,7 @@ function Ensure-ApiIngressContract {
         "--memory", $ApiMemory,
         "--min-replicas", $ApiMinReplicas,
         "--max-replicas", $ApiMaxReplicas,
-        "--set-env-vars", "APP_ROLE=api",
+        "--set-env-vars", "APP_ROLE=api", "CORS_ORIGINS=https://$AppPublicHostname",
         "--output", "none"
     )
     if ($ApiImage) {
@@ -935,14 +981,47 @@ if ($RolloutMode -in @("promote", "rollback")) {
     }
 
     if ($CreateApps) {
+        if (-not $FrontendImage) {
+            throw "FrontendImage is required when -CreateApps is used."
+        }
         if (-not $ApiImage) {
             throw "ApiImage is required when -CreateApps is used."
         }
         if (-not $WorkerImage) {
             throw "WorkerImage is required when -CreateApps is used."
         }
+        if (-not $AppPublicHostname) {
+            throw "AppPublicHostname is required when -CreateApps is used."
+        }
+        if (-not $ApiPublicHostname) {
+            throw "ApiPublicHostname is required when -CreateApps is used."
+        }
         if (-not $TunnelToken) {
             throw "TunnelToken is required when -CreateApps is used."
+        }
+
+        Write-Host ">>> Ensuring frontend app: $FrontendAppName"
+        if (-not (Test-ContainerAppExists -Name $FrontendAppName)) {
+            $frontendArgs = @(
+                "containerapp", "create",
+                "--resource-group", $ResourceGroup,
+                "--name", $FrontendAppName,
+                "--environment", $ContainerAppEnvironment,
+                "--image", $FrontendImage,
+                "--ingress", "internal",
+                "--target-port", "3000",
+                "--transport", "auto",
+                "--cpu", $FrontendCpu,
+                "--memory", $FrontendMemory,
+                "--min-replicas", $FrontendMinReplicas,
+                "--max-replicas", $FrontendMaxReplicas,
+                "--env-vars", "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname", "CORS_ORIGINS=https://$AppPublicHostname",
+                "--output", "none"
+            )
+            if ($IdentityResourceId) {
+                $frontendArgs += @("--user-assigned", $IdentityResourceId)
+            }
+            az @frontendArgs | Out-Null
         }
 
         Write-Host ">>> Ensuring API app: $ApiAppName"
@@ -960,7 +1039,7 @@ if ($RolloutMode -in @("promote", "rollback")) {
                 "--memory", $ApiMemory,
                 "--min-replicas", $ApiMinReplicas,
                 "--max-replicas", $ApiMaxReplicas,
-                "--env-vars", "APP_ROLE=api",
+                "--env-vars", "APP_ROLE=api", "CORS_ORIGINS=https://$AppPublicHostname",
                 "--output", "none"
             )
             if ($IdentityResourceId) {
@@ -1009,7 +1088,15 @@ if ($RolloutMode -in @("promote", "rollback")) {
         }
     }
 
+    if (Test-ContainerAppExists -Name $FrontendAppName) {
+        Assert-FrontendRuntimeContractHostnames
+        Write-Host ">>> Reconciling frontend ingress and runtime contract"
+        Ensure-ContainerAppIdentity -Name $FrontendAppName
+        Ensure-FrontendIngressContract
+    }
+
     if (Test-ContainerAppExists -Name $ApiAppName) {
+        Assert-ApiRuntimeContractHostname
         Write-Host ">>> Reconciling API ingress and runtime role"
         Ensure-ContainerAppIdentity -Name $ApiAppName
         Ensure-ApiIngressContract
@@ -1027,6 +1114,7 @@ if ($RolloutMode -in @("promote", "rollback")) {
     }
 
     if ($ConfigureEasyAuth) {
+        Assert-EasyAuthHostname
         Configure-EasyAuth
         Verify-Phase3Contract
     }
@@ -1076,8 +1164,9 @@ if ($ConfigureEasyAuth) {
 } else {
     Write-Host "Next Cloudflare steps:"
     Write-Host "1. Create a remotely managed tunnel for this environment."
-    Write-Host "2. Add public hostname api.<domain> to the tunnel."
-    Write-Host "3. Point the tunnel service to the API private origin in ACA."
-    Write-Host "4. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
-    Write-Host "5. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
+    Write-Host "2. Add public hostnames app.<domain> and api.<domain> to the tunnel."
+    Write-Host "3. Point app.<domain> to the frontend private origin in ACA."
+    Write-Host "4. Point api.<domain> to the API private origin in ACA."
+    Write-Host "5. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
+    Write-Host "6. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
 }

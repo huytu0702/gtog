@@ -1,4 +1,6 @@
 param(
+    [string]$AppBaseUrl = "",
+    [string]$AppPublicHostname = "",
     [string]$ApiBaseUrl = "",
     [string]$ApiPublicHostname = "",
     [string]$AuthBearerToken = "",
@@ -98,6 +100,8 @@ function Invoke-JsonRequest {
 New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
 Set-Content -Path $uploadFile -Value "smoke document for $CollectionId"
 
+Require-Value -Name "AppBaseUrl" -Value $AppBaseUrl
+Require-Value -Name "AppPublicHostname" -Value $AppPublicHostname
 Require-Value -Name "ApiBaseUrl" -Value $ApiBaseUrl
 Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
 Require-Value -Name "AuthBearerToken" -Value $AuthBearerToken
@@ -112,6 +116,10 @@ Require-Value -Name "ExpectedAllowedAudiences" -Value $ExpectedAllowedAudiences
 Require-Value -Name "WrongAudienceToken" -Value $WrongAudienceToken
 Require-Value -Name "ProductionRejectionToken" -Value $ProductionRejectionToken
 Require-Value -Name "ProbeOriginUrls" -Value $ProbeOriginUrls
+
+$appHealthStatus = Invoke-StatusCheck -Url "$AppBaseUrl/api/health"
+if ($appHealthStatus -ne 200) { throw "app health expected 200, got $appHealthStatus" }
+Add-Result -Name "app_health" -Status "$appHealthStatus"
 
 $healthStatus = Invoke-StatusCheck -Url "$ApiBaseUrl/health"
 if ($healthStatus -ne 200) { throw "health expected 200, got $healthStatus" }

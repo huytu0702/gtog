@@ -14,26 +14,16 @@ REQUIRED_RELEASE_JOBS = [
     "deploy_staging",
     "smoke_staging",
     "await_prod_approval",
-    "deploy_production_canary",
-    "smoke_production_canary",
-    "rollback_production_canary",
-    "observe_production_canary",
-    "await_full_promotion",
-    "promote_production_full",
-    "smoke_production_full",
+    "deploy_production",
+    "smoke_production",
 ]
 EXPECTED_RELEASE_ARTIFACTS = {
     "deploy-production-log",
     "deploy-staging-log",
     "image-metadata",
     "phase3-auth-origin-validation",
-    "phase3-auth-origin-validation-production-canary",
-    "phase3-auth-origin-validation-production-full",
-    "production-canary-observation",
-    "production-rollback-log",
-    "production-rollout-state",
-    "smoke-production-canary-report",
-    "smoke-production-full-report",
+    "phase3-auth-origin-validation-production",
+    "smoke-production-report",
     "smoke-staging-report",
     "validate-stage-report",
 }
@@ -43,12 +33,15 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+
 def _workflow_jobs(path: Path) -> dict[str, dict]:
     return _load_yaml(path)["jobs"]
 
 
+
 def _iter_run_steps(job: dict) -> list[str]:
     return [step["run"] for step in job.get("steps", []) if isinstance(step.get("run"), str)]
+
 
 
 def _iter_upload_artifacts(jobs: dict[str, dict]) -> set[str]:
@@ -60,6 +53,12 @@ def _iter_upload_artifacts(jobs: dict[str, dict]) -> set[str]:
                 if isinstance(name, str):
                     artifacts.add(name)
     return artifacts
+
+
+
+def _step_named(job: dict, step_name: str) -> dict:
+    return next(step for step in job.get("steps", []) if step.get("name") == step_name)
+
 
 
 def test_validate_workflow_runs_on_pull_requests_and_main_pushes():
@@ -94,13 +93,8 @@ def test_release_workflow_contains_expected_job_chain():
     assert jobs["deploy_staging"]["needs"] == ["build_images"]
     assert jobs["smoke_staging"]["needs"] == ["deploy_staging"]
     assert jobs["await_prod_approval"]["needs"] == ["smoke_staging"]
-    assert jobs["deploy_production_canary"]["needs"] == ["await_prod_approval"]
-    assert jobs["smoke_production_canary"]["needs"] == ["deploy_production_canary"]
-    assert jobs["rollback_production_canary"]["needs"] == ["smoke_production_canary"]
-    assert jobs["observe_production_canary"]["needs"] == ["smoke_production_canary"]
-    assert jobs["await_full_promotion"]["needs"] == ["observe_production_canary"]
-    assert jobs["promote_production_full"]["needs"] == ["await_full_promotion"]
-    assert jobs["smoke_production_full"]["needs"] == ["promote_production_full"]
+    assert jobs["deploy_production"]["needs"] == ["await_prod_approval"]
+    assert jobs["smoke_production"]["needs"] == ["deploy_production"]
 
 
 
@@ -121,28 +115,48 @@ def test_release_workflow_preserves_artifact_contract_and_script_reuse():
         for step in jobs["build_images"].get("steps", [])
         if step.get("uses") == "actions/upload-artifact@v4"
     }
-    observe_artifacts = {
+    production_artifacts = {
         step.get("with", {}).get("name")
-        for step in jobs["observe_production_canary"].get("steps", [])
+        for step in jobs["deploy_production"].get("steps", [])
         if step.get("uses") == "actions/upload-artifact@v4"
     }
     assert "image-metadata" in build_artifacts
-    assert "production-rollout-state" in observe_artifacts
+    assert "deploy-production-log" in production_artifacts
 
 
 
-def test_release_workflow_preserves_rollout_modes_approvals_and_oidc_login():
+def test_release_workflow_builds_environment_specific_frontend_images_and_reuses_outputs():
+    workflow = _load_yaml(RELEASE_WORKFLOW_PATH)
+    jobs = workflow["jobs"]
+    build_scripts = "\n".join(_iter_run_steps(jobs["build_images"]))
+    build_outputs = jobs["build_images"]["outputs"]
+    deploy_staging_env = _step_named(jobs["deploy_staging"], "Run staging deployment script")["env"]
+    deploy_production_env = _step_named(jobs["deploy_production"], "Run production deployment script")["env"]
+
+    assert build_outputs["backend_image"] == "${{ steps.metadata.outputs.backend_image }}"
+    assert build_outputs["worker_image"] == "${{ steps.metadata.outputs.worker_image }}"
+    assert build_outputs["frontend_image_staging"] == "${{ steps.metadata.outputs.frontend_image_staging }}"
+    assert build_outputs["frontend_image_production"] == "${{ steps.metadata.outputs.frontend_image_production }}"
+    assert "NEXT_PUBLIC_API_BASE_URL_STAGING" in build_scripts
+    assert "NEXT_PUBLIC_API_BASE_URL_PRODUCTION" in build_scripts
+    assert "frontend_image_staging" in build_scripts
+    assert "frontend_image_production" in build_scripts
+    assert deploy_staging_env["FRONTEND_IMAGE"] == "${{ needs.build_images.outputs.frontend_image_staging }}"
+    assert deploy_production_env["FRONTEND_IMAGE"] == "${{ needs.build_images.outputs.frontend_image_production }}"
+    assert deploy_staging_env["API_IMAGE"] == "${{ needs.build_images.outputs.backend_image }}"
+    assert deploy_production_env["WORKER_IMAGE"] == "${{ needs.build_images.outputs.worker_image }}"
+
+
+
+def test_release_workflow_preserves_deploy_contract_approvals_and_oidc_login():
     workflow = _load_yaml(RELEASE_WORKFLOW_PATH)
     jobs = workflow["jobs"]
     deploy_staging_scripts = "\n".join(_iter_run_steps(jobs["deploy_staging"]))
-    deploy_production_scripts = "\n".join(_iter_run_steps(jobs["deploy_production_canary"]))
-    rollback_scripts = "\n".join(_iter_run_steps(jobs["rollback_production_canary"]))
-    promote_scripts = "\n".join(_iter_run_steps(jobs["promote_production_full"]))
-    deploy_production_env = next(
-        step["env"]
-        for step in jobs["deploy_production_canary"]["steps"]
-        if step.get("name") == "Run production deployment script"
-    )
+    deploy_production_scripts = "\n".join(_iter_run_steps(jobs["deploy_production"]))
+    deploy_staging_env = _step_named(jobs["deploy_staging"], "Run staging deployment script")["env"]
+    deploy_production_env = _step_named(jobs["deploy_production"], "Run production deployment script")["env"]
+    smoke_staging_env = _step_named(jobs["smoke_staging"], "Run staging smoke gates")["env"]
+    smoke_production_env = _step_named(jobs["smoke_production"], "Run production smoke gates")["env"]
     all_uses = [
         step.get("uses")
         for job in jobs.values()
@@ -151,16 +165,24 @@ def test_release_workflow_preserves_rollout_modes_approvals_and_oidc_login():
     ]
 
     assert "ROLLOUT_MODE=reconcile" in deploy_staging_scripts
-    assert "ROLLOUT_MODE=canary" in deploy_production_scripts
-    assert deploy_production_env["CANARY_TRAFFIC_PERCENT"] == "${{ vars.CANARY_TRAFFIC_PERCENT }}"
-    assert deploy_production_env["STABLE_TRAFFIC_PERCENT"] == "${{ vars.STABLE_TRAFFIC_PERCENT }}"
-    assert "ROLLOUT_MODE=rollback" in rollback_scripts
-    assert "ROLLOUT_MODE=promote" in promote_scripts
-    assert jobs["await_prod_approval"]["environment"] == "production-canary-approval"
-    assert jobs["await_full_promotion"]["environment"] == "production-full-approval"
-    assert jobs["rollback_production_canary"]["if"] == "${{ !inputs.staging_only && failure() }}"
-    assert jobs["observe_production_canary"]["if"] == "${{ !inputs.staging_only && success() }}"
+    assert "ROLLOUT_MODE=reconcile" in deploy_production_scripts
+    assert deploy_staging_env["CREATE_APPS"] == "true"
+    assert deploy_production_env["CREATE_APPS"] == "true"
+    assert deploy_staging_env["CONFIGURE_EASY_AUTH"] == "true"
+    assert deploy_production_env["CONFIGURE_EASY_AUTH"] == "true"
+    assert deploy_staging_env["FRONTEND_APP_NAME"] == "${{ vars.FRONTEND_APP_NAME }}"
+    assert deploy_staging_env["APP_PUBLIC_HOSTNAME"] == "${{ vars.APP_PUBLIC_HOSTNAME }}"
+    assert deploy_staging_env["API_PUBLIC_HOSTNAME"] == "${{ vars.API_PUBLIC_HOSTNAME }}"
+    assert deploy_production_env["FRONTEND_APP_NAME"] == "${{ vars.FRONTEND_APP_NAME }}"
+    assert deploy_production_env["APP_PUBLIC_HOSTNAME"] == "${{ vars.APP_PUBLIC_HOSTNAME }}"
+    assert deploy_production_env["API_PUBLIC_HOSTNAME"] == "${{ vars.API_PUBLIC_HOSTNAME }}"
+    assert smoke_staging_env["APP_BASE_URL"] == "https://${{ vars.APP_PUBLIC_HOSTNAME }}"
+    assert smoke_staging_env["API_BASE_URL"] == "https://${{ vars.API_PUBLIC_HOSTNAME }}"
+    assert smoke_production_env["APP_BASE_URL"] == "https://${{ vars.APP_PUBLIC_HOSTNAME }}"
+    assert smoke_production_env["API_BASE_URL"] == "https://${{ vars.API_PUBLIC_HOSTNAME }}"
+    assert jobs["await_prod_approval"]["environment"] == "production-approval"
     assert jobs["await_prod_approval"]["if"] == "${{ !inputs.staging_only }}"
-    assert jobs["await_full_promotion"]["if"] == "${{ !inputs.staging_only }}"
+    assert jobs["deploy_production"]["environment"] == "production"
+    assert jobs["smoke_production"]["environment"] == "production"
     assert "azure/login@v2" in all_uses
     assert workflow["permissions"]["id-token"] == "write"

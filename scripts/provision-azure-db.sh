@@ -88,23 +88,34 @@ else
 fi
 
 SEARCH_ENDPOINT="https://${SEARCH_SERVICE}.search.windows.net"
-SEARCH_API_KEY="$(
-  az search admin-key show \
-    --service-name "${SEARCH_SERVICE}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --query primaryKey \
-    --output tsv
-)"
+
+cosmos_account_is_serverless() {
+  local capabilities
+  capabilities="$(
+    az cosmosdb show \
+      --name "${COSMOS_ACCOUNT}" \
+      --resource-group "${RESOURCE_GROUP}" \
+      --query "capabilities[].name" \
+      --output tsv 2>/dev/null || true
+  )"
+  [[ "$capabilities" == *"EnableServerless"* ]]
+}
 
 echo ">>> Ensuring Cosmos DB account: ${COSMOS_ACCOUNT}"
 if az cosmosdb show --name "${COSMOS_ACCOUNT}" --resource-group "${RESOURCE_GROUP}" --output none 2>/dev/null; then
-  echo "    Cosmos account already exists, skipping create."
+  if cosmos_account_is_serverless; then
+    echo "    Cosmos account already exists and is configured for serverless."
+  else
+    echo "Cosmos account ${COSMOS_ACCOUNT} already exists but is not configured for serverless; capacity mode cannot be changed in place." >&2
+    exit 1
+  fi
 else
   az cosmosdb create \
     --name "${COSMOS_ACCOUNT}" \
     --resource-group "${RESOURCE_GROUP}" \
     --locations regionName="${LOCATION}" failoverPriority=0 isZoneRedundant=False \
     --kind GlobalDocumentDB \
+    --capabilities EnableServerless \
     --default-consistency-level Session \
     --output none
 fi
@@ -118,7 +129,6 @@ az cosmosdb sql database create \
 
 create_container() {
   local container_name="$1"
-  local max_throughput="$2"
 
   if az cosmosdb sql container show \
     --account-name "${COSMOS_ACCOUNT}" \
@@ -136,22 +146,21 @@ create_container() {
     --database-name "${COSMOS_DATABASE}" \
     --name "${container_name}" \
     --partition-key-path "/collectionId" \
-    --max-throughput "${max_throughput}" \
     --output none
 }
 
-echo ">>> Ensuring Cosmos containers (autoscale throughput)"
-create_container "${COLLECTIONS_CONTAINER}" "1000"
-create_container "${DOCUMENTS_CONTAINER}" "1000"
-create_container "${INDEXING_JOBS_CONTAINER}" "4000"
-create_container "${JOB_EVENTS_CONTAINER}" "4000"
-create_container "${ARTIFACT_MANIFEST_CONTAINER}" "1000"
-create_container "${ENTITIES_CONTAINER}" "4000"
-create_container "${RELATIONSHIPS_CONTAINER}" "4000"
-create_container "${TEXT_UNITS_CONTAINER}" "4000"
-create_container "${COMMUNITIES_CONTAINER}" "1000"
-create_container "${COMMUNITY_REPORTS_CONTAINER}" "1000"
-create_container "${COVARIATES_CONTAINER}" "1000"
+echo ">>> Ensuring Cosmos containers (serverless)"
+create_container "${COLLECTIONS_CONTAINER}"
+create_container "${DOCUMENTS_CONTAINER}"
+create_container "${INDEXING_JOBS_CONTAINER}"
+create_container "${JOB_EVENTS_CONTAINER}"
+create_container "${ARTIFACT_MANIFEST_CONTAINER}"
+create_container "${ENTITIES_CONTAINER}"
+create_container "${RELATIONSHIPS_CONTAINER}"
+create_container "${TEXT_UNITS_CONTAINER}"
+create_container "${COMMUNITIES_CONTAINER}"
+create_container "${COMMUNITY_REPORTS_CONTAINER}"
+create_container "${COVARIATES_CONTAINER}"
 
 COSMOS_ENDPOINT="$(
   az cosmosdb show \
@@ -160,37 +169,17 @@ COSMOS_ENDPOINT="$(
     --query documentEndpoint \
     --output tsv
 )"
-COSMOS_KEY="$(
-  az cosmosdb keys list \
-    --name "${COSMOS_ACCOUNT}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --query primaryMasterKey \
-    --output tsv
-)"
-COSMOS_CONNECTION_STRING="$(
-  az cosmosdb keys list \
-    --name "${COSMOS_ACCOUNT}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --type connection-strings \
-    --query "connectionStrings[0].connectionString" \
-    --output tsv
-)"
 
 echo
 echo "=========================================="
 echo "Provisioning complete."
 echo "=========================================="
 echo
-echo "Add these to backend/.env:"
-echo "AZURE_STORAGE_CONNECTION_STRING=\"${STORAGE_CONNECTION_STRING}\""
+echo "Add these non-secret values to backend/.env:"
 echo "AZURE_STORAGE_ACCOUNT_NAME=\"${STORAGE_ACCOUNT}\""
-echo "AZURE_STORAGE_ACCOUNT_KEY=\"${STORAGE_ACCOUNT_KEY}\""
 echo "AZURE_STORAGE_QUEUE_NAME=\"indexing-jobs\""
 echo "AZURE_SEARCH_ENDPOINT=\"${SEARCH_ENDPOINT}\""
-echo "AZURE_SEARCH_API_KEY=\"${SEARCH_API_KEY}\""
-echo "AZURE_COSMOS_CONNECTION_STRING=\"${COSMOS_CONNECTION_STRING}\""
 echo "AZURE_COSMOS_ENDPOINT=\"${COSMOS_ENDPOINT}\""
-echo "AZURE_COSMOS_KEY=\"${COSMOS_KEY}\""
 echo "AZURE_COSMOS_DATABASE_NAME=\"${COSMOS_DATABASE}\""
 echo "AZURE_COSMOS_COLLECTIONS_CONTAINER=\"${COLLECTIONS_CONTAINER}\""
 echo "AZURE_COSMOS_DOCUMENTS_CONTAINER=\"${DOCUMENTS_CONTAINER}\""
@@ -204,5 +193,7 @@ echo "AZURE_COSMOS_COMMUNITIES_CONTAINER=\"${COMMUNITIES_CONTAINER}\""
 echo "AZURE_COSMOS_COMMUNITY_REPORTS_CONTAINER=\"${COMMUNITY_REPORTS_CONTAINER}\""
 echo "AZURE_COSMOS_COVARIATES_CONTAINER=\"${COVARIATES_CONTAINER}\""
 echo
+echo "Retrieve secret values separately via Azure CLI before writing backend/.env."
+echo "Required secret keys: AZURE_STORAGE_CONNECTION_STRING, AZURE_STORAGE_ACCOUNT_KEY, AZURE_SEARCH_API_KEY, AZURE_COSMOS_CONNECTION_STRING, AZURE_COSMOS_KEY"
 echo "Search SKU in use: ${SEARCH_SKU}"
 echo "Do not commit secrets to git."

@@ -27,14 +27,9 @@ env:
   STAGING_DEPLOY_ARTIFACT_NAME: deploy-staging-log
   PRODUCTION_DEPLOY_ARTIFACT_NAME: deploy-production-log
   SMOKE_STAGING_ARTIFACT_NAME: smoke-staging-report
-  SMOKE_PRODUCTION_CANARY_ARTIFACT_NAME: smoke-production-canary-report
-  SMOKE_PRODUCTION_FULL_ARTIFACT_NAME: smoke-production-full-report
-  PRODUCTION_CANARY_OBSERVATION_ARTIFACT_NAME: production-canary-observation
-  PRODUCTION_ROLLBACK_ARTIFACT_NAME: production-rollback-log
-  PRODUCTION_ROLLOUT_STATE_ARTIFACT_NAME: production-rollout-state
+  SMOKE_PRODUCTION_ARTIFACT_NAME: smoke-production-report
   PHASE3_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation
-  PHASE3_PRODUCTION_CANARY_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation-production-canary
-  PHASE3_PRODUCTION_FULL_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation-production-full
+  PHASE3_PRODUCTION_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation-production
   VALIDATE_REPORT_ARTIFACT_NAME: validate-stage-report
 
 jobs:
@@ -92,7 +87,8 @@ jobs:
     outputs:
       backend_image: ${{ steps.metadata.outputs.backend_image }}
       worker_image: ${{ steps.metadata.outputs.worker_image }}
-      frontend_image: ${{ steps.metadata.outputs.frontend_image }}
+      frontend_image_staging: ${{ steps.metadata.outputs.frontend_image_staging }}
+      frontend_image_production: ${{ steps.metadata.outputs.frontend_image_production }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -118,27 +114,33 @@ jobs:
           BACKEND_IMAGE_REPOSITORY: ${{ vars.BACKEND_IMAGE_REPOSITORY }}
           FRONTEND_IMAGE_REPOSITORY: ${{ vars.FRONTEND_IMAGE_REPOSITORY }}
           NEXT_PUBLIC_API_BASE_URL_STAGING: ${{ vars.NEXT_PUBLIC_API_BASE_URL_STAGING }}
+          NEXT_PUBLIC_API_BASE_URL_PRODUCTION: ${{ vars.NEXT_PUBLIC_API_BASE_URL_PRODUCTION }}
         run: |
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/image-metadata"
           mkdir -p "$artifact_dir"
           image_tag="${GITHUB_SHA}"
           backend_image="${ACR_LOGIN_SERVER}/${BACKEND_IMAGE_REPOSITORY}:${image_tag}"
-          frontend_image="${ACR_LOGIN_SERVER}/${FRONTEND_IMAGE_REPOSITORY}:${image_tag}"
+          frontend_image_staging="${ACR_LOGIN_SERVER}/${FRONTEND_IMAGE_REPOSITORY}:staging-${image_tag}"
+          frontend_image_production="${ACR_LOGIN_SERVER}/${FRONTEND_IMAGE_REPOSITORY}:production-${image_tag}"
           docker build -f backend/Dockerfile -t "$backend_image" .
-          docker build --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL_STAGING" -f frontend/Dockerfile -t "$frontend_image" frontend
+          docker build --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL_STAGING" -f frontend/Dockerfile -t "$frontend_image_staging" frontend
+          docker build --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL_PRODUCTION" -f frontend/Dockerfile -t "$frontend_image_production" frontend
           docker push "$backend_image"
-          docker push "$frontend_image"
+          docker push "$frontend_image_staging"
+          docker push "$frontend_image_production"
           {
             printf 'commit=%s\n' "$GITHUB_SHA"
             printf 'backend_image=%s\n' "$backend_image"
-            printf 'frontend_image=%s\n' "$frontend_image"
-            printf 'worker_runtime=%s\n' 'APP_ROLE=worker'
+            printf 'worker_image=%s\n' "$backend_image"
+            printf 'frontend_image_staging=%s\n' "$frontend_image_staging"
+            printf 'frontend_image_production=%s\n' "$frontend_image_production"
           } > "$artifact_dir/metadata.txt"
           {
             printf 'backend_image=%s\n' "$backend_image"
             printf 'worker_image=%s\n' "$backend_image"
-            printf 'frontend_image=%s\n' "$frontend_image"
+            printf 'frontend_image_staging=%s\n' "$frontend_image_staging"
+            printf 'frontend_image_production=%s\n' "$frontend_image_production"
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload image metadata
@@ -175,10 +177,13 @@ jobs:
         env:
           RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
           SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          FRONTEND_APP_NAME: ${{ vars.FRONTEND_APP_NAME }}
           API_APP_NAME: ${{ vars.API_APP_NAME }}
           WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
           TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
+          APP_PUBLIC_HOSTNAME: ${{ vars.APP_PUBLIC_HOSTNAME }}
           API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
+          FRONTEND_IMAGE: ${{ needs.build_images.outputs.frontend_image_staging }}
           API_IMAGE: ${{ needs.build_images.outputs.backend_image }}
           WORKER_IMAGE: ${{ needs.build_images.outputs.worker_image }}
           KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
@@ -188,7 +193,8 @@ jobs:
           ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
           ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
           ALLOWED_AUDIENCES: ${{ vars.ALLOWED_AUDIENCES }}
-          CONFIGURE_EASY_AUTH: 'true'
+          CREATE_APPS: "true"
+          CONFIGURE_EASY_AUTH: "true"
         run: |
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/deploy-staging-log"
@@ -229,6 +235,8 @@ jobs:
 
       - name: Run staging smoke gates
         env:
+          APP_BASE_URL: https://${{ vars.APP_PUBLIC_HOSTNAME }}
+          APP_PUBLIC_HOSTNAME: ${{ vars.APP_PUBLIC_HOSTNAME }}
           API_BASE_URL: https://${{ vars.API_PUBLIC_HOSTNAME }}
           API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
           AUTH_BEARER_TOKEN: ${{ secrets.AUTH_BEARER_TOKEN }}
@@ -268,23 +276,23 @@ jobs:
           if-no-files-found: error
 
   await_prod_approval:
-    name: Await production canary approval
+    name: Await production approval
     runs-on: ubuntu-latest
     needs:
       - smoke_staging
     if: ${{ !inputs.staging_only }}
-    environment: production-canary-approval
+    environment: production-approval
     steps:
       - name: Approval checkpoint
-        run: echo "Production canary approval granted"
+        run: echo "Production approval granted"
 
-  deploy_production_canary:
-    name: Deploy production canary
+  deploy_production:
+    name: Deploy production environment
     runs-on: ubuntu-latest
     needs:
       - await_prod_approval
     if: ${{ !inputs.staging_only }}
-    environment: production-canary
+    environment: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -294,12 +302,6 @@ jobs:
         with:
           name: image-metadata
           path: ${{ runner.temp }}/image-metadata
-
-      - name: Download staging smoke report
-        uses: actions/download-artifact@v4
-        with:
-          name: smoke-staging-report
-          path: ${{ runner.temp }}/smoke-staging-report
 
       - name: Azure login for production
         uses: azure/login@v2
@@ -312,10 +314,13 @@ jobs:
         env:
           RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
           SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          FRONTEND_APP_NAME: ${{ vars.FRONTEND_APP_NAME }}
           API_APP_NAME: ${{ vars.API_APP_NAME }}
           WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
           TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
+          APP_PUBLIC_HOSTNAME: ${{ vars.APP_PUBLIC_HOSTNAME }}
           API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
+          FRONTEND_IMAGE: ${{ needs.build_images.outputs.frontend_image_production }}
           API_IMAGE: ${{ needs.build_images.outputs.backend_image }}
           WORKER_IMAGE: ${{ needs.build_images.outputs.worker_image }}
           KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
@@ -325,14 +330,13 @@ jobs:
           ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
           ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
           ALLOWED_AUDIENCES: ${{ vars.ALLOWED_AUDIENCES }}
-          CONFIGURE_EASY_AUTH: 'true'
-          CANARY_TRAFFIC_PERCENT: ${{ vars.CANARY_TRAFFIC_PERCENT }}
-          STABLE_TRAFFIC_PERCENT: ${{ vars.STABLE_TRAFFIC_PERCENT }}
+          CREATE_APPS: "true"
+          CONFIGURE_EASY_AUTH: "true"
         run: |
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/deploy-production-log"
           mkdir -p "$artifact_dir"
-          ROLLOUT_MODE=canary \
+          ROLLOUT_MODE=reconcile \
           ROLLOUT_STATE_FILE="$artifact_dir/rollout-state.json" \
           bash ./scripts/provision-aca-private-origin.sh > "$artifact_dir/deploy-production.log" 2>&1
 
@@ -343,13 +347,13 @@ jobs:
           path: ${{ runner.temp }}/deploy-production-log
           if-no-files-found: error
 
-  smoke_production_canary:
-    name: Run production canary smoke and security gates
+  smoke_production:
+    name: Run production smoke and security gates
     runs-on: ubuntu-latest
     needs:
-      - deploy_production_canary
+      - deploy_production
     if: ${{ !inputs.staging_only }}
-    environment: production-canary
+    environment: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -367,8 +371,10 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Run production canary smoke gates
+      - name: Run production smoke gates
         env:
+          APP_BASE_URL: https://${{ vars.APP_PUBLIC_HOSTNAME }}
+          APP_PUBLIC_HOSTNAME: ${{ vars.APP_PUBLIC_HOSTNAME }}
           API_BASE_URL: https://${{ vars.API_PUBLIC_HOSTNAME }}
           API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
           AUTH_BEARER_TOKEN: ${{ secrets.AUTH_BEARER_TOKEN }}
@@ -383,246 +389,26 @@ jobs:
           API_APP_NAME: ${{ vars.API_APP_NAME }}
           WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
           TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
-          SMOKE_ARTIFACT_NAME: smoke-production-canary-report
-          PHASE3_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation-production-canary
-          SMOKE_PHASE_LABEL: production-canary
+          SMOKE_ARTIFACT_NAME: smoke-production-report
+          PHASE3_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation-production
+          SMOKE_PHASE_LABEL: production
           ROLLOUT_STATE_FILE: ${{ runner.temp }}/deploy-production-log/rollout-state.json
-          EVIDENCE_DIR: ${{ runner.temp }}/smoke-production-canary-report
+          EVIDENCE_DIR: ${{ runner.temp }}/smoke-production-report
         run: |
           set -euo pipefail
           chmod +x ./scripts/smoke-release-gates.sh
           bash ./scripts/smoke-release-gates.sh
 
-      - name: Upload production canary smoke report
+      - name: Upload production smoke report
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-production-canary-report
-          path: ${{ runner.temp }}/smoke-production-canary-report
+          name: smoke-production-report
+          path: ${{ runner.temp }}/smoke-production-report
           if-no-files-found: error
 
-      - name: Upload production canary phase 3 evidence
+      - name: Upload production phase 3 evidence
         uses: actions/upload-artifact@v4
         with:
-          name: phase3-auth-origin-validation-production-canary
-          path: ${{ runner.temp }}/smoke-production-canary-report
-          if-no-files-found: error
-
-  rollback_production_canary:
-    name: Roll back failed production canary
-    runs-on: ubuntu-latest
-    needs:
-      - smoke_production_canary
-    if: ${{ !inputs.staging_only && failure() }}
-    environment: production-canary
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download production deployment log
-        uses: actions/download-artifact@v4
-        with:
-          name: deploy-production-log
-          path: ${{ runner.temp }}/deploy-production-log
-
-      - name: Azure login for production
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Roll back production canary traffic to stable revision
-        env:
-          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-          SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          API_APP_NAME: ${{ vars.API_APP_NAME }}
-          WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
-          TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
-        run: |
-          set -euo pipefail
-          artifact_dir="$RUNNER_TEMP/production-rollback-log"
-          mkdir -p "$artifact_dir"
-          ROLLOUT_MODE=rollback \
-          ROLLOUT_STATE_FILE="$RUNNER_TEMP/deploy-production-log/rollout-state.json" \
-          bash ./scripts/provision-aca-private-origin.sh > "$artifact_dir/rollback-production.log" 2>&1
-
-      - name: Upload production rollback log
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-rollback-log
-          path: ${{ runner.temp }}/production-rollback-log
-          if-no-files-found: error
-
-  observe_production_canary:
-    name: Observe production canary behavior
-    runs-on: ubuntu-latest
-    needs:
-      - smoke_production_canary
-    if: ${{ !inputs.staging_only && success() }}
-    environment: production-canary
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download production canary smoke report
-        uses: actions/download-artifact@v4
-        with:
-          name: smoke-production-canary-report
-          path: ${{ runner.temp }}/smoke-production-canary-report
-
-      - name: Download production deployment log
-        uses: actions/download-artifact@v4
-        with:
-          name: deploy-production-log
-          path: ${{ runner.temp }}/deploy-production-log
-
-      - name: Capture canary rollout state and health observation evidence
-        env:
-          API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
-        run: |
-          set -euo pipefail
-          observation_dir="$RUNNER_TEMP/production-canary-observation"
-          rollout_dir="$RUNNER_TEMP/production-rollout-state"
-          mkdir -p "$observation_dir" "$rollout_dir"
-          cp "$RUNNER_TEMP/deploy-production-log/rollout-state.json" "$observation_dir/rollout-state.json"
-          cp "$RUNNER_TEMP/deploy-production-log/rollout-state.json" "$rollout_dir/rollout-state.json"
-          curl --silent --show-error --fail "https://${API_PUBLIC_HOSTNAME}/health" > "$observation_dir/health.json"
-          curl --silent --show-error --fail "https://${API_PUBLIC_HOSTNAME}/health/readiness" > "$observation_dir/readiness.json"
-          cp "$RUNNER_TEMP/smoke-production-canary-report/smoke-production-canary-report.json" "$observation_dir/canary-smoke-report.json"
-
-      - name: Upload production canary observation evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-canary-observation
-          path: ${{ runner.temp }}/production-canary-observation
-          if-no-files-found: error
-
-      - name: Upload production rollout state
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-rollout-state
-          path: ${{ runner.temp }}/production-rollout-state
-          if-no-files-found: error
-
-  await_full_promotion:
-    name: Await full production promotion approval
-    runs-on: ubuntu-latest
-    needs:
-      - observe_production_canary
-    if: ${{ !inputs.staging_only }}
-    environment: production-full-approval
-    steps:
-      - name: Approval checkpoint
-        run: echo "Full production promotion approved"
-
-  promote_production_full:
-    name: Promote production canary to full traffic
-    runs-on: ubuntu-latest
-    needs:
-      - await_full_promotion
-    if: ${{ !inputs.staging_only }}
-    environment: production-full
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download production rollout state
-        uses: actions/download-artifact@v4
-        with:
-          name: production-rollout-state
-          path: ${{ runner.temp }}/production-rollout-state
-
-      - name: Azure login for production
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Promote production revision to full traffic
-        env:
-          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-          SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          API_APP_NAME: ${{ vars.API_APP_NAME }}
-          WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
-          TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
-        run: |
-          set -euo pipefail
-          source_dir="$RUNNER_TEMP/production-rollout-state"
-          artifact_dir="$RUNNER_TEMP/production-rollout-state-promoted"
-          mkdir -p "$artifact_dir"
-          ROLLOUT_MODE=promote \
-          ROLLOUT_STATE_FILE="$source_dir/rollout-state.json" \
-          bash ./scripts/provision-aca-private-origin.sh > "$artifact_dir/promote-production.log" 2>&1
-          cp "$source_dir/rollout-state.json" "$artifact_dir/rollout-state.json"
-
-      - name: Upload promoted rollout state
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-rollout-state-promoted
-          path: ${{ runner.temp }}/production-rollout-state-promoted
-          if-no-files-found: error
-
-  smoke_production_full:
-    name: Run production post-promotion smoke and security gates
-    runs-on: ubuntu-latest
-    needs:
-      - promote_production_full
-    if: ${{ !inputs.staging_only }}
-    environment: production-full
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download promoted production rollout state
-        uses: actions/download-artifact@v4
-        with:
-          name: production-rollout-state-promoted
-          path: ${{ runner.temp }}/production-rollout-state
-
-      - name: Azure login for production
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Run production post-promotion smoke gates
-        env:
-          API_BASE_URL: https://${{ vars.API_PUBLIC_HOSTNAME }}
-          API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
-          AUTH_BEARER_TOKEN: ${{ secrets.AUTH_BEARER_TOKEN }}
-          EXPECTED_CLIENT_ID: ${{ vars.EXPECTED_CLIENT_ID }}
-          EXPECTED_ISSUER_URL: ${{ vars.EXPECTED_ISSUER_URL }}
-          EXPECTED_ALLOWED_AUDIENCES: ${{ vars.ALLOWED_AUDIENCES }}
-          WRONG_AUDIENCE_TOKEN: ${{ secrets.WRONG_AUDIENCE_TOKEN }}
-          PRODUCTION_REJECTION_TOKEN: ${{ secrets.PRODUCTION_REJECTION_TOKEN }}
-          PROBE_ORIGIN_URLS: ${{ vars.PROBE_ORIGIN_URLS }}
-          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-          SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          API_APP_NAME: ${{ vars.API_APP_NAME }}
-          WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
-          TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
-          SMOKE_ARTIFACT_NAME: smoke-production-full-report
-          PHASE3_VALIDATION_ARTIFACT_NAME: phase3-auth-origin-validation-production-full
-          SMOKE_PHASE_LABEL: production-full
-          ROLLOUT_STATE_FILE: ${{ runner.temp }}/production-rollout-state/rollout-state.json
-          EVIDENCE_DIR: ${{ runner.temp }}/smoke-production-full-report
-        run: |
-          set -euo pipefail
-          chmod +x ./scripts/smoke-release-gates.sh
-          bash ./scripts/smoke-release-gates.sh
-
-      - name: Upload production full smoke report
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-production-full-report
-          path: ${{ runner.temp }}/smoke-production-full-report
-          if-no-files-found: error
-
-      - name: Upload production full phase 3 evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase3-auth-origin-validation-production-full
-          path: ${{ runner.temp }}/smoke-production-full-report
+          name: phase3-auth-origin-validation-production
+          path: ${{ runner.temp }}/smoke-production-report
           if-no-files-found: error

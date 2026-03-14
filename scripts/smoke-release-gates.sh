@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+APP_BASE_URL="${APP_BASE_URL:-}"
+APP_PUBLIC_HOSTNAME="${APP_PUBLIC_HOSTNAME:-}"
 API_BASE_URL="${API_BASE_URL:-}"
 API_PUBLIC_HOSTNAME="${API_PUBLIC_HOSTNAME:-}"
 AUTH_BEARER_TOKEN="${AUTH_BEARER_TOKEN:-}"
@@ -112,6 +114,8 @@ SMOKE_REPORT_FILE="$EVIDENCE_DIR/${SMOKE_ARTIFACT_NAME}.json"
 UPLOAD_FILE="$EVIDENCE_DIR/smoke-upload.txt"
 SSE_FILE="$EVIDENCE_DIR/sse-output.txt"
 
+require_var APP_BASE_URL
+require_var APP_PUBLIC_HOSTNAME
 require_var API_BASE_URL
 require_var API_PUBLIC_HOSTNAME
 require_var AUTH_BEARER_TOKEN
@@ -129,6 +133,7 @@ require_var PROBE_ORIGIN_URLS
 
 printf 'smoke document for %s\n' "$COLLECTION_ID" > "$UPLOAD_FILE"
 
+expect_status "app_health" "200" "${APP_BASE_URL}/api/health"
 expect_status "health" "200" "${API_BASE_URL}/health"
 expect_status "readiness" "200" "${API_BASE_URL}/health/readiness"
 

@@ -15,13 +15,19 @@ PRIVATE_ENDPOINT_SUBNET_PREFIX="${PRIVATE_ENDPOINT_SUBNET_PREFIX:-10.30.2.0/27}"
 PRIVATE_ENDPOINT_NAME="${PRIVATE_ENDPOINT_NAME:-pe-cae-gtog-prod}"
 PRIVATE_DNS_ZONE="${PRIVATE_DNS_ZONE:-privatelink.${LOCATION}.azurecontainerapps.io}"
 PRIVATE_DNS_LINK_NAME="${PRIVATE_DNS_LINK_NAME:-link-cae-gtog-prod}"
+FRONTEND_APP_NAME="${FRONTEND_APP_NAME:-ca-gtog-frontend-prod}"
 API_APP_NAME="${API_APP_NAME:-ca-gtog-api-prod}"
 WORKER_APP_NAME="${WORKER_APP_NAME:-ca-gtog-worker-prod}"
 TUNNEL_APP_NAME="${TUNNEL_APP_NAME:-ca-gtog-tunnel-prod}"
 TUNNEL_SECRET_REF_NAME="${TUNNEL_SECRET_REF_NAME:-tunnel-token}"
+FRONTEND_IMAGE="${FRONTEND_IMAGE:-}"
 API_IMAGE="${API_IMAGE:-}"
 WORKER_IMAGE="${WORKER_IMAGE:-}"
 TUNNEL_IMAGE="${TUNNEL_IMAGE:-cloudflare/cloudflared:latest}"
+FRONTEND_CPU="${FRONTEND_CPU:-1.0}"
+FRONTEND_MEMORY="${FRONTEND_MEMORY:-2.0Gi}"
+FRONTEND_MIN_REPLICAS="${FRONTEND_MIN_REPLICAS:-1}"
+FRONTEND_MAX_REPLICAS="${FRONTEND_MAX_REPLICAS:-2}"
 API_CPU="${API_CPU:-1.0}"
 API_MEMORY="${API_MEMORY:-2.0Gi}"
 API_MIN_REPLICAS="${API_MIN_REPLICAS:-1}"
@@ -48,6 +54,7 @@ CREATE_APPS="${CREATE_APPS:-false}"
 CONFIGURE_EASY_AUTH="${CONFIGURE_EASY_AUTH:-false}"
 CREATE_ENTRA_APP="${CREATE_ENTRA_APP:-false}"
 RESET_ENTRA_CLIENT_SECRET="${RESET_ENTRA_CLIENT_SECRET:-false}"
+APP_PUBLIC_HOSTNAME="${APP_PUBLIC_HOSTNAME:-}"
 API_PUBLIC_HOSTNAME="${API_PUBLIC_HOSTNAME:-}"
 ENTRA_APP_DISPLAY_NAME="${ENTRA_APP_DISPLAY_NAME:-}"
 ENTRA_APP_ID="${ENTRA_APP_ID:-}"
@@ -89,6 +96,19 @@ require_var() {
     echo "${name} is required for this operation" >&2
     exit 1
   fi
+}
+
+require_frontend_runtime_contract_hostnames() {
+  require_var APP_PUBLIC_HOSTNAME
+  require_var API_PUBLIC_HOSTNAME
+}
+
+require_api_runtime_contract_hostname() {
+  require_var APP_PUBLIC_HOSTNAME
+}
+
+require_easy_auth_hostname() {
+  require_var API_PUBLIC_HOSTNAME
 }
 
 ensure_subnet() {
@@ -193,6 +213,32 @@ print(json.dumps([f"scope=openid profile email offline_access {scope_value}"]))
 PY
 }
 
+ensure_frontend_ingress_contract() {
+  local frontend_args=(
+    containerapp update
+    --resource-group "$RESOURCE_GROUP"
+    --name "$FRONTEND_APP_NAME"
+    --cpu "$FRONTEND_CPU"
+    --memory "$FRONTEND_MEMORY"
+    --min-replicas "$FRONTEND_MIN_REPLICAS"
+    --max-replicas "$FRONTEND_MAX_REPLICAS"
+    --set-env-vars "NEXT_PUBLIC_API_BASE_URL=https://${API_PUBLIC_HOSTNAME}" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
+    --output none
+  )
+  if [[ -n "$FRONTEND_IMAGE" ]]; then
+    frontend_args+=(--image "$FRONTEND_IMAGE")
+  fi
+  az "${frontend_args[@]}"
+
+  az containerapp ingress enable \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$FRONTEND_APP_NAME" \
+    --type internal \
+    --target-port 3000 \
+    --transport auto \
+    --output none
+}
+
 ensure_api_ingress_contract() {
   local api_args=(
     containerapp update
@@ -202,7 +248,7 @@ ensure_api_ingress_contract() {
     --memory "$API_MEMORY"
     --min-replicas "$API_MIN_REPLICAS"
     --max-replicas "$API_MAX_REPLICAS"
-    --set-env-vars "APP_ROLE=api"
+    --set-env-vars "APP_ROLE=api" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
     --output none
   )
   if [[ -n "$API_IMAGE" ]]; then
@@ -1056,6 +1102,10 @@ else
   fi
 
   if bool_true "$CREATE_APPS"; then
+    if [[ -z "$FRONTEND_IMAGE" ]]; then
+      echo "FRONTEND_IMAGE is required when CREATE_APPS=true" >&2
+      exit 1
+    fi
     if [[ -z "$API_IMAGE" ]]; then
       echo "API_IMAGE is required when CREATE_APPS=true" >&2
       exit 1
@@ -1064,9 +1114,41 @@ else
       echo "WORKER_IMAGE is required when CREATE_APPS=true" >&2
       exit 1
     fi
+    if [[ -z "$APP_PUBLIC_HOSTNAME" ]]; then
+      echo "APP_PUBLIC_HOSTNAME is required when CREATE_APPS=true" >&2
+      exit 1
+    fi
+    if [[ -z "$API_PUBLIC_HOSTNAME" ]]; then
+      echo "API_PUBLIC_HOSTNAME is required when CREATE_APPS=true" >&2
+      exit 1
+    fi
     if [[ -z "$TUNNEL_TOKEN" ]]; then
       echo "TUNNEL_TOKEN is required when CREATE_APPS=true" >&2
       exit 1
+    fi
+
+    echo ">>> Ensuring frontend app: ${FRONTEND_APP_NAME}"
+    if ! container_app_exists "$FRONTEND_APP_NAME"; then
+      FRONTEND_ARGS=(
+        containerapp create
+        --resource-group "$RESOURCE_GROUP"
+        --name "$FRONTEND_APP_NAME"
+        --environment "$CONTAINER_APP_ENVIRONMENT"
+        --image "$FRONTEND_IMAGE"
+        --ingress internal
+        --target-port 3000
+        --transport auto
+        --cpu "$FRONTEND_CPU"
+        --memory "$FRONTEND_MEMORY"
+        --min-replicas "$FRONTEND_MIN_REPLICAS"
+        --max-replicas "$FRONTEND_MAX_REPLICAS"
+        --env-vars "NEXT_PUBLIC_API_BASE_URL=https://${API_PUBLIC_HOSTNAME}" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
+        --output none
+      )
+      if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
+        FRONTEND_ARGS+=(--user-assigned "$IDENTITY_RESOURCE_ID")
+      fi
+      az "${FRONTEND_ARGS[@]}"
     fi
 
     echo ">>> Ensuring API app: ${API_APP_NAME}"
@@ -1084,7 +1166,7 @@ else
         --memory "$API_MEMORY"
         --min-replicas "$API_MIN_REPLICAS"
         --max-replicas "$API_MAX_REPLICAS"
-        --env-vars "APP_ROLE=api"
+        --env-vars "APP_ROLE=api" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
         --output none
       )
       if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
@@ -1133,7 +1215,15 @@ else
     fi
   fi
 
+  if container_app_exists "$FRONTEND_APP_NAME"; then
+    require_frontend_runtime_contract_hostnames
+    echo ">>> Reconciling frontend ingress and runtime contract"
+    ensure_container_app_identity "$FRONTEND_APP_NAME"
+    ensure_frontend_ingress_contract
+  fi
+
   if container_app_exists "$API_APP_NAME"; then
+    require_api_runtime_contract_hostname
     echo ">>> Reconciling API ingress and runtime role"
     ensure_container_app_identity "$API_APP_NAME"
     ensure_api_ingress_contract
@@ -1151,6 +1241,7 @@ else
   fi
 
   if bool_true "$CONFIGURE_EASY_AUTH"; then
+    require_easy_auth_hostname
     configure_easy_auth
     verify_phase3_contract
   fi
@@ -1202,8 +1293,9 @@ if bool_true "$CONFIGURE_EASY_AUTH"; then
 else
   echo "Next Cloudflare steps:"
   echo "1. Create a remotely managed tunnel for this environment."
-  echo "2. Add public hostname api.<domain> to the tunnel."
-  echo "3. Point the tunnel service to the API private origin in ACA."
-  echo "4. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
-  echo "5. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
+  echo "2. Add public hostnames app.<domain> and api.<domain> to the tunnel."
+  echo "3. Point app.<domain> to the frontend private origin in ACA."
+  echo "4. Point api.<domain> to the API private origin in ACA."
+  echo "5. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
+  echo "6. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
 fi
