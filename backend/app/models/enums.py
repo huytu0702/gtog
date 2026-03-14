@@ -18,5 +18,7 @@ class IndexStatus(str, Enum):
 
     PENDING = "pending"
     RUNNING = "running"
+    RETRYING = "retrying"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"

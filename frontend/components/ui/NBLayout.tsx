@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { NBButton } from './NBButton';
+
+import { AuthLinks } from '@/components/ui/AuthLinks';
 
 interface NBLayoutProps {
     children: React.ReactNode;
@@ -22,9 +23,7 @@ export function NBLayout({ children }: NBLayoutProps) {
                         <a href="https://microsoft.github.io/graphrag/" target="_blank" rel="noopener noreferrer" className="font-bold hover:underline decoration-2">
                             Docs
                         </a>
-                        <NBButton size="sm" variant="primary">
-                            Log In
-                        </NBButton>
+                        <AuthLinks />
                     </nav>
                 </div>
             </header>

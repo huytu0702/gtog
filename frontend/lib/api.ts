@@ -1,6 +1,156 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+function normalizeBaseUrl(value?: string): string {
+    if (!value) return '';
+    return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+const API_HOST_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://127.0.0.1:8000';
+const API_BASE_URL = `${API_HOST_BASE_URL}/api`;
+const EASY_AUTH_ME_URL = `${API_HOST_BASE_URL}/.auth/me`;
+
+function normalizeRedirectUri(value?: string): string | null {
+    const normalized = normalizeBaseUrl(value);
+    return normalized || null;
+}
+
+export function buildEasyAuthLoginUrl(postLoginRedirectUri?: string): string {
+    const loginUrl = new URL(`${API_HOST_BASE_URL}/.auth/login/aad`);
+    const redirectUri = normalizeRedirectUri(postLoginRedirectUri);
+    if (redirectUri) {
+        loginUrl.searchParams.set('post_login_redirect_uri', redirectUri);
+    }
+    return loginUrl.toString();
+}
+
+export function buildEasyAuthLogoutUrl(postLogoutRedirectUri?: string): string {
+    const logoutUrl = new URL(`${API_HOST_BASE_URL}/.auth/logout`);
+    const redirectUri = normalizeRedirectUri(postLogoutRedirectUri);
+    if (redirectUri) {
+        logoutUrl.searchParams.set('post_logout_redirect_uri', redirectUri);
+    }
+    return logoutUrl.toString();
+}
+
+export const EASY_AUTH_LOGIN_URL = buildEasyAuthLoginUrl();
+export const EASY_AUTH_LOGOUT_URL = buildEasyAuthLogoutUrl();
+
+type EasyAuthState = {
+    checked: boolean;
+    easyAuthAvailable: boolean;
+    token: string | null;
+};
+
+const easyAuthState: EasyAuthState = {
+    checked: false,
+    easyAuthAvailable: false,
+    token: null,
+};
+
+let tokenRequestPromise: Promise<string | null> | null = null;
+
+function redirectToLoginIfNeeded() {
+    if (typeof window === 'undefined') return;
+    window.location.assign(buildEasyAuthLoginUrl(window.location.origin));
+}
+
+function extractTokenFromMeResponse(payload: unknown): string | null {
+    if (!Array.isArray(payload) || payload.length === 0) {
+        return null;
+    }
+
+    for (const provider of payload) {
+        if (!provider || typeof provider !== 'object') {
+            continue;
+        }
+        const typedProvider = provider as {
+            access_token?: string;
+            id_token?: string;
+            user_claims?: Array<{ typ?: string; val?: string }>;
+        };
+
+        if (typedProvider.access_token) {
+            return typedProvider.access_token;
+        }
+        if (typedProvider.id_token) {
+            return typedProvider.id_token;
+        }
+
+        if (Array.isArray(typedProvider.user_claims)) {
+            const tokenClaim = typedProvider.user_claims.find(
+                (claim) => claim.typ === 'access_token' && typeof claim.val === 'string'
+            );
+            if (tokenClaim?.val) {
+                return tokenClaim.val;
+            }
+        }
+    }
+    return null;
+}
+
+async function getEasyAuthToken(): Promise<string | null> {
+    if (easyAuthState.checked) {
+        return easyAuthState.token;
+    }
+
+    if (tokenRequestPromise) {
+        return tokenRequestPromise;
+    }
+
+    tokenRequestPromise = (async () => {
+        if (typeof window === 'undefined') {
+            return null;
+        }
+
+        try {
+            const response = await axios.get(EASY_AUTH_ME_URL, {
+                withCredentials: true,
+                validateStatus: () => true,
+            });
+
+            if (response.status === 404) {
+                easyAuthState.checked = true;
+                easyAuthState.easyAuthAvailable = false;
+                easyAuthState.token = null;
+                return null;
+            }
+
+            if (response.status >= 200 && response.status < 300) {
+                const token = extractTokenFromMeResponse(response.data);
+                easyAuthState.checked = true;
+                easyAuthState.easyAuthAvailable = true;
+                easyAuthState.token = token;
+
+                if (!token) {
+                    redirectToLoginIfNeeded();
+                }
+                return token;
+            }
+
+            if (response.status === 401 || response.status === 403) {
+                easyAuthState.checked = true;
+                easyAuthState.easyAuthAvailable = true;
+                easyAuthState.token = null;
+                redirectToLoginIfNeeded();
+                return null;
+            }
+
+            easyAuthState.checked = true;
+            easyAuthState.easyAuthAvailable = false;
+            easyAuthState.token = null;
+            return null;
+        } catch {
+            easyAuthState.checked = true;
+            easyAuthState.easyAuthAvailable = false;
+            easyAuthState.token = null;
+            return null;
+        } finally {
+            tokenRequestPromise = null;
+        }
+    })();
+
+    return tokenRequestPromise;
+}
 
 export const api = axios.create({
     baseURL: API_BASE_URL,
@@ -9,7 +159,14 @@ export const api = axios.create({
     },
 });
 
-// Types based on API Documentation
+api.interceptors.request.use(async (config) => {
+    const token = await getEasyAuthToken();
+    if (token) {
+        config.headers = config.headers ?? {};
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
 
 export interface Collection {
     id: string;
@@ -39,7 +196,7 @@ export interface IndexingStatus {
 export interface SearchResult {
     query: string;
     response: string;
-    context_data: any;
+    context_data: Record<string, unknown> | null;
     method: string;
 }
 
@@ -78,8 +235,6 @@ export interface WebSearchResult {
     }>;
     method: string;
 }
-
-// API Methods
 
 export const collectionsApi = {
     list: async () => {
@@ -190,22 +345,35 @@ export const searchApi = {
         });
         return response.data;
     },
-    agentStream: (collectionId: string, query: string, onMessage: (data: any) => void) => {
+    agentStream: (
+        collectionId: string,
+        query: string,
+        onMessage: (data: unknown) => void,
+        sessionId?: string,
+    ) => {
+        const params = new URLSearchParams({ query });
+        if (sessionId) {
+            params.set('session_id', sessionId);
+        }
         const eventSource = new EventSource(
-            `${API_BASE_URL}/collections/${collectionId}/search/agent/stream`,
-            { withCredentials: false }
+            `${API_BASE_URL}/collections/${collectionId}/search/agent/stream?${params.toString()}`,
+            { withCredentials: true }
         );
-        
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            onMessage(data);
+
+        const handleEvent = (event: MessageEvent) => {
+            onMessage(JSON.parse(event.data));
         };
-        
+        eventSource.onmessage = handleEvent;
+        eventSource.addEventListener('status', handleEvent as EventListener);
+        eventSource.addEventListener('content', handleEvent as EventListener);
+        eventSource.addEventListener('done', handleEvent as EventListener);
+        eventSource.addEventListener('error', handleEvent as EventListener);
+
         eventSource.onerror = (error) => {
             console.error('SSE error:', error);
             eventSource.close();
         };
-        
+
         return eventSource;
     },
 };

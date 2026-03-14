@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi.testclient import TestClient
+import httpx
 
 from backend.app.main import app
 
@@ -11,11 +11,17 @@ class TestAgentSearchIntegration:
     """Integration tests for agent search flow."""
 
     @pytest.fixture
-    def client(self):
-        """Create test client."""
-        return TestClient(app)
+    async def client(self):
+        """Create async test client."""
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            yield client
 
-    def test_full_agent_search_flow(self, client):
+    @pytest.mark.asyncio
+    async def test_full_agent_search_flow(self, client):
         """Test complete agent search from request to response."""
         # This test verifies the full flow works end-to-end
         # with mocked external services
@@ -31,17 +37,17 @@ class TestAgentSearchIntegration:
         mock_web_result.sources = []
 
         with patch(
-            "backend.app.services.router_agent.RouterAgent.route",
+            "backend.app.routers.search.router_agent.route",
             new_callable=AsyncMock,
         ) as mock_router:
             with patch(
-                "backend.app.services.web_search.WebSearchService.search",
+                "backend.app.routers.search.web_search_service.search",
                 new_callable=AsyncMock,
             ) as mock_web:
                 mock_router.return_value = mock_route
                 mock_web.return_value = mock_web_result
 
-                response = client.post(
+                response = await client.post(
                     "/api/collections/test/search/agent",
                     json={"query": "What are latest FDA regulations?", "stream": False},
                 )
@@ -54,17 +60,18 @@ class TestAgentSearchIntegration:
                     or "regulations" in data["response"].lower()
                 )
 
-    def test_summarize_endpoint_returns_summary_and_trimmed_history(self, client):
+    @pytest.mark.asyncio
+    async def test_summarize_endpoint_returns_summary_and_trimmed_history(self, client):
         """POST /agent/summarize returns summary and trimmed history."""
         mock_summary = "User explored Inception (2010) film."
 
         with patch(
-            "backend.app.services.summarization_service.SummarizationService.summarize",
+            "backend.app.routers.search.summarization_service.summarize",
             new_callable=AsyncMock,
         ) as mock_summarize:
             mock_summarize.return_value = mock_summary
 
-            response = client.post(
+            response = await client.post(
                 "/api/collections/test/search/agent/summarize",
                 json={
                     "conversation_history": [
@@ -86,7 +93,8 @@ class TestAgentSearchIntegration:
             assert "trimmed_history" in data
             assert isinstance(data["trimmed_history"], list)
 
-    def test_agent_search_passes_history_and_summary_to_router(self, client):
+    @pytest.mark.asyncio
+    async def test_agent_search_passes_history_and_summary_to_router(self, client):
         """agent_search endpoint passes both conversation_history and conversation_summary to router."""
         mock_route = MagicMock()
         mock_route.method = "local"
@@ -96,19 +104,20 @@ class TestAgentSearchIntegration:
 
         mock_result = MagicMock()
         mock_result.response = "Christopher Nolan."
+        mock_result.context_data = {}
 
         with patch(
-            "backend.app.services.router_agent.RouterAgent.route",
+            "backend.app.routers.search.router_agent.route",
             new_callable=AsyncMock,
         ) as mock_router:
             with patch(
-                "backend.app.services.query_service.QueryService.local_search",
+                "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
             ) as mock_local:
                 mock_router.return_value = mock_route
                 mock_local.return_value = mock_result
 
-                response = client.post(
+                response = await client.post(
                     "/api/collections/test/search/agent",
                     json={
                         "query": "Who directed it?",
@@ -129,7 +138,8 @@ class TestAgentSearchIntegration:
                 assert history is not None
                 assert len(history) == 2
 
-    def test_agent_search_response_includes_rewritten_query(self, client):
+    @pytest.mark.asyncio
+    async def test_agent_search_response_includes_rewritten_query(self, client):
         """AgentSearchResponse includes rewritten_query field."""
         mock_route = MagicMock()
         mock_route.method = "local"
@@ -139,19 +149,20 @@ class TestAgentSearchIntegration:
 
         mock_result = MagicMock()
         mock_result.response = "Christopher Nolan."
+        mock_result.context_data = {}
 
         with patch(
-            "backend.app.services.router_agent.RouterAgent.route",
+            "backend.app.routers.search.router_agent.route",
             new_callable=AsyncMock,
         ) as mock_router:
             with patch(
-                "backend.app.services.query_service.QueryService.local_search",
+                "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
             ) as mock_local:
                 mock_router.return_value = mock_route
                 mock_local.return_value = mock_result
 
-                response = client.post(
+                response = await client.post(
                     "/api/collections/test/search/agent",
                     json={"query": "Who directed it?", "stream": False},
                 )
@@ -160,7 +171,8 @@ class TestAgentSearchIntegration:
                 data = response.json()
                 assert data["rewritten_query"] == "Who directed Inception?"
 
-    def test_agent_search_uses_rewritten_query_for_search(self, client):
+    @pytest.mark.asyncio
+    async def test_agent_search_uses_rewritten_query_for_search(self, client):
         """agent_search calls search methods with rewritten_query, not original query."""
         mock_route = MagicMock()
         mock_route.method = "local"
@@ -170,19 +182,20 @@ class TestAgentSearchIntegration:
 
         mock_result = MagicMock()
         mock_result.response = "Christopher Nolan."
+        mock_result.context_data = {}
 
         with patch(
-            "backend.app.services.router_agent.RouterAgent.route",
+            "backend.app.routers.search.router_agent.route",
             new_callable=AsyncMock,
         ) as mock_router:
             with patch(
-                "backend.app.services.query_service.QueryService.local_search",
+                "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
             ) as mock_local:
                 mock_router.return_value = mock_route
                 mock_local.return_value = mock_result
 
-                client.post(
+                await client.post(
                     "/api/collections/test/search/agent",
                     json={"query": "Who directed it?", "stream": False},
                 )

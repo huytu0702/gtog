@@ -15,7 +15,21 @@
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_click",
-      "mcp__playwright__browser_type"
+      "mcp__playwright__browser_type",
+      "Bash(sed:*)",
+      "WebFetch(domain:microsoft.github.io)",
+      "mcp__tilth__tilth_read",
+      "mcp__tilth__tilth_files",
+      "Bash(gh search:*)",
+      "mcp__tilth__tilth_search",
+      "Bash(az containerapp:*)",
+      "Bash(az ad:*)",
+      "WebSearch",
+      "Bash(az resource:*)",
+      "Bash(az monitor:*)",
+      "Bash(az group:*)",
+      "Bash(az network:*)",
+      "Bash(az acr:*)"
     ],
     "deny": [],
     "ask": []
