@@ -125,9 +125,9 @@ coverage_report = 'coverage report --omit "**/tests/**" --show-missing'
 check_format = 'ruff format . --check'
 fix = "ruff check --fix ."
 fix_unsafe = "ruff check --fix --unsafe-fixes ."
-_test_all = "coverage run -m pytest ./tests"
-test_unit = "pytest ./tests/unit"
-test_integration = "pytest ./tests/integration"
+_test_all = "coverage run -m pytest ./backend/tests ./tests"
+test_unit = "pytest ./backend/tests/unit ./tests/unit"
+test_integration = "pytest ./backend/tests/integration ./tests/integration"
 test_smoke = "pytest ./tests/smoke"
 test_notebook = "pytest ./tests/notebook"
 test_verbs = "pytest ./tests/verbs"
@@ -245,7 +245,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S", "D", "ANN", "T201", "ASYNC", "ARG", "PTH", "TRY"]
+"tests/**/*.py" = ["S", "D", "ANN", "T201", "ASYNC", "ARG", "PTH", "TRY", "INP", "I", "B904", "RUF029", "F401"]
+"backend/tests/**/*.py" = ["S", "D", "ANN", "T201", "ASYNC", "ARG", "PTH", "TRY", "INP", "I", "SIM117", "SLF001", "B904", "RUF029", "F401"]
 "graphrag/index/config/*" = ["TCH"]
 "*.ipynb" = ["T201", "S101", "PT015", "B011"]
 
@@ -257,10 +258,14 @@ convention = "numpy"
 
 # https://github.com/microsoft/pyright/blob/9f81564a4685ff5c55edd3959f9b39030f590b2f/docs/configuration.md#sample-pyprojecttoml-file
 [tool.pyright]
-include = ["graphrag", "tests", "examples_notebooks"]
-exclude = ["**/node_modules", "**/__pycache__"]
+include = ["graphrag", "tests"]
+exclude = ["**/node_modules", "**/__pycache__", ".venv", "frontend"]
+venvPath = "."
+venv = ".venv"
 
 [tool.pytest.ini_options]
+testpaths = ["tests", "backend/tests"]
+pythonpath = ["."]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 timeout = 1000
