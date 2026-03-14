@@ -223,7 +223,6 @@ select = [
     "EM",
     "TRY",
     "PERF",
-    "CPY",
     # "FBT", # use named arguments for boolean flags
     # "TD", # todos
     # "FIX", # fixme
