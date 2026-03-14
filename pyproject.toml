@@ -114,9 +114,7 @@ exclude = ["examples_notebooks*", "tests*"]
 _sort_imports = "ruff check --select I --fix ."
 _format_code = "ruff format  ."
 _ruff_check = 'ruff check .'
-_pyright = "pyright"
-_convert_local_search_nb = 'jupyter nbconvert --output-dir=docsite/posts/query/notebooks/ --output="{notebook_name}_nb" --template=docsite/nbdocsite_template --to markdown examples_notebooks/local_search.ipynb'
-_convert_global_search_nb = 'jupyter nbconvert --output-dir=docsite/posts/query/notebooks/ --output="{notebook_name}_nb" --template=docsite/nbdocsite_template --to markdown examples_notebooks/global_search.ipynb'
+typecheck = "pyright"
 _semversioner_release = "semversioner release"
 _semversioner_changelog = "semversioner changelog > CHANGELOG.md"
 _semversioner_update_toml_version = "update-toml update --path project.version --value $(uv run semversioner current-version)"
@@ -125,12 +123,9 @@ coverage_report = 'coverage report --omit "**/tests/**" --show-missing'
 check_format = 'ruff format . --check'
 fix = "ruff check --fix ."
 fix_unsafe = "ruff check --fix --unsafe-fixes ."
-_test_all = "coverage run -m pytest ./backend/tests ./tests"
+_test_all = "coverage run -m pytest"
 test_unit = "pytest ./backend/tests/unit ./tests/unit"
 test_integration = "pytest ./backend/tests/integration ./tests/integration"
-test_smoke = "pytest ./tests/smoke"
-test_notebook = "pytest ./tests/notebook"
-test_verbs = "pytest ./tests/verbs"
 index = "python -m graphrag index"
 update = "python -m graphrag update"
 init = "python -m graphrag init"
@@ -149,16 +144,12 @@ sequence = [
 ]
 ignore_fail = 'return_non_zero'
 
-[[tool.poe.tasks.convert_docsite_notebooks]]
-sequence = ['_convert_local_search_nb', '_convert_global_search_nb']
-ignore_fail = 'return_non_zero'
-
 [[tool.poe.tasks.format]]
 sequence = ['_sort_imports', '_format_code']
 ignore_fail = 'return_non_zero'
 
 [[tool.poe.tasks.check]]
-sequence = ['check_format', '_ruff_check', '_pyright']
+sequence = ['check_format', '_ruff_check']
 ignore_fail = 'return_non_zero'
 
 [[tool.poe.tasks.test]]
