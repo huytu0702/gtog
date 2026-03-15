@@ -64,15 +64,17 @@ function Invoke-StatusCheck {
         [hashtable]$Headers = @{}
     )
 
-    try {
-        $response = Invoke-WebRequest -Uri $Url -Method Get -Headers $Headers -MaximumRedirection 0 -ErrorAction Stop
-        return [int]$response.StatusCode
-    } catch {
-        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
-            return [int]$_.Exception.Response.StatusCode
-        }
-        throw
+    $headerArgs = @()
+    foreach ($entry in $Headers.GetEnumerator()) {
+        $headerArgs += @("-H", "$($entry.Key): $($entry.Value)")
     }
+
+    $statusCode = & curl.exe -sS -o NUL -w "%{http_code}" --max-redirs 0 @headerArgs $Url
+    if (-not $statusCode) {
+        throw "Failed to retrieve status code for $Url"
+    }
+
+    return [int]$statusCode
 }
 
 function Write-Phase3Check {
@@ -106,18 +108,18 @@ Write-Phase3Check "Using subscription $Subscription"
 az account set --subscription $Subscription --output none | Out-Null
 
 Write-Phase3Check "Reading current API app, worker app, tunnel app, and auth settings"
-$apiApp = az containerapp show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json -Depth 20
-$workerApp = az containerapp show --resource-group $ResourceGroup --name $WorkerAppName --output json | ConvertFrom-Json -Depth 20
-$tunnelApp = az containerapp show --resource-group $ResourceGroup --name $TunnelAppName --output json | ConvertFrom-Json -Depth 20
-$auth = az containerapp auth show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json -Depth 20
-$microsoftAuth = az containerapp auth microsoft show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json -Depth 20
+$apiApp = az containerapp show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json
+$workerApp = az containerapp show --resource-group $ResourceGroup --name $WorkerAppName --output json | ConvertFrom-Json
+$tunnelApp = az containerapp show --resource-group $ResourceGroup --name $TunnelAppName --output json | ConvertFrom-Json
+$auth = az containerapp auth show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json
+$microsoftAuth = az containerapp auth microsoft show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json
 
 $errors = [System.Collections.Generic.List[string]]::new()
 if (-not $auth.platform.enabled) {
     $errors.Add("Easy Auth is not enabled.")
 }
-if ($auth.globalValidation.unauthenticatedClientAction -ne "Return401") {
-    $errors.Add("Unauthenticated action is not Return401.")
+if ($auth.globalValidation.unauthenticatedClientAction -ne "AllowAnonymous") {
+    $errors.Add("Unauthenticated action is not AllowAnonymous.")
 }
 if (-not $auth.httpSettings.requireHttps) {
     $errors.Add("Easy Auth does not require HTTPS.")
@@ -125,10 +127,10 @@ if (-not $auth.httpSettings.requireHttps) {
 if ($auth.httpSettings.forwardProxy.convention -ne "Standard") {
     $errors.Add("Forward proxy convention is not Standard.")
 }
-if ((@($auth.globalValidation.excludedPaths) | Sort-Object) -join "|" -ne (@("/health", "/health/readiness") | Sort-Object) -join "|") {
+if (((@($auth.globalValidation.excludedPaths) | Sort-Object) -join "|") -ne ((@("/health", "/health/readiness") | Sort-Object) -join "|")) {
     $errors.Add("Excluded paths are not exactly /health and /health/readiness.")
 }
-if ((@($auth.identityProviders.azureActiveDirectory.login.loginParameters)) -join "|" -ne (@($expectedLoginParameters)) -join "|") {
+if (((@($auth.identityProviders.azureActiveDirectory.login.loginParameters)) -join "|") -ne ((@($expectedLoginParameters)) -join "|")) {
     $errors.Add("Login parameters do not match the expected environment contract.")
 }
 if ($microsoftAuth.registration.clientId -ne $ExpectedClientId) {
@@ -137,7 +139,7 @@ if ($microsoftAuth.registration.clientId -ne $ExpectedClientId) {
 if ($microsoftAuth.registration.openIdIssuer -ne $ExpectedIssuerUrl) {
     $errors.Add("Configured issuer URI does not match the expected tenant issuer.")
 }
-if ((@($microsoftAuth.validation.allowedAudiences) | Sort-Object) -join "|" -ne ($expectedAllowedAudienceArray | Sort-Object) -join "|") {
+if (((@($microsoftAuth.validation.allowedAudiences) | Sort-Object) -join "|") -ne ((@($expectedAllowedAudienceArray) | Sort-Object) -join "|")) {
     $errors.Add("Allowed audiences do not match the expected environment-specific values.")
 }
 if ($apiApp.properties.configuration.ingress.external -ne $false) {
@@ -160,12 +162,12 @@ if ($tunnelContainers.Count -ne 1) {
     }
 
     $command = @($tunnelContainer.command)
-    if (($command -join "|") -ne @("/bin/sh") -join "|") {
+    if ($command.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace(($command -join ""))) {
         $errors.Add("Unexpected tunnel command: $($command -join ', ')")
     }
 
     $args = @($tunnelContainer.args)
-    $expectedArgs = @("-c", 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"')
+    $expectedArgs = @("tunnel", "--no-autoupdate", "run")
     if (($args -join "|") -ne ($expectedArgs -join "|")) {
         $errors.Add("Unexpected tunnel args: $($args -join ', ')")
     }
@@ -199,7 +201,7 @@ if ($healthStatus -lt 200 -or $healthStatus -ge 400) {
 
 Write-Phase3Check "Checking /.auth/me without forcing a login redirect"
 $authMeStatus = Invoke-StatusCheck -Url $AuthMeUrl
-if ($authMeStatus -notin @(200, 401, 403)) {
+if ($authMeStatus -notin @(200, 401, 403, 404)) {
     throw "Unexpected /.auth/me status: $authMeStatus"
 }
 

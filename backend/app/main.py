@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 from collections import defaultdict, deque
@@ -16,7 +18,11 @@ from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .azure_runtime import bootstrap_runtime_secrets, is_cosmos_configured, _key_vault_client
+from .azure_runtime import (
+    bootstrap_runtime_secrets,
+    is_cosmos_configured,
+    _key_vault_client,
+)
 from .config import settings
 from .models import HealthResponse
 from .repositories import get_control_plane_repository
@@ -93,6 +99,66 @@ def _client_ip(request: Request) -> str:
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
+
+
+def _has_valid_easy_auth_principal(request: Request) -> bool:
+    encoded_principal = request.headers.get("x-ms-client-principal")
+    if not encoded_principal:
+        return False
+
+    try:
+        decoded_principal = base64.b64decode(encoded_principal, validate=True)
+        principal = json.loads(decoded_principal.decode("utf-8"))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False
+
+    if not isinstance(principal, dict):
+        return False
+
+    auth_type = principal.get("auth_typ")
+    claims = principal.get("claims")
+    if not isinstance(auth_type, str) or not auth_type.strip():
+        return False
+    if not isinstance(claims, list) or not claims:
+        return False
+
+    for field in ("name_typ", "role_typ"):
+        value = principal.get(field)
+        if value is not None and not isinstance(value, str):
+            return False
+
+    for claim in claims:
+        if not isinstance(claim, dict):
+            return False
+        claim_type = claim.get("typ")
+        claim_value = claim.get("val")
+        if not isinstance(claim_type, str) or not claim_type.strip():
+            return False
+        if not isinstance(claim_value, str) or not claim_value.strip():
+            return False
+
+    return True
+
+
+def _apply_cors_headers(request: Request, response: Response) -> None:
+    if response.headers.get("access-control-allow-origin"):
+        return
+
+    origin = request.headers.get("origin")
+    if not origin or origin not in allowed_origins:
+        return
+
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+
+    vary = response.headers.get("Vary")
+    if not vary:
+        response.headers["Vary"] = "Origin"
+        return
+
+    vary_values = [value.strip() for value in vary.split(",") if value.strip()]
+    if "Origin" not in vary_values:
+        response.headers["Vary"] = ", ".join([*vary_values, "Origin"])
 
 
 def _check_cosmos_ready() -> tuple[bool, str]:
@@ -232,18 +298,19 @@ async def security_and_logging_middleware(request: Request, call_next):
 
             if response is None:
                 expected_secret = settings.edge_origin_secret.strip()
-                if expected_secret:
-                    provided_secret = request.headers.get("x-edge-secret", "")
-                    if provided_secret != expected_secret:
-                        response = JSONResponse(
-                            status_code=403,
-                            content={"detail": "Forbidden"},
-                        )
-                    elif not request.headers.get("x-ms-client-principal"):
-                        response = JSONResponse(
-                            status_code=401,
-                            content={"detail": "Unauthorized"},
-                        )
+                provided_secret = request.headers.get("x-edge-secret", "")
+                if expected_secret and provided_secret != expected_secret:
+                    response = JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden"},
+                    )
+                elif (
+                    expected_secret or settings.require_platform_auth
+                ) and not _has_valid_easy_auth_principal(request):
+                    response = JSONResponse(
+                        status_code=401,
+                        content={"detail": "Unauthorized"},
+                    )
 
         if response is None:
             response = await call_next(request)
@@ -259,22 +326,21 @@ async def security_and_logging_middleware(request: Request, call_next):
                 status_code=500,
                 content={"detail": "Internal Server Error"},
             )
+        _apply_cors_headers(request, response)
         latency_ms = round((monotonic() - started_at) * 1000, 2)
         response.headers["X-Request-Id"] = request_id
         logger.info(
-            json.dumps(
-                {
-                    "event": "http_request",
-                    "method": method,
-                    "path": path,
-                    "status_code": response.status_code,
-                    "latency_ms": latency_ms,
-                    "request_id": request_id,
-                    "client_ip": client_ip,
-                    "cf_ray": cf_ray,
-                    "cf_connecting_ip": cf_connecting_ip,
-                }
-            )
+            json.dumps({
+                "event": "http_request",
+                "method": method,
+                "path": path,
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+                "request_id": request_id,
+                "client_ip": client_ip,
+                "cf_ray": cf_ray,
+                "cf_connecting_ip": cf_connecting_ip,
+            })
         )
 
     return response

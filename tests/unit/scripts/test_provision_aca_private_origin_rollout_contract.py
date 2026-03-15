@@ -26,7 +26,9 @@ def test_bash_provision_script_supports_recovery_and_rollout_contracts():
     assert "ROLLOUT_STATE_FILE" in content
     assert "az containerapp revision set-mode" in content
     assert "az containerapp ingress traffic set" in content
-    assert 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"' in content
+    assert '--command ""' in content
+    assert "--args tunnel --no-autoupdate run" in content
+    assert '--command /bin/sh' not in content
     assert "validate_rollout_percentages" in content
     assert "CANARY_TRAFFIC_PERCENT must be between 0 and 100" in content
     assert "STABLE_TRAFFIC_PERCENT must be between 0 and 100" in content
@@ -45,6 +47,7 @@ def test_bash_provision_script_supports_frontend_private_ingress_and_dual_host_c
     assert "APP_PUBLIC_HOSTNAME" in content
     assert "NEXT_PUBLIC_API_BASE_URL=https://${API_PUBLIC_HOSTNAME}" in content
     assert "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}" in content
+    assert "REQUIRE_PLATFORM_AUTH=true" in content
     assert "--target-port 3000" in content
     assert "Add public hostnames app.<domain> and api.<domain> to the tunnel." in content
     assert "Point app.<domain> to the frontend private origin in ACA." in content
@@ -63,7 +66,8 @@ def test_powershell_provision_script_supports_recovery_and_rollout_contracts():
     assert "RolloutStateFile" in content
     assert "az containerapp revision set-mode" in content
     assert "az containerapp ingress traffic set" in content
-    assert 'cloudflared tunnel --no-autoupdate run --token' in content
+    assert '--args "tunnel" "--no-autoupdate" "run"' in content
+    assert '--command "/bin/sh"' not in content
     assert "Assert-RolloutPercentages" in content
     assert "CanaryTrafficPercent must be between 0 and 100." in content
     assert "StableTrafficPercent must be between 0 and 100." in content
@@ -82,6 +86,7 @@ def test_powershell_provision_script_supports_frontend_private_ingress_and_dual_
     assert "AppPublicHostname" in content
     assert "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname" in content
     assert "CORS_ORIGINS=https://$AppPublicHostname" in content
+    assert "REQUIRE_PLATFORM_AUTH=true" in content
     assert '--target-port", "3000"' in content or "--target-port 3000" in content
     assert "Add public hostnames app.<domain> and api.<domain> to the tunnel." in content
     assert "Point app.<domain> to the frontend private origin in ACA." in content

@@ -7,7 +7,6 @@ function normalizeBaseUrl(value?: string): string {
 
 const API_HOST_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://127.0.0.1:8000';
 const API_BASE_URL = `${API_HOST_BASE_URL}/api`;
-const EASY_AUTH_ME_URL = `${API_HOST_BASE_URL}/.auth/me`;
 
 function normalizeRedirectUri(value?: string): string | null {
     const normalized = normalizeBaseUrl(value);
@@ -35,137 +34,28 @@ export function buildEasyAuthLogoutUrl(postLogoutRedirectUri?: string): string {
 export const EASY_AUTH_LOGIN_URL = buildEasyAuthLoginUrl();
 export const EASY_AUTH_LOGOUT_URL = buildEasyAuthLogoutUrl();
 
-type EasyAuthState = {
-    checked: boolean;
-    easyAuthAvailable: boolean;
-    token: string | null;
-};
-
-const easyAuthState: EasyAuthState = {
-    checked: false,
-    easyAuthAvailable: false,
-    token: null,
-};
-
-let tokenRequestPromise: Promise<string | null> | null = null;
-
 function redirectToLoginIfNeeded() {
     if (typeof window === 'undefined') return;
     window.location.assign(buildEasyAuthLoginUrl(window.location.origin));
 }
 
-function extractTokenFromMeResponse(payload: unknown): string | null {
-    if (!Array.isArray(payload) || payload.length === 0) {
-        return null;
-    }
-
-    for (const provider of payload) {
-        if (!provider || typeof provider !== 'object') {
-            continue;
-        }
-        const typedProvider = provider as {
-            access_token?: string;
-            id_token?: string;
-            user_claims?: Array<{ typ?: string; val?: string }>;
-        };
-
-        if (typedProvider.access_token) {
-            return typedProvider.access_token;
-        }
-        if (typedProvider.id_token) {
-            return typedProvider.id_token;
-        }
-
-        if (Array.isArray(typedProvider.user_claims)) {
-            const tokenClaim = typedProvider.user_claims.find(
-                (claim) => claim.typ === 'access_token' && typeof claim.val === 'string'
-            );
-            if (tokenClaim?.val) {
-                return tokenClaim.val;
-            }
-        }
-    }
-    return null;
-}
-
-async function getEasyAuthToken(): Promise<string | null> {
-    if (easyAuthState.checked) {
-        return easyAuthState.token;
-    }
-
-    if (tokenRequestPromise) {
-        return tokenRequestPromise;
-    }
-
-    tokenRequestPromise = (async () => {
-        if (typeof window === 'undefined') {
-            return null;
-        }
-
-        try {
-            const response = await axios.get(EASY_AUTH_ME_URL, {
-                withCredentials: true,
-                validateStatus: () => true,
-            });
-
-            if (response.status === 404) {
-                easyAuthState.checked = true;
-                easyAuthState.easyAuthAvailable = false;
-                easyAuthState.token = null;
-                return null;
-            }
-
-            if (response.status >= 200 && response.status < 300) {
-                const token = extractTokenFromMeResponse(response.data);
-                easyAuthState.checked = true;
-                easyAuthState.easyAuthAvailable = true;
-                easyAuthState.token = token;
-
-                if (!token) {
-                    redirectToLoginIfNeeded();
-                }
-                return token;
-            }
-
-            if (response.status === 401 || response.status === 403) {
-                easyAuthState.checked = true;
-                easyAuthState.easyAuthAvailable = true;
-                easyAuthState.token = null;
-                redirectToLoginIfNeeded();
-                return null;
-            }
-
-            easyAuthState.checked = true;
-            easyAuthState.easyAuthAvailable = false;
-            easyAuthState.token = null;
-            return null;
-        } catch {
-            easyAuthState.checked = true;
-            easyAuthState.easyAuthAvailable = false;
-            easyAuthState.token = null;
-            return null;
-        } finally {
-            tokenRequestPromise = null;
-        }
-    })();
-
-    return tokenRequestPromise;
-}
-
 export const api = axios.create({
     baseURL: API_BASE_URL,
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },
+    validateStatus: () => true,
 });
 
-api.interceptors.request.use(async (config) => {
-    const token = await getEasyAuthToken();
-    if (token) {
-        config.headers = config.headers ?? {};
-        config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.response.use((response) => {
+    if (response.status === 401 || response.status === 403) {
+        redirectToLoginIfNeeded();
     }
-    return config;
+    if (response.status >= 400) {
+        throw new Error(`Request failed with status ${response.status}`);
+    }
+    return response;
 });
 
 export interface Collection {

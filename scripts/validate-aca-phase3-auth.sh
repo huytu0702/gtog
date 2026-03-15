@@ -136,8 +136,8 @@ errors = []
 
 if not auth.get("platform", {}).get("enabled"):
     errors.append("Easy Auth is not enabled")
-if auth.get("globalValidation", {}).get("unauthenticatedClientAction") != "Return401":
-    errors.append("Unauthenticated action is not Return401")
+if auth.get("globalValidation", {}).get("unauthenticatedClientAction") != "AllowAnonymous":
+    errors.append("Unauthenticated action is not AllowAnonymous")
 if auth.get("httpSettings", {}).get("requireHttps") is not True:
     errors.append("Easy Auth does not require HTTPS")
 if auth.get("httpSettings", {}).get("forwardProxy", {}).get("convention") != "Standard":
@@ -169,11 +169,11 @@ else:
     tunnel_container = tunnel_config[0]
     if not tunnel_container.get("image"):
         errors.append("Tunnel app image is not configured")
-    command = tunnel_container.get("command") or []
+    command = tunnel_container.get("command")
     args = tunnel_container.get("args") or []
-    if command != ["/bin/sh"]:
+    if command not in (None, []):
         errors.append(f"Unexpected tunnel command: {command!r}")
-    if args != ["-c", 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"']:
+    if args != ["tunnel", "--no-autoupdate", "run"]:
         errors.append(f"Unexpected tunnel args: {args!r}")
     env = {
         item.get("name"): item.get("secretRef") or item.get("value")
@@ -205,7 +205,7 @@ curl --fail --silent --show-error "$API_HEALTH_URL" >/dev/null
 print_check "Checking /.auth/me without forcing a login redirect"
 auth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$AUTH_ME_URL")"
 case "$auth_status" in
-  200|401|403)
+  200|401|403|404)
     ;;
   *)
     echo "Unexpected /.auth/me status: $auth_status" >&2

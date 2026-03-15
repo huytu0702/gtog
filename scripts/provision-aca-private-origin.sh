@@ -248,7 +248,7 @@ ensure_api_ingress_contract() {
     --memory "$API_MEMORY"
     --min-replicas "$API_MIN_REPLICAS"
     --max-replicas "$API_MAX_REPLICAS"
-    --set-env-vars "APP_ROLE=api" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
+    --set-env-vars "APP_ROLE=api" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}" "REQUIRE_PLATFORM_AUTH=true"
     --output none
   )
   if [[ -n "$API_IMAGE" ]]; then
@@ -310,8 +310,8 @@ ensure_tunnel_connector_contract() {
     --min-replicas "$TUNNEL_MIN_REPLICAS" \
     --max-replicas "$TUNNEL_MAX_REPLICAS" \
     --set-env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
-    --command /bin/sh \
-    --args "-c" "cloudflared tunnel --no-autoupdate run --token \"\$TUNNEL_TOKEN\"" \
+    --command "" \
+    --args tunnel --no-autoupdate run \
     --output none
 
   az containerapp ingress disable \
@@ -695,7 +695,7 @@ configure_easy_auth() {
     --resource-group "$RESOURCE_GROUP" \
     --name "$API_APP_NAME" \
     --enabled true \
-    --unauthenticated-client-action Return401 \
+    --unauthenticated-client-action AllowAnonymous \
     --require-https true \
     --proxy-convention Standard \
     --token-store true \
@@ -815,7 +815,7 @@ ensure(auth_enabled is True, "Easy Auth is not enabled on the API app", errors)
 
 unauthenticated_action = get(auth, "globalValidation", "unauthenticatedClientAction")
 ensure(
-    unauthenticated_action == "Return401",
+    unauthenticated_action == "AllowAnonymous",
     f"Unexpected unauthenticated action: {unauthenticated_action!r}",
     errors,
 )
@@ -1209,8 +1209,7 @@ else
         --max-replicas "$TUNNEL_MAX_REPLICAS" \
         --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
         --env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
-        --command /bin/sh \
-        --args -c 'cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN"' \
+        --args tunnel --no-autoupdate run \
         --output none
     fi
   fi

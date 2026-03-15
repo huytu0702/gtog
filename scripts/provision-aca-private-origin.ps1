@@ -263,7 +263,7 @@ function Ensure-ApiIngressContract {
         "--memory", $ApiMemory,
         "--min-replicas", $ApiMinReplicas,
         "--max-replicas", $ApiMaxReplicas,
-        "--set-env-vars", "APP_ROLE=api", "CORS_ORIGINS=https://$AppPublicHostname",
+        "--set-env-vars", "APP_ROLE=api", "CORS_ORIGINS=https://$AppPublicHostname", "REQUIRE_PLATFORM_AUTH=true",
         "--output", "none"
     )
     if ($ApiImage) {
@@ -325,8 +325,8 @@ function Ensure-TunnelConnectorContract {
         --min-replicas $TunnelMinReplicas `
         --max-replicas $TunnelMaxReplicas `
         --set-env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
-        --command "/bin/sh" `
-        --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
+        --command "" `
+        --args "tunnel" "--no-autoupdate" "run" `
         --output none | Out-Null
 
     az containerapp ingress disable `
@@ -390,7 +390,7 @@ function Read-RolloutStateField {
         throw "RolloutStateFile is required for $RolloutMode rollout mode."
     }
 
-    $payload = Get-Content -Path $RolloutStateFile -Raw | ConvertFrom-Json -Depth 20
+    $payload = Get-Content -Path $RolloutStateFile -Raw | ConvertFrom-Json
     return [string]($payload.$FieldName)
 }
 
@@ -636,7 +636,7 @@ function Configure-EasyAuth {
         --resource-group $ResourceGroup `
         --name $ApiAppName `
         --enabled true `
-        --unauthenticated-client-action Return401 `
+        --unauthenticated-client-action AllowAnonymous `
         --require-https true `
         --proxy-convention Standard `
         --token-store true `
@@ -670,29 +670,29 @@ function Verify-Phase3Contract {
     $apiApp = az containerapp show `
         --resource-group $ResourceGroup `
         --name $ApiAppName `
-        --output json | ConvertFrom-Json -Depth 20
+        --output json | ConvertFrom-Json
     $workerApp = az containerapp show `
         --resource-group $ResourceGroup `
         --name $WorkerAppName `
-        --output json | ConvertFrom-Json -Depth 20
+        --output json | ConvertFrom-Json
     $auth = az containerapp auth show `
         --resource-group $ResourceGroup `
         --name $ApiAppName `
-        --output json | ConvertFrom-Json -Depth 20
+        --output json | ConvertFrom-Json
     $microsoftAuth = az containerapp auth microsoft show `
         --resource-group $ResourceGroup `
         --name $ApiAppName `
-        --output json | ConvertFrom-Json -Depth 20
+        --output json | ConvertFrom-Json
     $appRegistration = az ad app show `
         --id $EntraAppId `
-        --output json | ConvertFrom-Json -Depth 20
+        --output json | ConvertFrom-Json
 
     $errors = [System.Collections.Generic.List[string]]::new()
 
     if (-not $auth.platform.enabled) {
         $errors.Add("Easy Auth is not enabled on the API app.")
     }
-    if ($auth.globalValidation.unauthenticatedClientAction -ne "Return401") {
+    if ($auth.globalValidation.unauthenticatedClientAction -ne "AllowAnonymous") {
         $errors.Add("Unexpected unauthenticated action: $($auth.globalValidation.unauthenticatedClientAction)")
     }
     $requireHttps = $auth.httpSettings.requireHttps
@@ -1082,8 +1082,7 @@ if ($RolloutMode -in @("promote", "rollback")) {
                 --max-replicas $TunnelMaxReplicas `
                 --secrets "${TunnelSecretRefName}=$TunnelToken" `
                 --env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
-                --command "/bin/sh" `
-                --args "-c" "cloudflared tunnel --no-autoupdate run --token `"`$TUNNEL_TOKEN`"" `
+                --args "tunnel" "--no-autoupdate" "run" `
                 --output none
         }
     }

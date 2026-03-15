@@ -13,7 +13,7 @@ from backend.app.models import IndexJobResponse, IndexStatus, IndexStatusRespons
 
 
 @pytest.mark.asyncio
-async def test_start_indexing_returns_202_and_job_payload():
+async def test_start_indexing_returns_202_and_job_payload(valid_easy_auth_headers):
     with patch("backend.app.routers.indexing.storage_service") as mock_storage:
         with patch("backend.app.routers.indexing.indexing_service") as mock_indexing:
             mock_storage.get_collection.return_value = SimpleNamespace(document_count=2)
@@ -30,10 +30,12 @@ async def test_start_indexing_returns_202_and_job_payload():
             )
 
             transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
                 response = await client.post(
                     "/api/collections/c1/index",
-                    headers={"X-MS-CLIENT-PRINCIPAL": "present"},
+                    headers=valid_easy_auth_headers,
                 )
 
     assert response.status_code == 202
@@ -43,7 +45,9 @@ async def test_start_indexing_returns_202_and_job_payload():
 
 
 @pytest.mark.asyncio
-async def test_get_collection_index_status_returns_retrying_state():
+async def test_get_collection_index_status_returns_retrying_state(
+    valid_easy_auth_headers,
+):
     with patch("backend.app.routers.indexing.indexing_service") as mock_indexing:
         mock_indexing.get_index_status.return_value = IndexStatusResponse(
             collection_id="c1",
@@ -57,10 +61,12 @@ async def test_get_collection_index_status_returns_retrying_state():
         )
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
             response = await client.get(
                 "/api/collections/c1/index",
-                headers={"X-MS-CLIENT-PRINCIPAL": "present"},
+                headers=valid_easy_auth_headers,
             )
 
     assert response.status_code == 200
@@ -68,7 +74,7 @@ async def test_get_collection_index_status_returns_retrying_state():
 
 
 @pytest.mark.asyncio
-async def test_get_job_status_returns_canonical_payload():
+async def test_get_job_status_returns_canonical_payload(valid_easy_auth_headers):
     with patch("backend.app.routers.indexing.indexing_service") as mock_indexing:
         mock_indexing.get_job_status.return_value = IndexJobResponse(
             job_id="job-1",
@@ -83,10 +89,12 @@ async def test_get_job_status_returns_canonical_payload():
         )
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
             response = await client.get(
                 "/api/index-jobs/job-1",
-                headers={"X-MS-CLIENT-PRINCIPAL": "present"},
+                headers=valid_easy_auth_headers,
             )
 
     assert response.status_code == 200
@@ -96,15 +104,17 @@ async def test_get_job_status_returns_canonical_payload():
 
 
 @pytest.mark.asyncio
-async def test_get_job_status_returns_404_when_missing():
+async def test_get_job_status_returns_404_when_missing(valid_easy_auth_headers):
     with patch("backend.app.routers.indexing.indexing_service") as mock_indexing:
         mock_indexing.get_job_status.return_value = None
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
             response = await client.get(
                 "/api/index-jobs/missing",
-                headers={"X-MS-CLIENT-PRINCIPAL": "present"},
+                headers=valid_easy_auth_headers,
             )
 
     assert response.status_code == 404
