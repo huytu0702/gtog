@@ -102,6 +102,7 @@ $AccountTenantId = ""
 $IdentityResourceId = ""
 $IdentityPrincipalId = ""
 $ExpectedAllowedAudiences = @()
+$ExpectedAllowedExternalRedirectUrls = @()
 $ExpectedLoginParameters = @()
 $ExpectedScopeValue = ""
 $ExpectedCallbackUrl = ""
@@ -228,6 +229,36 @@ function Ensure-ContainerAppIdentity {
         --output none | Out-Null
 }
 
+function Wait-ContainerAppProvisioning {
+    param(
+        [string]$Name,
+        [int]$MaxAttempts = 40,
+        [int]$DelaySeconds = 3
+    )
+
+    $lastState = ""
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $lastState = az containerapp show `
+            --resource-group $ResourceGroup `
+            --name $Name `
+            --query properties.provisioningState `
+            --output tsv 2>$null
+
+        if ($LASTEXITCODE -eq 0) {
+            if ($lastState -eq "Succeeded") {
+                return
+            }
+            if ($lastState -eq "Failed") {
+                throw "Container app $Name provisioning failed."
+            }
+        }
+
+        Start-Sleep -Seconds $DelaySeconds
+    }
+
+    throw "Timed out waiting for container app $Name provisioning state to settle. Last state: $lastState"
+}
+
 function Ensure-FrontendIngressContract {
     $frontendArgs = @(
         "containerapp", "update",
@@ -255,6 +286,20 @@ function Ensure-FrontendIngressContract {
 }
 
 function Ensure-ApiIngressContract {
+    $apiEnvVars = @(
+        "APP_ROLE=api",
+        "CORS_ORIGINS=https://$AppPublicHostname",
+        "REQUIRE_PLATFORM_AUTH=true"
+    )
+    if ($EdgeOriginSecret) {
+        az containerapp secret set `
+            --resource-group $ResourceGroup `
+            --name $ApiAppName `
+            --secrets "$EdgeOriginSecretName=$EdgeOriginSecret" `
+            --output none | Out-Null
+        $apiEnvVars += "EDGE_ORIGIN_SECRET=secretref:$EdgeOriginSecretName"
+    }
+
     $apiArgs = @(
         "containerapp", "update",
         "--resource-group", $ResourceGroup,
@@ -263,7 +308,10 @@ function Ensure-ApiIngressContract {
         "--memory", $ApiMemory,
         "--min-replicas", $ApiMinReplicas,
         "--max-replicas", $ApiMaxReplicas,
-        "--set-env-vars", "APP_ROLE=api", "CORS_ORIGINS=https://$AppPublicHostname", "REQUIRE_PLATFORM_AUTH=true",
+        "--set-env-vars"
+    )
+    $apiArgs += $apiEnvVars
+    $apiArgs += @(
         "--output", "none"
     )
     if ($ApiImage) {
@@ -277,6 +325,16 @@ function Ensure-ApiIngressContract {
         --type internal `
         --target-port 8000 `
         --transport auto `
+        --output none | Out-Null
+
+    az containerapp ingress cors update `
+        --resource-group $ResourceGroup `
+        --name $ApiAppName `
+        --allowed-origins "https://$AppPublicHostname" `
+        --allowed-methods GET HEAD OPTIONS POST PUT PATCH DELETE `
+        --allowed-headers "*" `
+        --allow-credentials true `
+        --max-age 600 `
         --output none | Out-Null
 }
 
@@ -314,20 +372,45 @@ function Ensure-TunnelConnectorContract {
             --name $TunnelAppName `
             --secrets "${TunnelSecretRefName}=$TunnelToken" `
             --output none | Out-Null
+        Wait-ContainerAppProvisioning -Name $TunnelAppName
     }
 
-    az containerapp update `
-        --resource-group $ResourceGroup `
-        --name $TunnelAppName `
-        --image $TunnelImage `
-        --cpu $TunnelCpu `
-        --memory $TunnelMemory `
-        --min-replicas $TunnelMinReplicas `
-        --max-replicas $TunnelMaxReplicas `
-        --set-env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
-        --command "" `
-        --args "tunnel" "--no-autoupdate" "run" `
+    $tunnelPatch = @{
+        properties = @{
+            template = @{
+                containers = @(
+                    @{
+                        name = $TunnelAppName
+                        image = $TunnelImage
+                        command = @()
+                        args = @("tunnel", "--no-autoupdate", "run")
+                        env = @(
+                            @{
+                                name = "TUNNEL_TOKEN"
+                                secretRef = $TunnelSecretRefName
+                            }
+                        )
+                        resources = @{
+                            cpu = [double]$TunnelCpu
+                            memory = $TunnelMemory
+                        }
+                    }
+                )
+                scale = @{
+                    minReplicas = [int]$TunnelMinReplicas
+                    maxReplicas = [int]$TunnelMaxReplicas
+                }
+            }
+        }
+    } | ConvertTo-Json -Depth 20 -Compress
+
+    az rest `
+        --method patch `
+        --uri "https://management.azure.com/subscriptions/$Subscription/resourceGroups/$ResourceGroup/providers/Microsoft.App/containerApps/$TunnelAppName?api-version=2025-07-01" `
+        --body $tunnelPatch `
+        --headers "Content-Type=application/json" `
         --output none | Out-Null
+    Wait-ContainerAppProvisioning -Name $TunnelAppName
 
     az containerapp ingress disable `
         --resource-group $ResourceGroup `
@@ -525,6 +608,7 @@ function Ensure-EntraAppContract {
     $ExpectedScopeValue = "$ApiAppIdUri/$EntraScopeName"
     $ExpectedCallbackUrl = "https://$ApiPublicHostname/.auth/login/aad/callback"
     $ExpectedAllowedAudiences = Convert-CsvToArray -Value $AllowedAudiences
+    $ExpectedAllowedExternalRedirectUrls = @("https://$AppPublicHostname")
     if (-not $AadLoginParametersJson) {
         $ExpectedLoginParameters = Get-DefaultLoginParameters -ScopeValue $ExpectedScopeValue
     } else {
@@ -639,26 +723,75 @@ function Configure-EasyAuth {
         --unauthenticated-client-action AllowAnonymous `
         --require-https true `
         --proxy-convention Standard `
-        --token-store true `
-        --excluded-paths /health /health/readiness `
+        --excluded-paths "/health,/health/readiness" `
         --set "identityProviders.azureActiveDirectory.login.loginParameters=$loginParametersJson" `
         --yes `
         --output none | Out-Null
 
-    $microsoftArgs = @(
-        "containerapp", "auth", "microsoft", "update",
-        "--resource-group", $ResourceGroup,
-        "--name", $ApiAppName,
-        "--client-id", $EntraAppId,
-        "--client-secret-name", $EntraClientSecretName,
-        "--tenant-id", $EntraTenantId,
-        "--issuer", $EntraIssuerUrl,
-        "--yes",
-        "--output", "none",
-        "--allowed-audiences"
-    )
-    $microsoftArgs += $ExpectedAllowedAudiences
-    az @microsoftArgs | Out-Null
+    $authConfigId = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup/providers/Microsoft.App/containerApps/$ApiAppName/authConfigs/current"
+    $auth = az rest `
+        --method get `
+        --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" `
+        --output json | ConvertFrom-Json
+    $authProperties = if ($auth.properties) { $auth.properties } else { $auth }
+    $loginSettings = @{}
+    if ($authProperties.login) {
+        foreach ($property in $authProperties.login.PSObject.Properties) {
+            $loginSettings[$property.Name] = $property.Value
+        }
+    }
+    $loginSettings["allowedExternalRedirectUrls"] = @($ExpectedAllowedExternalRedirectUrls)
+    $authProperties.login = $loginSettings
+
+    $identityProviders = @{}
+    if ($authProperties.identityProviders) {
+        foreach ($property in $authProperties.identityProviders.PSObject.Properties) {
+            $identityProviders[$property.Name] = $property.Value
+        }
+    }
+    $azureActiveDirectory = @{}
+    if ($identityProviders.azureActiveDirectory) {
+        foreach ($property in $identityProviders.azureActiveDirectory.PSObject.Properties) {
+            $azureActiveDirectory[$property.Name] = $property.Value
+        }
+    }
+    $azureActiveDirectory["enabled"] = $true
+    $aadLogin = @{}
+    if ($azureActiveDirectory.login) {
+        foreach ($property in $azureActiveDirectory.login.PSObject.Properties) {
+            $aadLogin[$property.Name] = $property.Value
+        }
+    }
+    $aadLogin["loginParameters"] = @($ExpectedLoginParameters)
+    $azureActiveDirectory["login"] = $aadLogin
+    $aadRegistration = @{}
+    if ($azureActiveDirectory.registration) {
+        foreach ($property in $azureActiveDirectory.registration.PSObject.Properties) {
+            $aadRegistration[$property.Name] = $property.Value
+        }
+    }
+    $aadRegistration["clientId"] = $EntraAppId
+    $aadRegistration["clientSecretSettingName"] = $EntraClientSecretName
+    $aadRegistration["openIdIssuer"] = $EntraIssuerUrl
+    $azureActiveDirectory["registration"] = $aadRegistration
+    $aadValidation = @{}
+    if ($azureActiveDirectory.validation) {
+        foreach ($property in $azureActiveDirectory.validation.PSObject.Properties) {
+            $aadValidation[$property.Name] = $property.Value
+        }
+    }
+    $aadValidation["allowedAudiences"] = @($ExpectedAllowedAudiences)
+    $azureActiveDirectory["validation"] = $aadValidation
+    $identityProviders["azureActiveDirectory"] = $azureActiveDirectory
+    $authProperties.identityProviders = $identityProviders
+
+    $authPatchBody = @{ properties = $authProperties } | ConvertTo-Json -Depth 100 -Compress
+    az rest `
+        --method put `
+        --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" `
+        --body $authPatchBody `
+        --headers "Content-Type=application/json" `
+        --output none | Out-Null
 }
 
 function Verify-Phase3Contract {
@@ -675,10 +808,12 @@ function Verify-Phase3Contract {
         --resource-group $ResourceGroup `
         --name $WorkerAppName `
         --output json | ConvertFrom-Json
-    $auth = az containerapp auth show `
-        --resource-group $ResourceGroup `
-        --name $ApiAppName `
+    $authConfigId = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup/providers/Microsoft.App/containerApps/$ApiAppName/authConfigs/current"
+    $auth = az rest `
+        --method get `
+        --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" `
         --output json | ConvertFrom-Json
+    $auth = if ($auth.properties) { $auth.properties } else { $auth }
     $microsoftAuth = az containerapp auth microsoft show `
         --resource-group $ResourceGroup `
         --name $ApiAppName `
@@ -687,6 +822,7 @@ function Verify-Phase3Contract {
         --id $EntraAppId `
         --output json | ConvertFrom-Json
 
+    $expectedAppOrigin = "https://$AppPublicHostname"
     $errors = [System.Collections.Generic.List[string]]::new()
 
     if (-not $auth.platform.enabled) {
@@ -721,6 +857,11 @@ function Verify-Phase3Contract {
         $errors.Add("Unexpected login parameters: $($actualLoginParameters -join ', ')")
     }
 
+    $actualAllowedExternalRedirectUrls = @($auth.login.allowedExternalRedirectUrls) | Sort-Object
+    if (($actualAllowedExternalRedirectUrls -join "|") -ne (($ExpectedAllowedExternalRedirectUrls | Sort-Object) -join "|")) {
+        $errors.Add("Unexpected allowed external redirect URLs: $($actualAllowedExternalRedirectUrls -join ', ')")
+    }
+
     if ($microsoftAuth.registration.clientId -ne $EntraAppId) {
         $errors.Add("Unexpected Entra client ID: $($microsoftAuth.registration.clientId)")
     }
@@ -747,6 +888,25 @@ function Verify-Phase3Contract {
     }
     if ($apiApp.properties.configuration.ingress.targetPort -ne 8000) {
         $errors.Add("Unexpected API target port: $($apiApp.properties.configuration.ingress.targetPort)")
+    }
+    $corsPolicy = $apiApp.properties.configuration.ingress.corsPolicy
+    $corsAllowedOrigins = @($corsPolicy.allowedOrigins) | Sort-Object
+    if (($corsAllowedOrigins -join "|") -ne $expectedAppOrigin) {
+        $errors.Add("Ingress CORS allowed origins do not match the expected app origin.")
+    }
+    if ($corsPolicy.allowCredentials -ne $true) {
+        $errors.Add("Ingress CORS allowCredentials is not enabled.")
+    }
+    $corsAllowedMethods = @($corsPolicy.allowedMethods) | Sort-Object
+    if (($corsAllowedMethods -join "|") -ne ((@("DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT") | Sort-Object) -join "|")) {
+        $errors.Add("Ingress CORS allowed methods do not match the expected browser contract.")
+    }
+    $corsAllowedHeaders = @($corsPolicy.allowedHeaders) | Sort-Object
+    if (($corsAllowedHeaders -join "|") -ne "*") {
+        $errors.Add("Ingress CORS allowed headers do not match the expected browser contract.")
+    }
+    if ($corsPolicy.maxAge -ne 600) {
+        $errors.Add("Ingress CORS maxAge is not 600.")
     }
     $workerIngress = $workerApp.properties.configuration.ingress
     if ($null -ne $workerIngress -and $workerIngress.PSObject.Properties.Count -gt 0) {
@@ -892,13 +1052,15 @@ if ($RolloutMode -in @("promote", "rollback")) {
         --output tsv
 
     Write-Host ">>> Disabling ACA public network access"
-    $patchBody = "{""properties"":{""publicNetworkAccess"":""Disabled""}}"
-    az rest `
-        --method patch `
-        --uri "https://management.azure.com$environmentId?api-version=2024-03-01" `
-        --body $patchBody `
-        --headers "Content-Type=application/json" `
-        --output none
+    if (-not (Test-AzCommand {
+        az containerapp env update `
+            --resource-group $ResourceGroup `
+            --name $ContainerAppEnvironment `
+            --public-network-access Disabled `
+            --output none
+    })) {
+        Write-Warning "Failed to disable ACA public network access via az containerapp env update; continuing with existing environment settings"
+    }
 
     Write-Host ">>> Ensuring private endpoint: $PrivateEndpointName"
     if (-not (Test-AzCommand {
@@ -1026,6 +1188,17 @@ if ($RolloutMode -in @("promote", "rollback")) {
 
         Write-Host ">>> Ensuring API app: $ApiAppName"
         if (-not (Test-ContainerAppExists -Name $ApiAppName)) {
+            $apiEnvVars = @(
+                "APP_ROLE=api",
+                "CORS_ORIGINS=https://$AppPublicHostname",
+                "REQUIRE_PLATFORM_AUTH=true"
+            )
+            $apiSecretArgs = @()
+            if ($EdgeOriginSecret) {
+                $apiEnvVars += "EDGE_ORIGIN_SECRET=secretref:$EdgeOriginSecretName"
+                $apiSecretArgs = @("--secrets", "$EdgeOriginSecretName=$EdgeOriginSecret")
+            }
+
             $apiArgs = @(
                 "containerapp", "create",
                 "--resource-group", $ResourceGroup,
@@ -1039,7 +1212,11 @@ if ($RolloutMode -in @("promote", "rollback")) {
                 "--memory", $ApiMemory,
                 "--min-replicas", $ApiMinReplicas,
                 "--max-replicas", $ApiMaxReplicas,
-                "--env-vars", "APP_ROLE=api", "CORS_ORIGINS=https://$AppPublicHostname",
+                "--env-vars"
+            )
+            $apiArgs += $apiEnvVars
+            $apiArgs += $apiSecretArgs
+            $apiArgs += @(
                 "--output", "none"
             )
             if ($IdentityResourceId) {
@@ -1082,7 +1259,6 @@ if ($RolloutMode -in @("promote", "rollback")) {
                 --max-replicas $TunnelMaxReplicas `
                 --secrets "${TunnelSecretRefName}=$TunnelToken" `
                 --env-vars "TUNNEL_TOKEN=secretref:$TunnelSecretRefName" `
-                --args "tunnel" "--no-autoupdate" "run" `
                 --output none
         }
     }

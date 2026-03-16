@@ -22,6 +22,7 @@ def test_bash_script_requires_frontend_phase3_inputs_and_emits_artifact_names():
     assert "APP_PUBLIC_HOSTNAME" in content
     assert "API_BASE_URL" in content
     assert "API_PUBLIC_HOSTNAME" in content
+    assert "EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS" in content
     assert "WRONG_AUDIENCE_TOKEN" in content
     assert "PRODUCTION_REJECTION_TOKEN" in content
     assert "PROBE_ORIGIN_URLS" in content
@@ -53,6 +54,7 @@ def test_powershell_script_requires_frontend_phase3_inputs_and_reuses_validator(
     assert "AppPublicHostname" in content
     assert "ApiBaseUrl" in content
     assert "ApiPublicHostname" in content
+    assert "ExpectedAllowedExternalRedirectUrls" in content
     assert "WrongAudienceToken" in content
     assert "ProductionRejectionToken" in content
     assert "ProbeOriginUrls" in content

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
+import backend.app.main as main
 from backend.app.main import app
 from backend.app.models import IndexJobResponse, IndexStatus, IndexStatusResponse
 
@@ -118,3 +119,54 @@ async def test_get_job_status_returns_404_when_missing(valid_easy_auth_headers):
             )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_start_indexing_requires_valid_principal_when_platform_auth_required():
+    with patch.object(main.settings, "edge_origin_secret", ""):
+        with patch.object(main.settings, "require_platform_auth", True):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                response = await client.post("/api/collections/c1/index")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_job_status_rejects_wrong_edge_secret_even_with_principal(
+    valid_easy_auth_headers,
+):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+        with patch.object(main.settings, "require_platform_auth", True):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                response = await client.get(
+                    "/api/index-jobs/job-1",
+                    headers={
+                        **valid_easy_auth_headers,
+                        "X-Edge-Secret": "wrong-secret",
+                    },
+                )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_start_indexing_returns_cors_headers_on_401_for_allowed_origin():
+    with patch.object(main.settings, "edge_origin_secret", ""):
+        with patch.object(main.settings, "require_platform_auth", True):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                response = await client.post(
+                    "/api/collections/c1/index",
+                    headers={"Origin": main.allowed_origins[0]},
+                )
+
+    assert response.status_code == 401
+    assert response.headers["access-control-allow-origin"] == main.allowed_origins[0]

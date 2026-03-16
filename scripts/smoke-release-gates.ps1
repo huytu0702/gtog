@@ -12,6 +12,7 @@ param(
     [string]$ExpectedClientId = "",
     [string]$ExpectedIssuerUrl = "",
     [string]$ExpectedAllowedAudiences = "",
+    [string]$ExpectedAllowedExternalRedirectUrls = "",
     [string]$WrongAudienceToken = "",
     [string]$ProductionRejectionToken = "",
     [string]$ProbeOriginUrls = "",
@@ -32,6 +33,9 @@ if (-not $EvidenceDir) {
 }
 if (-not $CollectionId) {
     $CollectionId = "smoke-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+}
+if (-not $ExpectedAllowedExternalRedirectUrls) {
+    $ExpectedAllowedExternalRedirectUrls = "https://$AppPublicHostname"
 }
 
 $phase3ArtifactName = $Phase3ValidationArtifactName
@@ -205,6 +209,7 @@ Add-Result -Name "sse" -Status "$([int]$sseResponse.StatusCode)"
     -ExpectedClientId $ExpectedClientId `
     -ExpectedIssuerUrl $ExpectedIssuerUrl `
     -ExpectedAllowedAudiences $ExpectedAllowedAudiences `
+    -ExpectedAllowedExternalRedirectUrls $ExpectedAllowedExternalRedirectUrls `
     -TestAccessToken $AuthBearerToken `
     -WrongAudienceToken $WrongAudienceToken `
     -ProductionRejectionToken $ProductionRejectionToken `

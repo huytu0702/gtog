@@ -11,6 +11,7 @@ param(
     [string]$ExpectedClientId = "",
     [string]$ExpectedIssuerUrl = "",
     [string]$ExpectedAllowedAudiences = "",
+    [string]$ExpectedAllowedExternalRedirectUrls = "",
     [string]$ExpectedLoginParametersJson = "",
     [string]$ProbeOriginUrls = "",
     [string]$OriginBypassWorkspace = "",
@@ -90,6 +91,7 @@ Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
 Require-Value -Name "ExpectedClientId" -Value $ExpectedClientId
 Require-Value -Name "ExpectedIssuerUrl" -Value $ExpectedIssuerUrl
 Require-Value -Name "ExpectedAllowedAudiences" -Value $ExpectedAllowedAudiences
+Require-Value -Name "ExpectedAllowedExternalRedirectUrls" -Value $ExpectedAllowedExternalRedirectUrls
 
 if (-not $ApiHealthUrl) {
     $ApiHealthUrl = "https://$ApiPublicHostname/health"
@@ -98,6 +100,7 @@ if (-not $AuthMeUrl) {
     $AuthMeUrl = "https://$ApiPublicHostname/.auth/me"
 }
 $expectedAllowedAudienceArray = Convert-CsvToArray -Value $ExpectedAllowedAudiences
+$expectedAllowedExternalRedirectUrlArray = Convert-CsvToArray -Value $ExpectedAllowedExternalRedirectUrls
 if (-not $ExpectedLoginParametersJson) {
     $expectedLoginParameters = Get-DefaultLoginParameters -AllowedAudiences $expectedAllowedAudienceArray
 } else {
@@ -111,27 +114,34 @@ Write-Phase3Check "Reading current API app, worker app, tunnel app, and auth set
 $apiApp = az containerapp show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json
 $workerApp = az containerapp show --resource-group $ResourceGroup --name $WorkerAppName --output json | ConvertFrom-Json
 $tunnelApp = az containerapp show --resource-group $ResourceGroup --name $TunnelAppName --output json | ConvertFrom-Json
-$auth = az containerapp auth show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json
+$authConfigId = "$($apiApp.id)/authConfigs/current"
+$auth = az rest --method get --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" --output json | ConvertFrom-Json
+$authProperties = if ($auth.properties) { $auth.properties } else { $auth }
 $microsoftAuth = az containerapp auth microsoft show --resource-group $ResourceGroup --name $ApiAppName --output json | ConvertFrom-Json
 
+$expectedAppOrigin = $expectedAllowedExternalRedirectUrlArray[0]
 $errors = [System.Collections.Generic.List[string]]::new()
-if (-not $auth.platform.enabled) {
+if (-not $authProperties.platform.enabled) {
     $errors.Add("Easy Auth is not enabled.")
 }
-if ($auth.globalValidation.unauthenticatedClientAction -ne "AllowAnonymous") {
+if ($authProperties.globalValidation.unauthenticatedClientAction -ne "AllowAnonymous") {
     $errors.Add("Unauthenticated action is not AllowAnonymous.")
 }
-if (-not $auth.httpSettings.requireHttps) {
+if (-not $authProperties.httpSettings.requireHttps) {
     $errors.Add("Easy Auth does not require HTTPS.")
 }
-if ($auth.httpSettings.forwardProxy.convention -ne "Standard") {
+if ($authProperties.httpSettings.forwardProxy.convention -ne "Standard") {
     $errors.Add("Forward proxy convention is not Standard.")
 }
-if (((@($auth.globalValidation.excludedPaths) | Sort-Object) -join "|") -ne ((@("/health", "/health/readiness") | Sort-Object) -join "|")) {
+if (((@($authProperties.globalValidation.excludedPaths) | Sort-Object) -join "|") -ne ((@("/health", "/health/readiness") | Sort-Object) -join "|")) {
     $errors.Add("Excluded paths are not exactly /health and /health/readiness.")
 }
-if (((@($auth.identityProviders.azureActiveDirectory.login.loginParameters)) -join "|") -ne ((@($expectedLoginParameters)) -join "|")) {
+if (((@($authProperties.identityProviders.azureActiveDirectory.login.loginParameters)) -join "|") -ne ((@($expectedLoginParameters)) -join "|")) {
     $errors.Add("Login parameters do not match the expected environment contract.")
+}
+$actualAllowedExternalRedirectUrls = @($authProperties.login.allowedExternalRedirectUrls) | Sort-Object
+if (($actualAllowedExternalRedirectUrls -join "|") -ne (($expectedAllowedExternalRedirectUrlArray | Sort-Object) -join "|")) {
+    $errors.Add("Easy Auth allowed external redirect URLs do not match the expected app origin.")
 }
 if ($microsoftAuth.registration.clientId -ne $ExpectedClientId) {
     $errors.Add("Configured Entra clientId does not match the expected app registration.")
@@ -147,6 +157,24 @@ if ($apiApp.properties.configuration.ingress.external -ne $false) {
 }
 if ($apiApp.properties.configuration.ingress.targetPort -ne 8000) {
     $errors.Add("API app target port is not 8000.")
+}
+$corsAllowedOrigins = @($apiApp.properties.configuration.ingress.corsPolicy.allowedOrigins) | Sort-Object
+if (($corsAllowedOrigins -join "|") -ne $expectedAppOrigin) {
+    $errors.Add("Ingress CORS allowed origins do not match the expected app origin.")
+}
+if ($apiApp.properties.configuration.ingress.corsPolicy.allowCredentials -ne $true) {
+    $errors.Add("Ingress CORS allowCredentials is not enabled.")
+}
+$corsAllowedMethods = @($apiApp.properties.configuration.ingress.corsPolicy.allowedMethods) | Sort-Object
+if (($corsAllowedMethods -join "|") -ne ((@("DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT") | Sort-Object) -join "|")) {
+    $errors.Add("Ingress CORS allowed methods do not match the expected browser contract.")
+}
+$corsAllowedHeaders = @($apiApp.properties.configuration.ingress.corsPolicy.allowedHeaders) | Sort-Object
+if (($corsAllowedHeaders -join "|") -ne "*") {
+    $errors.Add("Ingress CORS allowed headers do not match the expected browser contract.")
+}
+if ($apiApp.properties.configuration.ingress.corsPolicy.maxAge -ne 600) {
+    $errors.Add("Ingress CORS maxAge is not 600.")
 }
 if ($workerApp.properties.configuration.ingress) {
     $errors.Add("Worker app still exposes ingress.")

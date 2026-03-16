@@ -75,12 +75,16 @@ AAD_LOGIN_PARAMETERS_JSON="${AAD_LOGIN_PARAMETERS_JSON:-}"
 if [[ -z "${AZURE_CONFIG_DIR:-}" ]]; then
   export AZURE_CONFIG_DIR="$(pwd)/.azure"
 fi
+if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
+  export MSYS2_ARG_CONV_EXCL='*'
+fi
 mkdir -p "$AZURE_CONFIG_DIR"
 
 ACCOUNT_TENANT_ID=""
 IDENTITY_RESOURCE_ID=""
 IDENTITY_PRINCIPAL_ID=""
 EXPECTED_ALLOWED_AUDIENCES_JSON="[]"
+EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="[]"
 EXPECTED_LOGIN_PARAMETERS_JSON="[]"
 EXPECTED_SCOPE_VALUE=""
 EXPECTED_CALLBACK_URL=""
@@ -179,6 +183,39 @@ ensure_container_app_identity() {
     --output none
 }
 
+wait_for_container_app_provisioning() {
+  local app_name="$1"
+  local max_attempts="${2:-40}"
+  local attempt=1
+  local provisioning_state=""
+
+  while (( attempt <= max_attempts )); do
+    if provisioning_state="$(
+      az containerapp show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$app_name" \
+        --query properties.provisioningState \
+        --output tsv 2>/dev/null
+    )"; then
+      case "$provisioning_state" in
+        Succeeded)
+          return 0
+          ;;
+        Failed)
+          echo "Container app ${app_name} provisioning failed" >&2
+          return 1
+          ;;
+      esac
+    fi
+
+    sleep 3
+    ((attempt++))
+  done
+
+  echo "Timed out waiting for container app ${app_name} provisioning state to settle (last state: ${provisioning_state:-unknown})" >&2
+  return 1
+}
+
 csv_to_json_array() {
   local raw="$1"
   RAW="$raw" python - <<'PY'
@@ -240,6 +277,20 @@ ensure_frontend_ingress_contract() {
 }
 
 ensure_api_ingress_contract() {
+  local api_env_vars=(
+    "APP_ROLE=api"
+    "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
+    "REQUIRE_PLATFORM_AUTH=true"
+  )
+  if [[ -n "$EDGE_ORIGIN_SECRET" ]]; then
+    az containerapp secret set \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$API_APP_NAME" \
+      --secrets "${EDGE_ORIGIN_SECRET_NAME}=${EDGE_ORIGIN_SECRET}" \
+      --output none
+    api_env_vars+=("EDGE_ORIGIN_SECRET=secretref:${EDGE_ORIGIN_SECRET_NAME}")
+  fi
+
   local api_args=(
     containerapp update
     --resource-group "$RESOURCE_GROUP"
@@ -248,7 +299,7 @@ ensure_api_ingress_contract() {
     --memory "$API_MEMORY"
     --min-replicas "$API_MIN_REPLICAS"
     --max-replicas "$API_MAX_REPLICAS"
-    --set-env-vars "APP_ROLE=api" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}" "REQUIRE_PLATFORM_AUTH=true"
+    --set-env-vars "${api_env_vars[@]}"
     --output none
   )
   if [[ -n "$API_IMAGE" ]]; then
@@ -262,6 +313,16 @@ ensure_api_ingress_contract() {
     --type internal \
     --target-port 8000 \
     --transport auto \
+    --output none
+
+  az containerapp ingress cors update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$API_APP_NAME" \
+    --allowed-origins "https://${APP_PUBLIC_HOSTNAME}" \
+    --allowed-methods GET HEAD OPTIONS POST PUT PATCH DELETE \
+    --allowed-headers '*' \
+    --allow-credentials true \
+    --max-age 600 \
     --output none
 }
 
@@ -299,20 +360,68 @@ ensure_tunnel_connector_contract() {
       --name "$TUNNEL_APP_NAME" \
       --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
       --output none
+    wait_for_container_app_provisioning "$TUNNEL_APP_NAME"
   fi
 
-  az containerapp update \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$TUNNEL_APP_NAME" \
-    --image "$TUNNEL_IMAGE" \
-    --cpu "$TUNNEL_CPU" \
-    --memory "$TUNNEL_MEMORY" \
-    --min-replicas "$TUNNEL_MIN_REPLICAS" \
-    --max-replicas "$TUNNEL_MAX_REPLICAS" \
-    --set-env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
-    --command "" \
-    --args tunnel --no-autoupdate run \
+  local tunnel_patch_file
+  tunnel_patch_file="$(mktemp)"
+  TUNNEL_APP_NAME="$TUNNEL_APP_NAME" \
+  TUNNEL_IMAGE="$TUNNEL_IMAGE" \
+  TUNNEL_SECRET_REF_NAME="$TUNNEL_SECRET_REF_NAME" \
+  TUNNEL_CPU="$TUNNEL_CPU" \
+  TUNNEL_MEMORY="$TUNNEL_MEMORY" \
+  TUNNEL_MIN_REPLICAS="$TUNNEL_MIN_REPLICAS" \
+  TUNNEL_MAX_REPLICAS="$TUNNEL_MAX_REPLICAS" \
+  TUNNEL_PATCH_FILE="$tunnel_patch_file" \
+  python - <<'PY'
+import json
+import os
+
+with open(os.environ["TUNNEL_PATCH_FILE"], "w", encoding="utf-8") as handle:
+    json.dump(
+        {
+            "properties": {
+                "template": {
+                    "containers": [
+                        {
+                            "name": os.environ["TUNNEL_APP_NAME"],
+                            "image": os.environ["TUNNEL_IMAGE"],
+                            "command": [],
+                            "args": ["tunnel", "--no-autoupdate", "run"],
+                            "env": [
+                                {
+                                    "name": "TUNNEL_TOKEN",
+                                    "secretRef": os.environ["TUNNEL_SECRET_REF_NAME"],
+                                }
+                            ],
+                            "resources": {
+                                "cpu": float(os.environ["TUNNEL_CPU"]),
+                                "memory": os.environ["TUNNEL_MEMORY"],
+                            },
+                        }
+                    ],
+                    "scale": {
+                        "minReplicas": int(os.environ["TUNNEL_MIN_REPLICAS"]),
+                        "maxReplicas": int(os.environ["TUNNEL_MAX_REPLICAS"]),
+                    },
+                }
+            }
+        },
+        handle,
+    )
+PY
+
+  local tunnel_patch_body
+  tunnel_patch_body="$(<"$tunnel_patch_file")"
+
+  az rest \
+    --method patch \
+    --uri "https://management.azure.com/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/containerApps/${TUNNEL_APP_NAME}?api-version=2025-07-01" \
+    --body "$tunnel_patch_body" \
+    --headers "Content-Type=application/json" \
     --output none
+  rm -f "$tunnel_patch_file"
+  wait_for_container_app_provisioning "$TUNNEL_APP_NAME"
 
   az containerapp ingress disable \
     --resource-group "$RESOURCE_GROUP" \
@@ -544,6 +653,7 @@ ensure_entra_app_contract() {
   EXPECTED_SCOPE_VALUE="${API_APP_ID_URI}/${ENTRA_SCOPE_NAME}"
   EXPECTED_CALLBACK_URL="https://${API_PUBLIC_HOSTNAME}/.auth/login/aad/callback"
   EXPECTED_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$ALLOWED_AUDIENCES")"
+  EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$(csv_to_json_array "https://${APP_PUBLIC_HOSTNAME}")"
 
   if [[ -n "$AAD_LOGIN_PARAMETERS_JSON" ]]; then
     EXPECTED_LOGIN_PARAMETERS_JSON="$AAD_LOGIN_PARAMETERS_JSON"
@@ -634,10 +744,13 @@ with open(os.environ["PATCH_FILE"], "w", encoding="utf-8") as handle:
     json.dump({"api": api}, handle)
 PY
 
+  local graph_patch_body
+  graph_patch_body="$(<"$patch_file")"
+
   az rest \
     --method patch \
     --url "https://graph.microsoft.com/v1.0/applications/${entra_object_id}" \
-    --body @"$patch_file" \
+    --body "$graph_patch_body" \
     --headers "Content-Type=application/json" \
     --output none
 
@@ -698,28 +811,72 @@ configure_easy_auth() {
     --unauthenticated-client-action AllowAnonymous \
     --require-https true \
     --proxy-convention Standard \
-    --token-store true \
-    --excluded-paths /health /health/readiness \
+    --excluded-paths "/health,/health/readiness" \
     --set "identityProviders.azureActiveDirectory.login.loginParameters=${EXPECTED_LOGIN_PARAMETERS_JSON}" \
     --yes \
     --output none
 
-  mapfile -t allowed_audiences < <(json_array_to_lines "$EXPECTED_ALLOWED_AUDIENCES_JSON")
-  if [[ ${#allowed_audiences[@]} -eq 0 ]]; then
-    echo "At least one allowed audience is required" >&2
-    exit 1
-  fi
+  local auth_config_id="/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/containerApps/${API_APP_NAME}/authConfigs/current"
+  local auth_config_file
+  local auth_config_patch_file
+  auth_config_file="$(mktemp)"
+  auth_config_patch_file="$(mktemp)"
 
-  az containerapp auth microsoft update \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$API_APP_NAME" \
-    --client-id "$ENTRA_APP_ID" \
-    --client-secret-name "$ENTRA_CLIENT_SECRET_NAME" \
-    --tenant-id "$ENTRA_TENANT_ID" \
-    --issuer "$ENTRA_ISSUER_URL" \
-    --allowed-audiences "${allowed_audiences[@]}" \
-    --yes \
+  az rest \
+    --method get \
+    --uri "https://management.azure.com${auth_config_id}?api-version=2025-07-01" \
+    --output json > "$auth_config_file"
+
+  AUTH_CONFIG_FILE="$auth_config_file" \
+  AUTH_CONFIG_PATCH_FILE="$auth_config_patch_file" \
+  EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" \
+  EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
+  EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
+  ENTRA_APP_ID="$ENTRA_APP_ID" \
+  ENTRA_CLIENT_SECRET_NAME="$ENTRA_CLIENT_SECRET_NAME" \
+  ENTRA_ISSUER_URL="$ENTRA_ISSUER_URL" \
+  python - <<'PY'
+import json
+import os
+
+with open(os.environ["AUTH_CONFIG_FILE"], "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+properties = payload.get("properties", payload)
+properties["login"] = dict(properties.get("login") or {})
+properties["login"]["allowedExternalRedirectUrls"] = json.loads(
+    os.environ["EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON"]
+)
+identity_providers = dict(properties.get("identityProviders") or {})
+aad = dict(identity_providers.get("azureActiveDirectory") or {})
+aad["enabled"] = True
+aad["login"] = dict(aad.get("login") or {})
+aad["login"]["loginParameters"] = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])
+aad["registration"] = dict(aad.get("registration") or {})
+aad["registration"]["clientId"] = os.environ["ENTRA_APP_ID"]
+aad["registration"]["clientSecretSettingName"] = os.environ["ENTRA_CLIENT_SECRET_NAME"]
+aad["registration"]["openIdIssuer"] = os.environ["ENTRA_ISSUER_URL"]
+aad["validation"] = dict(aad.get("validation") or {})
+aad["validation"]["allowedAudiences"] = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
+identity_providers["azureActiveDirectory"] = aad
+properties["identityProviders"] = identity_providers
+
+with open(os.environ["AUTH_CONFIG_PATCH_FILE"], "w", encoding="utf-8") as handle:
+    json.dump({"properties": properties}, handle)
+PY
+
+  local auth_config_patch_body
+  auth_config_patch_body="$(<"$auth_config_patch_file")"
+
+  az rest \
+    --method put \
+    --uri "https://management.azure.com${auth_config_id}?api-version=2025-07-01" \
+    --body "$auth_config_patch_body" \
+    --headers "Content-Type=application/json" \
     --output none
+
+  rm -f "$auth_config_file" "$auth_config_patch_file"
+
 }
 
 verify_phase3_contract() {
@@ -733,6 +890,7 @@ verify_phase3_contract() {
   local auth_json
   local microsoft_auth_json
   local app_registration_json
+  local auth_config_id
 
   api_app_json="$(
     az containerapp show \
@@ -746,10 +904,11 @@ verify_phase3_contract() {
       --name "$WORKER_APP_NAME" \
       --output json
   )"
+  auth_config_id="/subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/containerApps/${API_APP_NAME}/authConfigs/current"
   auth_json="$(
-    az containerapp auth show \
-      --resource-group "$RESOURCE_GROUP" \
-      --name "$API_APP_NAME" \
+    az rest \
+      --method get \
+      --uri "https://management.azure.com${auth_config_id}?api-version=2025-07-01" \
       --output json
   )"
   microsoft_auth_json="$(
@@ -770,8 +929,10 @@ verify_phase3_contract() {
   MICROSOFT_AUTH_JSON="$microsoft_auth_json" \
   APP_REGISTRATION_JSON="$app_registration_json" \
   EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
+  EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" \
   EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
   EXPECTED_CALLBACK_URL="$EXPECTED_CALLBACK_URL" \
+  APP_PUBLIC_HOSTNAME="$APP_PUBLIC_HOSTNAME" \
   ENTRA_APP_ID="$ENTRA_APP_ID" \
   ENTRA_CLIENT_SECRET_NAME="$ENTRA_CLIENT_SECRET_NAME" \
   ENTRA_ISSUER_URL="$ENTRA_ISSUER_URL" \
@@ -786,8 +947,13 @@ auth = json.loads(os.environ["AUTH_JSON"])
 microsoft_auth = json.loads(os.environ["MICROSOFT_AUTH_JSON"])
 app_registration = json.loads(os.environ["APP_REGISTRATION_JSON"])
 expected_allowed = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
+auth = auth.get("properties", auth)
+expected_allowed_external_redirect_urls = json.loads(
+    os.environ["EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON"]
+)
 expected_login_parameters = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])
 expected_callback_url = os.environ["EXPECTED_CALLBACK_URL"]
+expected_app_origin = f"https://{os.environ['APP_PUBLIC_HOSTNAME']}"
 expected_client_id = os.environ["ENTRA_APP_ID"]
 expected_secret_name = os.environ["ENTRA_CLIENT_SECRET_NAME"]
 expected_issuer = os.environ["ENTRA_ISSUER_URL"]
@@ -844,6 +1010,13 @@ ensure(
     errors,
 )
 
+allowed_external_redirect_urls = get(auth, "login", "allowedExternalRedirectUrls") or []
+ensure(
+    sorted(allowed_external_redirect_urls) == sorted(expected_allowed_external_redirect_urls),
+    f"Unexpected allowed external redirect URLs: {allowed_external_redirect_urls!r}",
+    errors,
+)
+
 client_id = get(microsoft_auth, "registration", "clientId")
 ensure(client_id == expected_client_id, f"Unexpected Entra client ID: {client_id!r}", errors)
 
@@ -874,6 +1047,25 @@ ensure(
 api_ingress = get(api_app, "properties", "configuration", "ingress") or {}
 ensure(api_ingress.get("external") is False, "API app ingress is not internal-only", errors)
 ensure(api_ingress.get("targetPort") == 8000, f"Unexpected API target port: {api_ingress.get('targetPort')!r}", errors)
+
+cors_policy = api_ingress.get("corsPolicy") or {}
+ensure(
+    sorted(cors_policy.get("allowedOrigins") or []) == [expected_app_origin],
+    f"Unexpected ingress CORS allowed origins: {cors_policy.get('allowedOrigins')!r}",
+    errors,
+)
+ensure(cors_policy.get("allowCredentials") is True, "Ingress CORS allowCredentials is not enabled", errors)
+ensure(
+    sorted(cors_policy.get("allowedMethods") or []) == ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+    f"Unexpected ingress CORS allowed methods: {cors_policy.get('allowedMethods')!r}",
+    errors,
+)
+ensure(
+    sorted(cors_policy.get("allowedHeaders") or []) == ["*"],
+    f"Unexpected ingress CORS allowed headers: {cors_policy.get('allowedHeaders')!r}",
+    errors,
+)
+ensure(cors_policy.get("maxAge") == 600, f"Unexpected ingress CORS maxAge: {cors_policy.get('maxAge')!r}", errors)
 
 worker_ingress = get(worker_app, "properties", "configuration", "ingress")
 ensure(worker_ingress in (None, {}), f"Worker app should not expose ingress: {worker_ingress!r}", errors)
@@ -1019,12 +1211,13 @@ else
   )"
 
   echo ">>> Disabling ACA public network access"
-  az rest \
-    --method patch \
-    --uri "https://management.azure.com${ENVIRONMENT_ID}?api-version=2024-03-01" \
-    --body '{"properties":{"publicNetworkAccess":"Disabled"}}' \
-    --headers "Content-Type=application/json" \
-    --output none
+  if ! az containerapp env update \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$CONTAINER_APP_ENVIRONMENT" \
+    --public-network-access Disabled \
+    --output none; then
+    echo "WARNING: Failed to disable ACA public network access via az containerapp env update; continuing with existing environment settings" >&2
+  fi
 
   echo ">>> Ensuring private endpoint: ${PRIVATE_ENDPOINT_NAME}"
   if ! az network private-endpoint show \
@@ -1153,6 +1346,17 @@ else
 
     echo ">>> Ensuring API app: ${API_APP_NAME}"
     if ! container_app_exists "$API_APP_NAME"; then
+      API_ENV_VARS=(
+        "APP_ROLE=api"
+        "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
+        "REQUIRE_PLATFORM_AUTH=true"
+      )
+      api_secret_args=()
+      if [[ -n "$EDGE_ORIGIN_SECRET" ]]; then
+        API_ENV_VARS+=("EDGE_ORIGIN_SECRET=secretref:${EDGE_ORIGIN_SECRET_NAME}")
+        api_secret_args=(--secrets "${EDGE_ORIGIN_SECRET_NAME}=${EDGE_ORIGIN_SECRET}")
+      fi
+
       API_ARGS=(
         containerapp create
         --resource-group "$RESOURCE_GROUP"
@@ -1166,9 +1370,10 @@ else
         --memory "$API_MEMORY"
         --min-replicas "$API_MIN_REPLICAS"
         --max-replicas "$API_MAX_REPLICAS"
-        --env-vars "APP_ROLE=api" "CORS_ORIGINS=https://${APP_PUBLIC_HOSTNAME}"
+        --env-vars "${API_ENV_VARS[@]}"
         --output none
       )
+      API_ARGS+=("${api_secret_args[@]}")
       if [[ -n "$IDENTITY_RESOURCE_ID" ]]; then
         API_ARGS+=(--user-assigned "$IDENTITY_RESOURCE_ID")
       fi
@@ -1209,7 +1414,6 @@ else
         --max-replicas "$TUNNEL_MAX_REPLICAS" \
         --secrets "${TUNNEL_SECRET_REF_NAME}=${TUNNEL_TOKEN}" \
         --env-vars "TUNNEL_TOKEN=secretref:${TUNNEL_SECRET_REF_NAME}" \
-        --args tunnel --no-autoupdate run \
         --output none
     fi
   fi

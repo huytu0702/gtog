@@ -13,6 +13,7 @@ AUTH_ME_URL="${AUTH_ME_URL:-}"
 EXPECTED_CLIENT_ID="${EXPECTED_CLIENT_ID:-}"
 EXPECTED_ISSUER_URL="${EXPECTED_ISSUER_URL:-}"
 EXPECTED_ALLOWED_AUDIENCES="${EXPECTED_ALLOWED_AUDIENCES:-}"
+EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS="${EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS:-https://${APP_PUBLIC_HOSTNAME:-}}"
 EXPECTED_LOGIN_PARAMETERS_JSON="${EXPECTED_LOGIN_PARAMETERS_JSON:-}"
 PROBE_ORIGIN_URLS="${PROBE_ORIGIN_URLS:-}"
 ORIGIN_BYPASS_WORKSPACE="${ORIGIN_BYPASS_WORKSPACE:-}"
@@ -80,6 +81,7 @@ require_var API_PUBLIC_HOSTNAME
 require_var EXPECTED_CLIENT_ID
 require_var EXPECTED_ISSUER_URL
 require_var EXPECTED_ALLOWED_AUDIENCES
+require_var EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS
 
 if [[ -z "$API_HEALTH_URL" ]]; then
   API_HEALTH_URL="https://${API_PUBLIC_HOSTNAME}/health"
@@ -88,8 +90,13 @@ if [[ -z "$AUTH_ME_URL" ]]; then
   AUTH_ME_URL="https://${API_PUBLIC_HOSTNAME}/.auth/me"
 fi
 EXPECTED_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$EXPECTED_ALLOWED_AUDIENCES")"
+EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$(csv_to_json_array "$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS")"
 if [[ "$EXPECTED_ALLOWED_AUDIENCES_JSON" == "[]" ]]; then
   echo "EXPECTED_ALLOWED_AUDIENCES must contain at least one non-empty audience" >&2
+  exit 1
+fi
+if [[ "$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" == "[]" ]]; then
+  echo "EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS must contain at least one non-empty URL" >&2
   exit 1
 fi
 if [[ -z "$EXPECTED_LOGIN_PARAMETERS_JSON" ]]; then
@@ -103,7 +110,14 @@ print_check "Reading current API app, worker app, tunnel app, and auth settings"
 API_APP_JSON="$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$API_APP_NAME" --output json)"
 WORKER_APP_JSON="$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$WORKER_APP_NAME" --output json)"
 TUNNEL_APP_JSON="$(az containerapp show --resource-group "$RESOURCE_GROUP" --name "$TUNNEL_APP_NAME" --output json)"
-AUTH_JSON="$(az containerapp auth show --resource-group "$RESOURCE_GROUP" --name "$API_APP_NAME" --output json)"
+AUTH_CONFIG_ID="$(API_APP_JSON="$API_APP_JSON" python - <<'PY'
+import json
+import os
+api_app = json.loads(os.environ["API_APP_JSON"])
+print(f"{api_app['id']}/authConfigs/current")
+PY
+)"
+AUTH_JSON="$(az rest --method get --uri "https://management.azure.com${AUTH_CONFIG_ID}?api-version=2025-07-01" --output json)"
 MICROSOFT_AUTH_JSON="$(az containerapp auth microsoft show --resource-group "$RESOURCE_GROUP" --name "$API_APP_NAME" --output json)"
 
 API_APP_JSON="$API_APP_JSON" \
@@ -112,6 +126,7 @@ TUNNEL_APP_JSON="$TUNNEL_APP_JSON" \
 AUTH_JSON="$AUTH_JSON" \
 MICROSOFT_AUTH_JSON="$MICROSOFT_AUTH_JSON" \
 EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
+EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" \
 EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
 EXPECTED_CLIENT_ID="$EXPECTED_CLIENT_ID" \
 EXPECTED_ISSUER_URL="$EXPECTED_ISSUER_URL" \
@@ -127,10 +142,15 @@ tunnel_app = json.loads(os.environ["TUNNEL_APP_JSON"])
 auth = json.loads(os.environ["AUTH_JSON"])
 microsoft_auth = json.loads(os.environ["MICROSOFT_AUTH_JSON"])
 expected_allowed = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
+expected_allowed_external_redirect_urls = json.loads(
+    os.environ["EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON"]
+)
 expected_login_parameters = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])
 expected_client_id = os.environ["EXPECTED_CLIENT_ID"]
 expected_issuer_url = os.environ["EXPECTED_ISSUER_URL"]
+expected_app_origin = expected_allowed_external_redirect_urls[0]
 expected_tunnel_secret_ref_name = os.environ["TUNNEL_SECRET_REF_NAME"]
+auth = auth.get("properties", auth)
 
 errors = []
 
@@ -149,16 +169,31 @@ if (auth.get("identityProviders", {})
        .get("login", {})
        .get("loginParameters") or []) != expected_login_parameters:
     errors.append("Login parameters do not match the expected environment contract")
+login = auth.get("login") or {}
+if sorted(login.get("allowedExternalRedirectUrls") or []) != sorted(expected_allowed_external_redirect_urls):
+    errors.append("Easy Auth allowed external redirect URLs do not match the expected app origin")
 if microsoft_auth.get("registration", {}).get("clientId") != expected_client_id:
     errors.append("Configured Entra clientId does not match the expected app registration")
 if microsoft_auth.get("registration", {}).get("openIdIssuer") != expected_issuer_url:
     errors.append("Configured issuer URI does not match the expected tenant issuer")
 if sorted(microsoft_auth.get("validation", {}).get("allowedAudiences") or []) != sorted(expected_allowed):
     errors.append("Allowed audiences do not match the expected environment-specific values")
-if api_app.get("properties", {}).get("configuration", {}).get("ingress", {}).get("external") is not False:
+ingress = api_app.get("properties", {}).get("configuration", {}).get("ingress", {})
+if ingress.get("external") is not False:
     errors.append("API app ingress is not internal-only")
-if api_app.get("properties", {}).get("configuration", {}).get("ingress", {}).get("targetPort") != 8000:
+if ingress.get("targetPort") != 8000:
     errors.append("API app target port is not 8000")
+cors_policy = ingress.get("corsPolicy") or {}
+if sorted(cors_policy.get("allowedOrigins") or []) != [expected_app_origin]:
+    errors.append("Ingress CORS allowed origins do not match the expected app origin")
+if cors_policy.get("allowCredentials") is not True:
+    errors.append("Ingress CORS allowCredentials is not enabled")
+if sorted(cors_policy.get("allowedMethods") or []) != ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]:
+    errors.append("Ingress CORS allowed methods do not match the expected browser contract")
+if sorted(cors_policy.get("allowedHeaders") or []) != ["*"]:
+    errors.append("Ingress CORS allowed headers do not match the expected browser contract")
+if cors_policy.get("maxAge") != 600:
+    errors.append("Ingress CORS maxAge is not 600")
 if worker_app.get("properties", {}).get("configuration", {}).get("ingress") not in (None, {}):
     errors.append("Worker app still exposes ingress")
 
