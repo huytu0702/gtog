@@ -246,7 +246,7 @@ class QueryService:
             SearchResponse with results
         """
         active_version, frames = await self._load_context_from_serving(collection_id, "global")
-        config = load_graphrag_config(collection_id, version=active_version)
+        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
         entities = frames["entities"]
         communities = frames["communities"]
         community_reports = frames["community_reports"]
@@ -298,7 +298,7 @@ class QueryService:
             SearchResponse with results
         """
         active_version, frames = await self._load_context_from_serving(collection_id, "local")
-        config = load_graphrag_config(collection_id, version=active_version)
+        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
         entities = frames["entities"]
         communities = frames["communities"]
         community_reports = frames["community_reports"]
@@ -351,7 +351,7 @@ class QueryService:
             SearchResponse with results
         """
         active_version, frames = await self._load_context_from_serving(collection_id, "tog")
-        config = load_graphrag_config(collection_id, version=active_version)
+        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
         entities = frames["entities"]
         relationships = frames["relationships"]
 
@@ -442,7 +442,7 @@ class QueryService:
             SearchResponse with results
         """
         active_version, frames = await self._load_context_from_serving(collection_id, "drift")
-        config = load_graphrag_config(collection_id, version=active_version)
+        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
         entities = frames["entities"]
         communities = frames["communities"]
         community_reports = frames["community_reports"]

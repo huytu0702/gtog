@@ -10,12 +10,19 @@ from typing import Dict, Optional, Tuple
 import pandas as pd
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.indexes import SearchIndexClient
+from graphrag.config.enums import VectorStoreType
 from graphrag.config.load_config import load_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
 from ..config import settings
 from ..repositories import get_control_plane_repository, get_serving_repository
-from ..azure_runtime import create_blob_service_client, resolve_storage_connection_string
+from ..azure_runtime import (
+    blob_account_url,
+    create_blob_service_client,
+    get_default_credential,
+    is_managed_identity_enabled,
+    resolve_storage_connection_string,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +35,49 @@ def _storage_connection_string() -> str:
 def _blob_client():
     """Return an Azure BlobServiceClient if storage auth is configured."""
     return create_blob_service_client()
+
+
+def _blob_storage_cli_overrides(conn_str: str, container_name: str) -> dict[str, str]:
+    """Build GraphRAG blob storage overrides for connection-string or MI auth."""
+    overrides = {
+        "input.storage.type": "blob",
+        "input.storage.container_name": container_name,
+        "input.storage.base_dir": "input",
+        "input.file_pattern": ".*\\.(txt|md)$",
+        "output.type": "blob",
+        "output.container_name": container_name,
+        "output.base_dir": "output",
+        "cache.type": "blob",
+        "cache.container_name": container_name,
+        "cache.base_dir": "cache",
+        "reporting.type": "blob",
+        "reporting.container_name": container_name,
+        "reporting.base_dir": "logs",
+    }
+    if conn_str:
+        overrides.update(
+            {
+                "input.storage.connection_string": conn_str,
+                "output.connection_string": conn_str,
+                "cache.connection_string": conn_str,
+                "reporting.connection_string": conn_str,
+            }
+        )
+        return overrides
+
+    account_url = blob_account_url()
+    if not account_url:
+        raise ValueError("Blob storage runtime requires Azure storage account URL for managed identity.")
+
+    overrides.update(
+        {
+            "input.storage.storage_account_blob_url": account_url,
+            "output.storage_account_blob_url": account_url,
+            "cache.storage_account_blob_url": account_url,
+            "reporting.storage_account_blob_url": account_url,
+        }
+    )
+    return overrides
 
 
 def _collection_container(collection_id: str) -> str:
@@ -155,11 +205,20 @@ def _build_vector_index_name(collection_id: str, version: str | None = None) -> 
 
 
 def _search_index_client() -> SearchIndexClient | None:
-    if not settings.azure_search_endpoint or not settings.azure_search_api_key:
+    endpoint = settings.azure_search_endpoint.strip()
+    if not endpoint:
         return None
+
+    if settings.azure_search_api_key:
+        credential = AzureKeyCredential(settings.azure_search_api_key)
+    elif is_managed_identity_enabled():
+        credential = get_default_credential()
+    else:
+        return None
+
     return SearchIndexClient(
-        endpoint=settings.azure_search_endpoint,
-        credential=AzureKeyCredential(settings.azure_search_api_key),
+        endpoint=endpoint,
+        credential=credential,
     )
 
 
@@ -179,13 +238,58 @@ def delete_search_indexes_for_collection(collection_id: str) -> int:
     return deleted
 
 
-def load_graphrag_config(collection_id: str, version: str | None = None) -> GraphRagConfig:
+def _vector_store_cli_overrides(
+    vector_index_name: str,
+    *,
+    use_blob: bool,
+    query_runtime: bool,
+) -> dict[str, object]:
+    """Build runtime vector-store overrides for local vs cloud serving/indexing."""
+    overrides: dict[str, object] = {
+        "vector_store.default_vector_store.container_name": vector_index_name,
+    }
+    cloud_query_runtime = (
+        query_runtime
+        and use_blob
+        and settings.query_context_mode.lower() == "cosmos_only"
+    )
+    if not cloud_query_runtime:
+        return overrides
+
+    endpoint = settings.azure_search_endpoint.strip()
+    if not endpoint:
+        raise ValueError(
+            "Cloud/runtime query embeddings require AZURE_SEARCH_ENDPOINT for Azure AI Search."
+        )
+    if not settings.azure_search_api_key and not is_managed_identity_enabled():
+        raise ValueError(
+            "Cloud/runtime query embeddings require AZURE_SEARCH_API_KEY or Azure managed identity for Azure AI Search."
+        )
+
+    overrides.update(
+        {
+            "vector_store.default_vector_store.type": VectorStoreType.AzureAISearch.value,
+            "vector_store.default_vector_store.db_uri": None,
+            "vector_store.default_vector_store.url": endpoint,
+        }
+    )
+    if settings.azure_search_api_key:
+        overrides["vector_store.default_vector_store.api_key"] = settings.azure_search_api_key
+    return overrides
+
+
+def load_graphrag_config(
+    collection_id: str,
+    version: str | None = None,
+    *,
+    query_runtime: bool = False,
+) -> GraphRagConfig:
     """
     Load shared GraphRAG configuration with collection-specific storage overrides.
     All collections use one shared prompt folder at backend/prompts.
     """
     conn_str = _storage_connection_string()
-    use_blob = bool(conn_str)
+    use_blob = _blob_client() is not None
     shared_root = settings.settings_yaml_path.parent.resolve()
     _validate_shared_prompt_files(shared_root / "prompts")
     # Keep one stable index prefix per collection to avoid index explosion
@@ -195,26 +299,7 @@ def load_graphrag_config(collection_id: str, version: str | None = None) -> Grap
     if use_blob:
         _ensure_blob_container(collection_id)
         container_name = _collection_container(collection_id)
-        cli_overrides = {
-            "input.storage.type": "blob",
-            "input.storage.connection_string": conn_str,
-            "input.storage.container_name": container_name,
-            "input.storage.base_dir": "input",
-            "input.file_pattern": ".*\\.(txt|md)$",
-            "output.type": "blob",
-            "output.connection_string": conn_str,
-            "output.container_name": container_name,
-            "output.base_dir": "output",
-            "cache.type": "blob",
-            "cache.connection_string": conn_str,
-            "cache.container_name": container_name,
-            "cache.base_dir": "cache",
-            "reporting.type": "blob",
-            "reporting.connection_string": conn_str,
-            "reporting.container_name": container_name,
-            "reporting.base_dir": "logs",
-            "vector_store.default_vector_store.container_name": vector_index_name,
-        }
+        cli_overrides = _blob_storage_cli_overrides(conn_str, container_name)
     else:
         storage_root = settings.collections_dir.resolve()
         collection_dir = storage_root / collection_id
@@ -230,8 +315,15 @@ def load_graphrag_config(collection_id: str, version: str | None = None) -> Grap
             "output.base_dir": str(collection_dir / "output"),
             "cache.type": "file",
             "cache.base_dir": str(collection_dir / "cache"),
-            "vector_store.default_vector_store.container_name": vector_index_name,
         }
+
+    cli_overrides.update(
+        _vector_store_cli_overrides(
+            vector_index_name,
+            use_blob=use_blob,
+            query_runtime=query_runtime,
+        )
+    )
 
     config = load_config(
         root_dir=str(shared_root),
@@ -278,7 +370,7 @@ def validate_collection_indexed(
             )
         return True, None
 
-    use_blob = bool(_storage_connection_string())
+    use_blob = _blob_client() is not None
 
     required_files = [
         "entities.parquet",
@@ -306,7 +398,7 @@ def validate_collection_indexed(
 
 def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
     """Get logical parquet paths for a search method."""
-    use_blob = bool(_storage_connection_string())
+    use_blob = _blob_client() is not None
 
     file_names = {
         "entities": "entities.parquet",

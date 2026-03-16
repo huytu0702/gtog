@@ -153,6 +153,25 @@ class TestSearchErrorMapping:
 
         assert response.status_code == 503
 
+    @pytest.mark.asyncio
+    async def test_local_returns_400_when_vector_store_runtime_config_invalid(self):
+        with patch(
+            "backend.app.routers.search.query_service.local_search",
+            new=AsyncMock(side_effect=ValueError("Cloud/runtime query embeddings must use azure_ai_search")),
+        ):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/local",
+                    json={"query": "hello"},
+                )
+
+        assert response.status_code == 400
+        assert "azure_ai_search" in response.json()["detail"]
+
 
 class TestAgentStreamEndpoint:
     """Test GET /agent/stream EventSource contract."""

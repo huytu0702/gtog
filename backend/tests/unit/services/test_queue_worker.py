@@ -36,6 +36,23 @@ async def test_worker_deletes_terminal_job_dispatch_message():
 
 
 @pytest.mark.asyncio
+async def test_worker_polls_after_successful_queue_initialization():
+    with patch("backend.app.worker.indexing_service") as mock_indexing:
+        with patch("backend.app.worker.queue_service") as mock_queue:
+            mock_indexing._ensure_dispatch_enabled.return_value = None
+            mock_indexing._require_control_plane.return_value = mock_indexing.control_plane
+            mock_indexing.requeue_recoverable_jobs.return_value = 0
+            mock_queue.ensure_queue.return_value = None
+            mock_queue.receive_messages.side_effect = [[], asyncio.CancelledError()]
+
+            with pytest.raises(asyncio.CancelledError):
+                await _run_worker_loop()
+
+    mock_queue.ensure_queue.assert_called_once_with()
+    assert mock_queue.receive_messages.call_count >= 1
+
+
+@pytest.mark.asyncio
 async def test_worker_executes_job_after_acquiring_lease():
     message = SimpleNamespace(content='{"job_id": "job-1", "job_type": "indexing", "attempt": 0}')
 

@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
+
+from azure.core.exceptions import ResourceExistsError
 
 from ..azure_runtime import create_queue_service_client
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class QueueService:
@@ -34,7 +39,10 @@ class QueueService:
 
     def ensure_queue(self) -> None:
         """Create the dispatch queue if it does not exist."""
-        self._ensure_client().create_queue()
+        try:
+            self._ensure_client().create_queue()
+        except ResourceExistsError:
+            logger.info("Queue %s already exists", settings.azure_storage_queue_name)
 
     def is_configured(self) -> bool:
         """Return True when queue auth configuration is available."""
