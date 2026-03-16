@@ -15,6 +15,7 @@ Do not expose ACA custom domains directly to the public Internet.
 - worker has no ingress
 - queue and Cosmos provide the durable execution boundary
 - `EDGE_ORIGIN_SECRET` remains optional secondary defense in depth
+- the Azure origin stays private, but `app.<domain>` and `api.<domain>` remain publicly reachable through Cloudflare
 
 ## System Contracts
 
@@ -31,7 +32,7 @@ Do not expose ACA custom domains directly to the public Internet.
 - Cloudflare is the only public ingress for frontend and API
 - frontend and API ACA origins are internal-only
 - direct-origin probes must fail before app handling
-- `REQUIRE_EDGE_AUTH=true` is the deployed API runtime contract
+- platform-level authentication is not part of the deployed topology contract
 - staging and production use separate tunnel tokens and secrets
 
 ### Logging and observability
@@ -40,6 +41,7 @@ Required fields where available:
 
 - request ID
 - `Cf-Ray`
+- `CF-Connecting-IP`
 - `job_id`
 - service role
 
@@ -86,6 +88,7 @@ Required smoke checks:
 | --- | --- | --- |
 | Cloudflare-only ingress | Access `app.<domain>` and `api.<domain>` | Both hosts work only through Cloudflare |
 | No public ACA origin | Probe ACA origin directly | Probe fails before app handling |
+| Public app, private origin | Access `app.<domain>` and `api.<domain>` from the Internet | Cloudflare serves the public hosts while ACA origin remains private |
 | Frontend/API split | Inspect frontend runtime config | `NEXT_PUBLIC_API_BASE_URL` points to `https://api.<domain>` |
 | CORS restriction | Test allowed and disallowed origins | Only `https://app.<domain>` is allowed |
 | Health/readiness | Call `/health` and `/health/readiness` | Both behave as documented |
