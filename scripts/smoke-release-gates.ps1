@@ -13,9 +13,6 @@ param(
     [string]$ExpectedIssuerUrl = "",
     [string]$ExpectedAllowedAudiences = "",
     [string]$ExpectedAllowedExternalRedirectUrls = "",
-    [string]$ExpectedGoogleClientId = "",
-    [string]$ExpectedGoogleAllowedAudiences = "",
-    [string]$ExpectedGoogleLoginScopesJson = "",
     [string]$WrongAudienceToken = "",
     [string]$ProductionRejectionToken = "",
     [string]$ProbeOriginUrls = "",
@@ -120,8 +117,6 @@ Require-Value -Name "TunnelAppName" -Value $TunnelAppName
 Require-Value -Name "ExpectedClientId" -Value $ExpectedClientId
 Require-Value -Name "ExpectedIssuerUrl" -Value $ExpectedIssuerUrl
 Require-Value -Name "ExpectedAllowedAudiences" -Value $ExpectedAllowedAudiences
-Require-Value -Name "ExpectedGoogleClientId" -Value $ExpectedGoogleClientId
-Require-Value -Name "ExpectedGoogleAllowedAudiences" -Value $ExpectedGoogleAllowedAudiences
 Require-Value -Name "WrongAudienceToken" -Value $WrongAudienceToken
 Require-Value -Name "ProductionRejectionToken" -Value $ProductionRejectionToken
 Require-Value -Name "ProbeOriginUrls" -Value $ProbeOriginUrls
@@ -215,9 +210,6 @@ Add-Result -Name "sse" -Status "$([int]$sseResponse.StatusCode)"
     -ExpectedIssuerUrl $ExpectedIssuerUrl `
     -ExpectedAllowedAudiences $ExpectedAllowedAudiences `
     -ExpectedAllowedExternalRedirectUrls $ExpectedAllowedExternalRedirectUrls `
-    -ExpectedGoogleClientId $ExpectedGoogleClientId `
-    -ExpectedGoogleAllowedAudiences $ExpectedGoogleAllowedAudiences `
-    -ExpectedGoogleLoginScopesJson $ExpectedGoogleLoginScopesJson `
     -TestAccessToken $AuthBearerToken `
     -WrongAudienceToken $WrongAudienceToken `
     -ProductionRejectionToken $ProductionRejectionToken `

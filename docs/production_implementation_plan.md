@@ -62,8 +62,7 @@ Use **backend-only Easy Auth** on `api.<domain>`.
 
 - Canonical callbacks:
   - `https://api.<domain>/.auth/login/aad/callback`
-  - `https://api.<domain>/.auth/login/google/callback`
-- Frontend initiates Microsoft or Google login and logout through the backend host.
+- Frontend initiates Microsoft login and logout through the backend host.
 - Frontend reads session state from `https://api.<domain>/.auth/me`.
 
 ### AI Search private-network stance
@@ -105,7 +104,6 @@ Use **Cloudflare Free** for the initial rollout.
 - API and auth endpoints are served from `https://api.<domain>`.
 - Frontend login redirects:
   - `https://api.<domain>/.auth/login/aad?post_login_redirect_uri=https://app.<domain>/`
-  - `https://api.<domain>/.auth/login/google?post_login_redirect_uri=https://app.<domain>/`
 - Frontend logout redirect:
   - `https://api.<domain>/.auth/logout?post_logout_redirect_uri=https://app.<domain>/`
 - Session inspection:
@@ -691,8 +689,7 @@ Each critical requirement must define:
 
 - Backend Easy Auth is enabled
 - Microsoft callback works at `https://api.<domain>/.auth/login/aad/callback`
-- Google callback works at `https://api.<domain>/.auth/login/google/callback`
-- `/.auth/me` works after Microsoft or Google login
+- `/.auth/me` works after Microsoft login
 - Unauthenticated `/api/*` requests return `401`
 - Wrong-audience tokens are rejected
 - Staging tokens are rejected by production

@@ -74,15 +74,12 @@ Keep backend-only Easy Auth on `api.<domain>`.
 
 - frontend login redirects:
   - `https://api.<domain>/.auth/login/aad?post_login_redirect_uri=https://app.<domain>/`
-  - `https://api.<domain>/.auth/login/google?post_login_redirect_uri=https://app.<domain>/`
 - frontend logout redirect:
   - `https://api.<domain>/.auth/logout?post_logout_redirect_uri=https://app.<domain>/`
 - session inspection:
   - `GET https://api.<domain>/.auth/me`
 - Microsoft callback:
   - `https://api.<domain>/.auth/login/aad/callback`
-- Google callback:
-  - `https://api.<domain>/.auth/login/google/callback`
 
 Optional:
 

@@ -15,9 +15,6 @@ EXPECTED_ISSUER_URL="${EXPECTED_ISSUER_URL:-}"
 EXPECTED_ALLOWED_AUDIENCES="${EXPECTED_ALLOWED_AUDIENCES:-}"
 EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS="${EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS:-https://${APP_PUBLIC_HOSTNAME:-}}"
 EXPECTED_LOGIN_PARAMETERS_JSON="${EXPECTED_LOGIN_PARAMETERS_JSON:-}"
-EXPECTED_GOOGLE_CLIENT_ID="${EXPECTED_GOOGLE_CLIENT_ID:-}"
-EXPECTED_GOOGLE_ALLOWED_AUDIENCES="${EXPECTED_GOOGLE_ALLOWED_AUDIENCES:-}"
-EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="${EXPECTED_GOOGLE_LOGIN_SCOPES_JSON:-}"
 PROBE_ORIGIN_URLS="${PROBE_ORIGIN_URLS:-}"
 ORIGIN_BYPASS_WORKSPACE="${ORIGIN_BYPASS_WORKSPACE:-}"
 ORIGIN_BYPASS_LOG_QUERY="${ORIGIN_BYPASS_LOG_QUERY:-}"
@@ -85,8 +82,6 @@ require_var EXPECTED_CLIENT_ID
 require_var EXPECTED_ISSUER_URL
 require_var EXPECTED_ALLOWED_AUDIENCES
 require_var EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS
-require_var EXPECTED_GOOGLE_CLIENT_ID
-require_var EXPECTED_GOOGLE_ALLOWED_AUDIENCES
 
 if [[ -z "$API_HEALTH_URL" ]]; then
   API_HEALTH_URL="https://${API_PUBLIC_HOSTNAME}/health"
@@ -96,7 +91,6 @@ if [[ -z "$AUTH_ME_URL" ]]; then
 fi
 EXPECTED_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$EXPECTED_ALLOWED_AUDIENCES")"
 EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$(csv_to_json_array "$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS")"
-EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$EXPECTED_GOOGLE_ALLOWED_AUDIENCES")"
 if [[ "$EXPECTED_ALLOWED_AUDIENCES_JSON" == "[]" ]]; then
   echo "EXPECTED_ALLOWED_AUDIENCES must contain at least one non-empty audience" >&2
   exit 1
@@ -107,9 +101,6 @@ if [[ "$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" == "[]" ]]; then
 fi
 if [[ -z "$EXPECTED_LOGIN_PARAMETERS_JSON" ]]; then
   EXPECTED_LOGIN_PARAMETERS_JSON="$(build_default_login_parameters_json "$EXPECTED_ALLOWED_AUDIENCES")"
-fi
-if [[ -z "$EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" ]]; then
-  EXPECTED_GOOGLE_LOGIN_SCOPES_JSON='["openid", "profile", "email"]'
 fi
 
 print_check "Using subscription ${SUBSCRIPTION}"
@@ -137,9 +128,6 @@ MICROSOFT_AUTH_JSON="$MICROSOFT_AUTH_JSON" \
 EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
 EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" \
 EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
-EXPECTED_GOOGLE_CLIENT_ID="$EXPECTED_GOOGLE_CLIENT_ID" \
-EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON="$EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON" \
-EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="$EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" \
 EXPECTED_CLIENT_ID="$EXPECTED_CLIENT_ID" \
 EXPECTED_ISSUER_URL="$EXPECTED_ISSUER_URL" \
 TUNNEL_SECRET_REF_NAME="$TUNNEL_SECRET_REF_NAME" \
@@ -158,8 +146,6 @@ expected_allowed_external_redirect_urls = json.loads(
     os.environ["EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON"]
 )
 expected_login_parameters = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])
-expected_google_allowed = json.loads(os.environ["EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON"])
-expected_google_login_scopes = json.loads(os.environ["EXPECTED_GOOGLE_LOGIN_SCOPES_JSON"])
 expected_client_id = os.environ["EXPECTED_CLIENT_ID"]
 expected_issuer_url = os.environ["EXPECTED_ISSUER_URL"]
 expected_app_origin = expected_allowed_external_redirect_urls[0]
@@ -186,15 +172,9 @@ if (auth.get("identityProviders", {})
 login = auth.get("login") or {}
 if sorted(login.get("allowedExternalRedirectUrls") or []) != sorted(expected_allowed_external_redirect_urls):
     errors.append("Easy Auth allowed external redirect URLs do not match the expected app origin")
-google = auth.get("identityProviders", {}).get("google", {})
-if google.get("enabled") is not True:
-    errors.append("Google provider is not enabled")
-if google.get("registration", {}).get("clientId") != os.environ["EXPECTED_GOOGLE_CLIENT_ID"]:
-    errors.append("Configured Google clientId does not match the expected value")
-if sorted(google.get("validation", {}).get("allowedAudiences") or []) != sorted(expected_google_allowed):
-    errors.append("Google allowed audiences do not match expected values")
-if (google.get("login", {}).get("scopes") or []) != expected_google_login_scopes:
-    errors.append("Google login scopes do not match expected values")
+identity_provider_names = sorted((auth.get("identityProviders") or {}).keys())
+if identity_provider_names != ["azureActiveDirectory"]:
+    errors.append("Identity providers do not match the expected AAD-only contract")
 if microsoft_auth.get("registration", {}).get("clientId") != expected_client_id:
     errors.append("Configured Entra clientId does not match the expected app registration")
 if microsoft_auth.get("registration", {}).get("openIdIssuer") != expected_issuer_url:

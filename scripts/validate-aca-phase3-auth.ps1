@@ -13,9 +13,6 @@ param(
     [string]$ExpectedAllowedAudiences = "",
     [string]$ExpectedAllowedExternalRedirectUrls = "",
     [string]$ExpectedLoginParametersJson = "",
-    [string]$ExpectedGoogleClientId = "",
-    [string]$ExpectedGoogleAllowedAudiences = "",
-    [string]$ExpectedGoogleLoginScopesJson = "",
     [string]$ProbeOriginUrls = "",
     [string]$OriginBypassWorkspace = "",
     [string]$OriginBypassLogQuery = "",
@@ -62,10 +59,6 @@ function Get-DefaultLoginParameters {
     return @("scope=openid profile email offline_access $($AllowedAudiences[0])/access_as_user")
 }
 
-function Get-DefaultGoogleLoginScopes {
-    return @("openid", "profile", "email")
-}
-
 function Invoke-StatusCheck {
     param(
         [string]$Url,
@@ -99,8 +92,6 @@ Require-Value -Name "ExpectedClientId" -Value $ExpectedClientId
 Require-Value -Name "ExpectedIssuerUrl" -Value $ExpectedIssuerUrl
 Require-Value -Name "ExpectedAllowedAudiences" -Value $ExpectedAllowedAudiences
 Require-Value -Name "ExpectedAllowedExternalRedirectUrls" -Value $ExpectedAllowedExternalRedirectUrls
-Require-Value -Name "ExpectedGoogleClientId" -Value $ExpectedGoogleClientId
-Require-Value -Name "ExpectedGoogleAllowedAudiences" -Value $ExpectedGoogleAllowedAudiences
 
 if (-not $ApiHealthUrl) {
     $ApiHealthUrl = "https://$ApiPublicHostname/health"
@@ -110,13 +101,11 @@ if (-not $AuthMeUrl) {
 }
 $expectedAllowedAudienceArray = Convert-CsvToArray -Value $ExpectedAllowedAudiences
 $expectedAllowedExternalRedirectUrlArray = Convert-CsvToArray -Value $ExpectedAllowedExternalRedirectUrls
-$expectedGoogleAllowedAudienceArray = Convert-CsvToArray -Value $ExpectedGoogleAllowedAudiences
 if (-not $ExpectedLoginParametersJson) {
     $expectedLoginParameters = Get-DefaultLoginParameters -AllowedAudiences $expectedAllowedAudienceArray
 } else {
     $expectedLoginParameters = $ExpectedLoginParametersJson | ConvertFrom-Json
 }
-$expectedGoogleLoginScopes = if ($ExpectedGoogleLoginScopesJson) { $ExpectedGoogleLoginScopesJson | ConvertFrom-Json } else { Get-DefaultGoogleLoginScopes }
 
 Write-Phase3Check "Using subscription $Subscription"
 az account set --subscription $Subscription --output none | Out-Null
@@ -154,20 +143,9 @@ $actualAllowedExternalRedirectUrls = @($authProperties.login.allowedExternalRedi
 if (($actualAllowedExternalRedirectUrls -join "|") -ne (($expectedAllowedExternalRedirectUrlArray | Sort-Object) -join "|")) {
     $errors.Add("Easy Auth allowed external redirect URLs do not match the expected app origin.")
 }
-$googleProvider = $authProperties.identityProviders.google
-if ($googleProvider.enabled -ne $true) {
-    $errors.Add("Google provider is not enabled.")
-}
-if ($googleProvider.registration.clientId -ne $ExpectedGoogleClientId) {
-    $errors.Add("Configured Google clientId does not match the expected value.")
-}
-$actualGoogleAllowedAudiences = @($googleProvider.validation.allowedAudiences) | Sort-Object
-if (($actualGoogleAllowedAudiences -join "|") -ne (($expectedGoogleAllowedAudienceArray | Sort-Object) -join "|")) {
-    $errors.Add("Google allowed audiences do not match expected values.")
-}
-$actualGoogleLoginScopes = @($googleProvider.login.scopes)
-if (($actualGoogleLoginScopes -join "|") -ne ((@($expectedGoogleLoginScopes)) -join "|")) {
-    $errors.Add("Google login scopes do not match expected values.")
+$identityProviderNames = @($authProperties.identityProviders.PSObject.Properties.Name) | Sort-Object
+if (($identityProviderNames -join "|") -ne "azureActiveDirectory") {
+    $errors.Add("Identity providers do not match the expected AAD-only contract.")
 }
 if ($microsoftAuth.registration.clientId -ne $ExpectedClientId) {
     $errors.Add("Configured Entra clientId does not match the expected app registration.")

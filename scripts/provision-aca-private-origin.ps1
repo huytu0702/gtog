@@ -69,12 +69,7 @@ param(
     [string]$EntraScopeAdminConsentDescription = "",
     [string]$EntraScopeUserConsentDisplayName = "",
     [string]$EntraScopeUserConsentDescription = "",
-    [string]$AadLoginParametersJson = "",
-    [string]$GoogleClientId = "",
-    [string]$GoogleClientSecret = "",
-    [string]$GoogleClientSecretName = "google-client-secret",
-    [string]$GoogleAllowedAudiences = "",
-    [string]$GoogleLoginScopesJson = ""
+    [string]$AadLoginParametersJson = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -109,8 +104,6 @@ $IdentityPrincipalId = ""
 $ExpectedAllowedAudiences = @()
 $ExpectedAllowedExternalRedirectUrls = @()
 $ExpectedLoginParameters = @()
-$ExpectedGoogleAllowedAudiences = @()
-$ExpectedGoogleLoginScopes = @()
 $ExpectedScopeValue = ""
 $ExpectedCallbackUrl = ""
 
@@ -146,11 +139,6 @@ function Assert-ApiRuntimeContractHostname {
 
 function Assert-EasyAuthHostname {
     Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
-}
-
-function Assert-GoogleEasyAuthContract {
-    Require-Value -Name "GoogleClientId" -Value $GoogleClientId
-    Require-Value -Name "GoogleClientSecret" -Value $GoogleClientSecret
 }
 
 function Ensure-Subnet {
@@ -616,24 +604,15 @@ function Ensure-EntraAppContract {
     if (-not $AllowedAudiences) {
         $AllowedAudiences = $ApiAppIdUri
     }
-    if (-not $GoogleAllowedAudiences) {
-        $GoogleAllowedAudiences = $GoogleClientId
-    }
 
     $ExpectedScopeValue = "$ApiAppIdUri/$EntraScopeName"
     $ExpectedCallbackUrl = "https://$ApiPublicHostname/.auth/login/aad/callback"
     $ExpectedAllowedAudiences = Convert-CsvToArray -Value $AllowedAudiences
     $ExpectedAllowedExternalRedirectUrls = @("https://$AppPublicHostname")
-    $ExpectedGoogleAllowedAudiences = Convert-CsvToArray -Value $GoogleAllowedAudiences
     if (-not $AadLoginParametersJson) {
         $ExpectedLoginParameters = Get-DefaultLoginParameters -ScopeValue $ExpectedScopeValue
     } else {
         $ExpectedLoginParameters = $AadLoginParametersJson | ConvertFrom-Json
-    }
-    if (-not $GoogleLoginScopesJson) {
-        $ExpectedGoogleLoginScopes = @("openid", "profile", "email")
-    } else {
-        $ExpectedGoogleLoginScopes = $GoogleLoginScopesJson | ConvertFrom-Json
     }
 
     Write-Host ">>> Reconciling Entra app registration contract"
@@ -730,9 +709,6 @@ function Configure-EasyAuth {
 
     Write-Host ">>> Storing Easy Auth client secrets on API app"
     $easyAuthSecrets = @("$EntraClientSecretName=$EntraClientSecret")
-    if ($GoogleClientSecret) {
-        $easyAuthSecrets += "$GoogleClientSecretName=$GoogleClientSecret"
-    }
     az containerapp secret set `
         --resource-group $ResourceGroup `
         --name $ApiAppName `
@@ -768,15 +744,9 @@ function Configure-EasyAuth {
     $loginSettings["allowedExternalRedirectUrls"] = @($ExpectedAllowedExternalRedirectUrls)
     $authProperties.login = $loginSettings
 
-    $identityProviders = @{}
-    if ($authProperties.identityProviders) {
-        foreach ($property in $authProperties.identityProviders.PSObject.Properties) {
-            $identityProviders[$property.Name] = $property.Value
-        }
-    }
     $azureActiveDirectory = @{}
-    if ($identityProviders.azureActiveDirectory) {
-        foreach ($property in $identityProviders.azureActiveDirectory.PSObject.Properties) {
+    if ($authProperties.identityProviders.azureActiveDirectory) {
+        foreach ($property in $authProperties.identityProviders.azureActiveDirectory.PSObject.Properties) {
             $azureActiveDirectory[$property.Name] = $property.Value
         }
     }
@@ -807,45 +777,8 @@ function Configure-EasyAuth {
     }
     $aadValidation["allowedAudiences"] = @($ExpectedAllowedAudiences)
     $azureActiveDirectory["validation"] = $aadValidation
-    $identityProviders["azureActiveDirectory"] = $azureActiveDirectory
 
-    if ($GoogleClientId) {
-        $google = @{}
-        if ($identityProviders.google) {
-            foreach ($property in $identityProviders.google.PSObject.Properties) {
-                $google[$property.Name] = $property.Value
-            }
-        }
-        $google["enabled"] = $true
-        $googleRegistration = @{}
-        if ($google.registration) {
-            foreach ($property in $google.registration.PSObject.Properties) {
-                $googleRegistration[$property.Name] = $property.Value
-            }
-        }
-        $googleRegistration["clientId"] = $GoogleClientId
-        $googleRegistration["clientSecretSettingName"] = $GoogleClientSecretName
-        $google["registration"] = $googleRegistration
-        $googleValidation = @{}
-        if ($google.validation) {
-            foreach ($property in $google.validation.PSObject.Properties) {
-                $googleValidation[$property.Name] = $property.Value
-            }
-        }
-        $googleValidation["allowedAudiences"] = @($ExpectedGoogleAllowedAudiences)
-        $google["validation"] = $googleValidation
-        $googleLogin = @{}
-        if ($google.login) {
-            foreach ($property in $google.login.PSObject.Properties) {
-                $googleLogin[$property.Name] = $property.Value
-            }
-        }
-        $googleLogin["scopes"] = @($ExpectedGoogleLoginScopes)
-        $google["login"] = $googleLogin
-        $identityProviders["google"] = $google
-    }
-
-    $authProperties.identityProviders = $identityProviders
+    $authProperties.identityProviders = @{ azureActiveDirectory = $azureActiveDirectory }
 
     $authPatchBody = @{ properties = $authProperties } | ConvertTo-Json -Depth 100 -Compress
     az rest `
@@ -887,8 +820,6 @@ function Verify-Phase3Contract {
     $expectedAppOrigin = "https://$AppPublicHostname"
     $errors = [System.Collections.Generic.List[string]]::new()
 
-    $googleProvider = $auth.identityProviders.google
-
     if (-not $auth.platform.enabled) {
         $errors.Add("Easy Auth is not enabled on the API app.")
     }
@@ -924,25 +855,6 @@ function Verify-Phase3Contract {
     $actualAllowedExternalRedirectUrls = @($auth.login.allowedExternalRedirectUrls) | Sort-Object
     if (($actualAllowedExternalRedirectUrls -join "|") -ne (($ExpectedAllowedExternalRedirectUrls | Sort-Object) -join "|")) {
         $errors.Add("Unexpected allowed external redirect URLs: $($actualAllowedExternalRedirectUrls -join ', ')")
-    }
-
-    if ($googleProvider.enabled -ne $true) {
-        $errors.Add("Google provider is not enabled.")
-    }
-    if ($googleProvider.registration.clientId -ne $GoogleClientId) {
-        $errors.Add("Configured Google clientId does not match the expected value.")
-    }
-    if ($googleProvider.registration.clientSecretSettingName -ne $GoogleClientSecretName) {
-        $errors.Add("Unexpected Google client secret setting name: $($googleProvider.registration.clientSecretSettingName)")
-    }
-    $actualGoogleAllowedAudiences = @($googleProvider.validation.allowedAudiences) | Sort-Object
-    $expectedGoogleAllowedAudiences = @($ExpectedGoogleAllowedAudiences) | Sort-Object
-    if (($actualGoogleAllowedAudiences -join "|") -ne ($expectedGoogleAllowedAudiences -join "|")) {
-        $errors.Add("Google allowed audiences do not match expected values.")
-    }
-    $actualGoogleLoginScopes = @($googleProvider.login.scopes)
-    if (($actualGoogleLoginScopes -join "|") -ne ((@($ExpectedGoogleLoginScopes)) -join "|")) {
-        $errors.Add("Google login scopes do not match expected values.")
     }
 
     if ($microsoftAuth.registration.clientId -ne $EntraAppId) {
@@ -999,9 +911,6 @@ function Verify-Phase3Contract {
     $secretNames = @($apiApp.properties.configuration.secrets | ForEach-Object { $_.name })
     if ($secretNames -notcontains $EntraClientSecretName) {
         $errors.Add("Missing API secret setting $EntraClientSecretName.")
-    }
-    if ($secretNames -notcontains $GoogleClientSecretName) {
-        $errors.Add("Missing API secret setting $GoogleClientSecretName.")
     }
 
     if ($errors.Count -gt 0) {
@@ -1376,7 +1285,6 @@ if ($RolloutMode -in @("promote", "rollback")) {
 
     if ($ConfigureEasyAuth) {
         Assert-EasyAuthHostname
-        Assert-GoogleEasyAuthContract
         Configure-EasyAuth
         Verify-Phase3Contract
     }

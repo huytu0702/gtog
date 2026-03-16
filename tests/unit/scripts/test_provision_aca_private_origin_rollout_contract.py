@@ -80,22 +80,17 @@ def test_bash_provision_script_supports_frontend_private_ingress_and_dual_host_c
     assert 'aad["login"]["loginParameters"] = json.loads(os.environ["EXPECTED_LOGIN_PARAMETERS_JSON"])' in content
     assert 'aad["registration"]["openIdIssuer"] = os.environ["ENTRA_ISSUER_URL"]' in content
     assert 'aad["validation"]["allowedAudiences"] = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])' in content
-    assert "GOOGLE_CLIENT_ID" in content
-    assert "GOOGLE_CLIENT_SECRET" in content
-    assert "GOOGLE_CLIENT_SECRET_NAME" in content
-    assert "GOOGLE_ALLOWED_AUDIENCES" in content
-    assert "GOOGLE_LOGIN_SCOPES_JSON" in content
-    assert "EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON" in content
-    assert "EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" in content
-    assert "require_google_easy_auth_contract" in content
-    assert 'require_var GOOGLE_CLIENT_ID' in content
-    assert 'require_var GOOGLE_CLIENT_SECRET' in content
-    assert 'google["enabled"] = True' in content
-    assert 'google["registration"]["clientId"] = os.environ["GOOGLE_CLIENT_ID"]' in content
-    assert 'google["registration"]["clientSecretSettingName"] = os.environ["GOOGLE_CLIENT_SECRET_NAME"]' in content
-    assert 'google["validation"]["allowedAudiences"] = json.loads(os.environ["EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON"])' in content
-    assert 'google["login"]["scopes"] = json.loads(os.environ["EXPECTED_GOOGLE_LOGIN_SCOPES_JSON"])' in content
-    assert 'identity_providers["google"] = google' in content
+    assert 'auth["identityProviders"] = {"azureActiveDirectory": aad}' in content
+    assert "GOOGLE_CLIENT_ID" not in content
+    assert "GOOGLE_CLIENT_SECRET" not in content
+    assert "GOOGLE_CLIENT_SECRET_NAME" not in content
+    assert "GOOGLE_ALLOWED_AUDIENCES" not in content
+    assert "GOOGLE_LOGIN_SCOPES_JSON" not in content
+    assert "EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON" not in content
+    assert "EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" not in content
+    assert "require_google_easy_auth_contract" not in content
+    assert 'google["enabled"] = True' not in content
+    assert 'identity_providers["google"] = google' not in content
     assert 'auth = auth.get("properties", auth)' in content
     assert 'az containerapp env update \\' in content
     assert '--public-network-access Disabled' in content
@@ -165,22 +160,17 @@ def test_powershell_provision_script_supports_frontend_private_ingress_and_dual_
     assert '$aadLogin["loginParameters"] = @($ExpectedLoginParameters)' in content
     assert '$aadRegistration["openIdIssuer"] = $EntraIssuerUrl' in content
     assert '$aadValidation["allowedAudiences"] = @($ExpectedAllowedAudiences)' in content
-    assert "GoogleClientId" in content
-    assert "GoogleClientSecret" in content
-    assert "GoogleClientSecretName" in content
-    assert "GoogleAllowedAudiences" in content
-    assert "GoogleLoginScopesJson" in content
-    assert "Assert-GoogleEasyAuthContract" in content
-    assert 'Require-Value -Name "GoogleClientId" -Value $GoogleClientId' in content
-    assert 'Require-Value -Name "GoogleClientSecret" -Value $GoogleClientSecret' in content
-    assert "ExpectedGoogleAllowedAudiences" in content
-    assert "ExpectedGoogleLoginScopes" in content
-    assert '$google["enabled"] = $true' in content
-    assert '$googleRegistration["clientId"] = $GoogleClientId' in content
-    assert '$googleRegistration["clientSecretSettingName"] = $GoogleClientSecretName' in content
-    assert '$googleValidation["allowedAudiences"] = @($ExpectedGoogleAllowedAudiences)' in content
-    assert '$googleLogin["scopes"] = @($ExpectedGoogleLoginScopes)' in content
-    assert '$identityProviders["google"] = $google' in content
+    assert '$authProperties.identityProviders = @{ azureActiveDirectory = $azureActiveDirectory }' in content
+    assert "GoogleClientId" not in content
+    assert "GoogleClientSecret" not in content
+    assert "GoogleClientSecretName" not in content
+    assert "GoogleAllowedAudiences" not in content
+    assert "GoogleLoginScopesJson" not in content
+    assert "Assert-GoogleEasyAuthContract" not in content
+    assert "ExpectedGoogleAllowedAudiences" not in content
+    assert "ExpectedGoogleLoginScopes" not in content
+    assert '$google["enabled"] = $true' not in content
+    assert '$identityProviders["google"] = $google' not in content
     assert '$auth = if ($auth.properties) { $auth.properties } else { $auth }' in content
     assert 'az containerapp env update' in content
     assert '--public-network-access Disabled' in content

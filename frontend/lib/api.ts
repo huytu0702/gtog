@@ -21,8 +21,6 @@ type EasyAuthClaim = {
     val: string;
 };
 
-export type EasyAuthProvider = 'aad' | 'google';
-
 export interface EasyAuthUser {
     isAuthenticated: boolean;
     email: string | null;
@@ -42,15 +40,7 @@ export class ApiStatusError extends Error {
 const API_HOST_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://127.0.0.1:8000';
 const API_BASE_URL = `${API_HOST_BASE_URL}/api`;
 const EASY_AUTH_ME_URL = `${API_HOST_BASE_URL}/.auth/me`;
-const EASY_AUTH_LOGIN_PATHS: Record<EasyAuthProvider, string> = {
-    aad: '/.auth/login/aad',
-    google: '/.auth/login/google',
-};
-
-export const EASY_AUTH_LOGIN_PROVIDERS: Array<{ id: EasyAuthProvider; label: string }> = [
-    { id: 'aad', label: 'Microsoft' },
-    { id: 'google', label: 'Google' },
-];
+const EASY_AUTH_LOGIN_PATH = '/.auth/login/aad';
 
 export const SIGNED_OUT_EASY_AUTH_USER: EasyAuthUser = {
     isAuthenticated: false,
@@ -152,8 +142,8 @@ export function getEasyAuthUserLabel(user: EasyAuthUser): string | null {
     return user.email ?? user.displayName;
 }
 
-export function buildEasyAuthLoginUrl(provider: EasyAuthProvider = 'aad', postLoginRedirectUri?: string): string {
-    const loginUrl = new URL(`${API_HOST_BASE_URL}${EASY_AUTH_LOGIN_PATHS[provider]}`);
+export function buildEasyAuthLoginUrl(postLoginRedirectUri?: string): string {
+    const loginUrl = new URL(`${API_HOST_BASE_URL}${EASY_AUTH_LOGIN_PATH}`);
     const redirectUri = normalizeRedirectUri(postLoginRedirectUri);
     if (redirectUri) {
         loginUrl.searchParams.set('post_login_redirect_uri', redirectUri);
