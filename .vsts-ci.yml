@@ -24,9 +24,9 @@ variables:
   productionRollbackArtifactName: "production-rollback-log"
   productionCanaryTrafficPercent: "10"
   productionStableTrafficPercent: "90"
-  phase3ValidationArtifactName: "phase3-auth-origin-validation"
-  phase3ProductionCanaryValidationArtifactName: "phase3-auth-origin-validation-production-canary"
-  phase3ProductionFullValidationArtifactName: "phase3-auth-origin-validation-production-full"
+    phase3ValidationArtifactName: "edge-origin-validation"
+    phase3ProductionCanaryValidationArtifactName: "edge-origin-validation-production-canary"
+    phase3ProductionFullValidationArtifactName: "edge-origin-validation-production-full"
   productionRolloutStateArtifactName: "production-rollout-state"
   validateReportArtifactName: "validate-stage-report"
 
@@ -122,24 +122,21 @@ stages:
               bash ./scripts/provision-aca-private-origin.sh > "$(Build.ArtifactStagingDirectory)/deploy-staging-log/deploy-staging.log" 2>&1
             displayName: Run staging deployment script
             env:
-              RESOURCE_GROUP: $(stagingResourceGroup)
-              SUBSCRIPTION: $(azureSubscriptionId)
-              API_APP_NAME: $(stagingApiAppName)
-              WORKER_APP_NAME: $(stagingWorkerAppName)
-              TUNNEL_APP_NAME: $(stagingTunnelAppName)
-              API_PUBLIC_HOSTNAME: $(stagingApiPublicHostname)
-              API_IMAGE: $(backendImageRepository):$(Build.BuildId)
-              WORKER_IMAGE: $(backendImageRepository):$(Build.BuildId)
-              KEY_VAULT_NAME: $(stagingKeyVaultName)
-              EDGE_ORIGIN_SECRET: $(stagingEdgeOriginSecret)
-              TUNNEL_TOKEN: $(stagingTunnelToken)
-              ENTRA_APP_ID: $(stagingEntraAppId)
-              ENTRA_TENANT_ID: $(entraTenantId)
-              ENTRA_CLIENT_SECRET: $(stagingEntraClientSecret)
-              ALLOWED_AUDIENCES: $(stagingAllowedAudiences)
-              CONFIGURE_EASY_AUTH: "true"
-              ROLLOUT_MODE: "reconcile"
-              ROLLOUT_STATE_FILE: $(Build.ArtifactStagingDirectory)/deploy-staging-log/rollout-state.json
+                RESOURCE_GROUP: $(stagingResourceGroup)
+                SUBSCRIPTION: $(azureSubscriptionId)
+                FRONTEND_APP_NAME: $(stagingFrontendAppName)
+                API_APP_NAME: $(stagingApiAppName)
+                WORKER_APP_NAME: $(stagingWorkerAppName)
+                TUNNEL_APP_NAME: $(stagingTunnelAppName)
+                APP_PUBLIC_HOSTNAME: $(stagingAppPublicHostname)
+                API_PUBLIC_HOSTNAME: $(stagingApiPublicHostname)
+                API_IMAGE: $(backendImageRepository):$(Build.BuildId)
+                WORKER_IMAGE: $(backendImageRepository):$(Build.BuildId)
+                KEY_VAULT_NAME: $(stagingKeyVaultName)
+                EDGE_ORIGIN_SECRET: $(stagingEdgeOriginSecret)
+                TUNNEL_TOKEN: $(stagingTunnelToken)
+                ROLLOUT_MODE: "reconcile"
+                ROLLOUT_STATE_FILE: $(Build.ArtifactStagingDirectory)/deploy-staging-log/rollout-state.json
 
           - publish: $(Build.ArtifactStagingDirectory)/deploy-staging-log
             artifact: $(stagingDeployArtifactName)
@@ -168,20 +165,17 @@ stages:
               mkdir -p "$(Build.ArtifactStagingDirectory)/smoke-staging-report"
               bash ./scripts/smoke-release-gates.sh
             displayName: Run staging smoke gates
-            env:
-              API_BASE_URL: https://$(stagingApiPublicHostname)
-              API_PUBLIC_HOSTNAME: $(stagingApiPublicHostname)
-              AUTH_BEARER_TOKEN: $(stagingAuthBearerToken)
-              EXPECTED_CLIENT_ID: $(stagingEntraClientId)
-              EXPECTED_ISSUER_URL: $(stagingIssuerUrl)
-              EXPECTED_ALLOWED_AUDIENCES: $(stagingAllowedAudiences)
-              WRONG_AUDIENCE_TOKEN: $(stagingWrongAudienceToken)
-              PRODUCTION_REJECTION_TOKEN: $(stagingProductionRejectionToken)
-              PROBE_ORIGIN_URLS: $(stagingProbeOriginUrls)
-              RESOURCE_GROUP: $(stagingResourceGroup)
-              SUBSCRIPTION: $(azureSubscriptionId)
-              API_APP_NAME: $(stagingApiAppName)
-              WORKER_APP_NAME: $(stagingWorkerAppName)
+              env:
+                APP_BASE_URL: https://$(stagingAppPublicHostname)
+                APP_PUBLIC_HOSTNAME: $(stagingAppPublicHostname)
+                API_BASE_URL: https://$(stagingApiPublicHostname)
+                API_PUBLIC_HOSTNAME: $(stagingApiPublicHostname)
+                AUTH_BEARER_TOKEN: $(stagingAuthBearerToken)
+                PROBE_ORIGIN_URLS: $(stagingProbeOriginUrls)
+                RESOURCE_GROUP: $(stagingResourceGroup)
+                SUBSCRIPTION: $(azureSubscriptionId)
+                API_APP_NAME: $(stagingApiAppName)
+                WORKER_APP_NAME: $(stagingWorkerAppName)
               TUNNEL_APP_NAME: $(stagingTunnelAppName)
               SMOKE_ARTIFACT_NAME: $(smokeStagingArtifactName)
               PHASE3_VALIDATION_ARTIFACT_NAME: $(phase3ValidationArtifactName)
@@ -193,9 +187,9 @@ stages:
             artifact: $(smokeStagingArtifactName)
             displayName: Publish smoke staging report
 
-          - publish: $(Build.ArtifactStagingDirectory)/smoke-staging-report
-            artifact: phase3-auth-origin-validation
-            displayName: Publish Phase 3 auth and origin validation evidence
+            - publish: $(Build.ArtifactStagingDirectory)/smoke-staging-report
+              artifact: $(phase3ValidationArtifactName)
+              displayName: Publish Phase 3 private-origin validation evidence
 
   - stage: ManualApproval
     dependsOn:
@@ -209,9 +203,9 @@ stages:
           - task: ManualValidation@0
             inputs:
               instructions: |
-                Review validate-stage-report, image-metadata, deploy-staging-log,
-                smoke-staging-report, and phase3-auth-origin-validation artifacts
-                before approving production deployment.
+                  Review validate-stage-report, image-metadata, deploy-staging-log,
+                  smoke-staging-report, and edge-origin-validation artifacts
+                  before approving production deployment.
               notifyUsers: $(productionApprovers)
               onTimeout: reject
             timeoutInMinutes: 1440
@@ -244,26 +238,23 @@ stages:
               bash ./scripts/provision-aca-private-origin.sh > "$(Build.ArtifactStagingDirectory)/deploy-production-log/deploy-production.log" 2>&1
             displayName: Run production deployment script
             env:
-              RESOURCE_GROUP: $(productionResourceGroup)
-              SUBSCRIPTION: $(azureSubscriptionId)
-              API_APP_NAME: $(productionApiAppName)
-              WORKER_APP_NAME: $(productionWorkerAppName)
-              TUNNEL_APP_NAME: $(productionTunnelAppName)
-              API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
-              API_IMAGE: $(backendImageRepository):$(Build.BuildId)
-              WORKER_IMAGE: $(backendImageRepository):$(Build.BuildId)
-              KEY_VAULT_NAME: $(productionKeyVaultName)
-              EDGE_ORIGIN_SECRET: $(productionEdgeOriginSecret)
-              TUNNEL_TOKEN: $(productionTunnelToken)
-              ENTRA_APP_ID: $(productionEntraAppId)
-              ENTRA_TENANT_ID: $(entraTenantId)
-              ENTRA_CLIENT_SECRET: $(productionEntraClientSecret)
-              ALLOWED_AUDIENCES: $(productionAllowedAudiences)
-              CONFIGURE_EASY_AUTH: "true"
-              ROLLOUT_MODE: "canary"
-              CANARY_TRAFFIC_PERCENT: $(productionCanaryTrafficPercent)
-              STABLE_TRAFFIC_PERCENT: $(productionStableTrafficPercent)
-              ROLLOUT_STATE_FILE: $(Build.ArtifactStagingDirectory)/deploy-production-log/rollout-state.json
+                RESOURCE_GROUP: $(productionResourceGroup)
+                SUBSCRIPTION: $(azureSubscriptionId)
+                FRONTEND_APP_NAME: $(productionFrontendAppName)
+                API_APP_NAME: $(productionApiAppName)
+                WORKER_APP_NAME: $(productionWorkerAppName)
+                TUNNEL_APP_NAME: $(productionTunnelAppName)
+                APP_PUBLIC_HOSTNAME: $(productionAppPublicHostname)
+                API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
+                API_IMAGE: $(backendImageRepository):$(Build.BuildId)
+                WORKER_IMAGE: $(backendImageRepository):$(Build.BuildId)
+                KEY_VAULT_NAME: $(productionKeyVaultName)
+                EDGE_ORIGIN_SECRET: $(productionEdgeOriginSecret)
+                TUNNEL_TOKEN: $(productionTunnelToken)
+                ROLLOUT_MODE: "canary"
+                CANARY_TRAFFIC_PERCENT: $(productionCanaryTrafficPercent)
+                STABLE_TRAFFIC_PERCENT: $(productionStableTrafficPercent)
+                ROLLOUT_STATE_FILE: $(Build.ArtifactStagingDirectory)/deploy-production-log/rollout-state.json
 
           - publish: $(Build.ArtifactStagingDirectory)/deploy-production-log
             artifact: $(productionDeployArtifactName)
@@ -292,18 +283,15 @@ stages:
               mkdir -p "$(Build.ArtifactStagingDirectory)/smoke-production-canary-report"
               bash ./scripts/smoke-release-gates.sh
             displayName: Run production canary smoke gates
-            env:
-              API_BASE_URL: https://$(productionApiPublicHostname)
-              API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
-              AUTH_BEARER_TOKEN: $(productionAuthBearerToken)
-              EXPECTED_CLIENT_ID: $(productionEntraClientId)
-              EXPECTED_ISSUER_URL: $(productionIssuerUrl)
-              EXPECTED_ALLOWED_AUDIENCES: $(productionAllowedAudiences)
-              WRONG_AUDIENCE_TOKEN: $(productionWrongAudienceToken)
-              PRODUCTION_REJECTION_TOKEN: $(productionRejectionToken)
-              PROBE_ORIGIN_URLS: $(productionProbeOriginUrls)
-              RESOURCE_GROUP: $(productionResourceGroup)
-              SUBSCRIPTION: $(azureSubscriptionId)
+              env:
+                APP_BASE_URL: https://$(productionAppPublicHostname)
+                APP_PUBLIC_HOSTNAME: $(productionAppPublicHostname)
+                API_BASE_URL: https://$(productionApiPublicHostname)
+                API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
+                AUTH_BEARER_TOKEN: $(productionAuthBearerToken)
+                PROBE_ORIGIN_URLS: $(productionProbeOriginUrls)
+                RESOURCE_GROUP: $(productionResourceGroup)
+                SUBSCRIPTION: $(azureSubscriptionId)
               API_APP_NAME: $(productionApiAppName)
               WORKER_APP_NAME: $(productionWorkerAppName)
               TUNNEL_APP_NAME: $(productionTunnelAppName)
@@ -319,7 +307,7 @@ stages:
 
           - publish: $(Build.ArtifactStagingDirectory)/smoke-production-canary-report
             artifact: $(phase3ProductionCanaryValidationArtifactName)
-            displayName: Publish production canary auth and origin evidence
+              displayName: Publish production canary private-origin evidence
 
   - stage: RollbackProductionCanary
     dependsOn:
@@ -407,9 +395,9 @@ stages:
           - task: ManualValidation@0
             inputs:
               instructions: |
-                Review deploy-production-log, smoke-production-canary-report,
-                phase3-auth-origin-validation-production-canary, production-canary-observation,
-                and production-rollout-state artifacts before approving full production promotion or rollback.
+                  Review deploy-production-log, smoke-production-canary-report,
+                  edge-origin-validation-production-canary, production-canary-observation,
+                  and production-rollout-state artifacts before approving full production promotion or rollback.
               notifyUsers: $(productionApprovers)
               onTimeout: reject
             timeoutInMinutes: 1440
@@ -472,18 +460,15 @@ stages:
               mkdir -p "$(Build.ArtifactStagingDirectory)/smoke-production-full-report"
               bash ./scripts/smoke-release-gates.sh
             displayName: Run production post-promotion smoke gates
-            env:
-              API_BASE_URL: https://$(productionApiPublicHostname)
-              API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
-              AUTH_BEARER_TOKEN: $(productionAuthBearerToken)
-              EXPECTED_CLIENT_ID: $(productionEntraClientId)
-              EXPECTED_ISSUER_URL: $(productionIssuerUrl)
-              EXPECTED_ALLOWED_AUDIENCES: $(productionAllowedAudiences)
-              WRONG_AUDIENCE_TOKEN: $(productionWrongAudienceToken)
-              PRODUCTION_REJECTION_TOKEN: $(productionRejectionToken)
-              PROBE_ORIGIN_URLS: $(productionProbeOriginUrls)
-              RESOURCE_GROUP: $(productionResourceGroup)
-              SUBSCRIPTION: $(azureSubscriptionId)
+              env:
+                APP_BASE_URL: https://$(productionAppPublicHostname)
+                APP_PUBLIC_HOSTNAME: $(productionAppPublicHostname)
+                API_BASE_URL: https://$(productionApiPublicHostname)
+                API_PUBLIC_HOSTNAME: $(productionApiPublicHostname)
+                AUTH_BEARER_TOKEN: $(productionAuthBearerToken)
+                PROBE_ORIGIN_URLS: $(productionProbeOriginUrls)
+                RESOURCE_GROUP: $(productionResourceGroup)
+                SUBSCRIPTION: $(azureSubscriptionId)
               API_APP_NAME: $(productionApiAppName)
               WORKER_APP_NAME: $(productionWorkerAppName)
               TUNNEL_APP_NAME: $(productionTunnelAppName)
@@ -499,4 +484,4 @@ stages:
 
           - publish: $(Build.ArtifactStagingDirectory)/smoke-production-full-report
             artifact: $(phase3ProductionFullValidationArtifactName)
-            displayName: Publish production full auth and origin evidence
+              displayName: Publish production full private-origin evidence

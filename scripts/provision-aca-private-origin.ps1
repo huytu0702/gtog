@@ -50,26 +50,8 @@ param(
     [string]$EdgeOriginSecret = "",
     [string]$EdgeOriginSecretName = "edge-origin-secret",
     [switch]$CreateApps,
-    [switch]$ConfigureEasyAuth,
-    [switch]$CreateEntraApp,
-    [switch]$ResetEntraClientSecret,
     [string]$AppPublicHostname = "",
-    [string]$ApiPublicHostname = "",
-    [string]$EntraAppDisplayName = "",
-    [string]$EntraAppId = "",
-    [string]$EntraTenantId = "",
-    [string]$EntraIssuerUrl = "",
-    [string]$EntraClientSecret = "",
-    [string]$EntraClientSecretName = "entra-client-secret",
-    [string]$EntraClientSecretDisplayName = "",
-    [string]$ApiAppIdUri = "",
-    [string]$AllowedAudiences = "",
-    [string]$EntraScopeName = "access_as_user",
-    [string]$EntraScopeAdminConsentDisplayName = "",
-    [string]$EntraScopeAdminConsentDescription = "",
-    [string]$EntraScopeUserConsentDisplayName = "",
-    [string]$EntraScopeUserConsentDescription = "",
-    [string]$AadLoginParametersJson = ""
+    [string]$ApiPublicHostname = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -82,30 +64,10 @@ New-Item -ItemType Directory -Path $env:AZURE_CONFIG_DIR -Force | Out-Null
 if (-not $PrivateDnsZone) {
     $PrivateDnsZone = "privatelink.$Location.azurecontainerapps.io"
 }
-if (-not $EntraClientSecretDisplayName) {
-    $EntraClientSecretDisplayName = "$ApiAppName-easy-auth"
-}
-if (-not $EntraScopeAdminConsentDisplayName) {
-    $EntraScopeAdminConsentDisplayName = "Access $ApiAppName"
-}
-if (-not $EntraScopeAdminConsentDescription) {
-    $EntraScopeAdminConsentDescription = "Allow the signed-in user to access $ApiAppName."
-}
-if (-not $EntraScopeUserConsentDisplayName) {
-    $EntraScopeUserConsentDisplayName = "Access $ApiAppName"
-}
-if (-not $EntraScopeUserConsentDescription) {
-    $EntraScopeUserConsentDescription = "Allow the app to access $ApiAppName on your behalf."
-}
 
 $AccountTenantId = ""
 $IdentityResourceId = ""
 $IdentityPrincipalId = ""
-$ExpectedAllowedAudiences = @()
-$ExpectedAllowedExternalRedirectUrls = @()
-$ExpectedLoginParameters = @()
-$ExpectedScopeValue = ""
-$ExpectedCallbackUrl = ""
 
 function Test-AzCommand {
     param([scriptblock]$Command)
@@ -135,10 +97,6 @@ function Assert-FrontendRuntimeContractHostnames {
 
 function Assert-ApiRuntimeContractHostname {
     Require-Value -Name "AppPublicHostname" -Value $AppPublicHostname
-}
-
-function Assert-EasyAuthHostname {
-    Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
 }
 
 function Ensure-Subnet {
@@ -197,22 +155,6 @@ function Test-ContainerAppExists {
             --name $Name `
             --output none 2>$null
     })
-}
-
-function Convert-CsvToArray {
-    param([string]$Value)
-
-    if (-not $Value) {
-        return @()
-    }
-
-    return $Value.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-}
-
-function Get-DefaultLoginParameters {
-    param([string]$ScopeValue)
-
-    return @("scope=openid profile email offline_access $ScopeValue")
 }
 
 function Ensure-ContainerAppIdentity {
@@ -289,7 +231,7 @@ function Ensure-ApiIngressContract {
     $apiEnvVars = @(
         "APP_ROLE=api",
         "CORS_ORIGINS=https://$AppPublicHostname",
-        "REQUIRE_PLATFORM_AUTH=true"
+        "REQUIRE_EDGE_AUTH=true"
     )
     if ($EdgeOriginSecret) {
         az containerapp secret set `
@@ -573,353 +515,6 @@ function Rollback-ToStableTraffic {
     Write-RolloutState -StateMode "rollback" -StableRevision $StableRevision -CandidateRevision $CandidateRevision
 }
 
-function Ensure-EntraAppContract {
-    Require-Value -Name "ApiPublicHostname" -Value $ApiPublicHostname
-
-    if (-not $EntraAppId -and $EntraAppDisplayName) {
-        $EntraAppId = az ad app list `
-            --display-name $EntraAppDisplayName `
-            --query "[?displayName=='$EntraAppDisplayName'] | [0].appId" `
-            --output tsv
-    }
-
-    if (-not $EntraAppId) {
-        if (-not $CreateEntraApp) {
-            throw "EntraAppId or EntraAppDisplayName is required unless -CreateEntraApp is used."
-        }
-        Require-Value -Name "EntraAppDisplayName" -Value $EntraAppDisplayName
-        Write-Host ">>> Creating Entra app registration: $EntraAppDisplayName"
-        $EntraAppId = az ad app create `
-            --display-name $EntraAppDisplayName `
-            --sign-in-audience AzureADMyOrg `
-            --query appId `
-            --output tsv
-    }
-
-    $entraObjectId = az ad app show --id $EntraAppId --query id --output tsv
-
-    if (-not $ApiAppIdUri) {
-        $ApiAppIdUri = "api://$EntraAppId"
-    }
-    if (-not $AllowedAudiences) {
-        $AllowedAudiences = $ApiAppIdUri
-    }
-
-    $ExpectedScopeValue = "$ApiAppIdUri/$EntraScopeName"
-    $ExpectedCallbackUrl = "https://$ApiPublicHostname/.auth/login/aad/callback"
-    $ExpectedAllowedAudiences = Convert-CsvToArray -Value $AllowedAudiences
-    $ExpectedAllowedExternalRedirectUrls = @("https://$AppPublicHostname")
-    if (-not $AadLoginParametersJson) {
-        $ExpectedLoginParameters = Get-DefaultLoginParameters -ScopeValue $ExpectedScopeValue
-    } else {
-        $ExpectedLoginParameters = $AadLoginParametersJson | ConvertFrom-Json
-    }
-
-    Write-Host ">>> Reconciling Entra app registration contract"
-    az ad app update `
-        --id $EntraAppId `
-        --identifier-uris $ApiAppIdUri `
-        --web-home-page-url "https://$ApiPublicHostname" `
-        --web-redirect-uris $ExpectedCallbackUrl `
-        --enable-id-token-issuance true `
-        --requested-access-token-version 2 `
-        --sign-in-audience AzureADMyOrg `
-        --output none | Out-Null
-
-    $currentApi = az rest `
-        --method get `
-        --url "https://graph.microsoft.com/v1.0/applications/$entraObjectId?`$select=api" `
-        --output json | ConvertFrom-Json
-
-    if (-not $currentApi.api) {
-        $currentApi | Add-Member -NotePropertyName api -NotePropertyValue ([pscustomobject]@{})
-    }
-    if (-not $currentApi.api.oauth2PermissionScopes) {
-        $currentApi.api | Add-Member -NotePropertyName oauth2PermissionScopes -NotePropertyValue @()
-    }
-
-    $scope = $currentApi.api.oauth2PermissionScopes | Where-Object { $_.value -eq $EntraScopeName } | Select-Object -First 1
-    if (-not $scope) {
-        $scope = [ordered]@{
-            id = [guid]::NewGuid().Guid
-            value = $EntraScopeName
-            type = "User"
-            isEnabled = $true
-            adminConsentDisplayName = $EntraScopeAdminConsentDisplayName
-            adminConsentDescription = $EntraScopeAdminConsentDescription
-            userConsentDisplayName = $EntraScopeUserConsentDisplayName
-            userConsentDescription = $EntraScopeUserConsentDescription
-        }
-        $currentApi.api.oauth2PermissionScopes += $scope
-    } else {
-        $scope.id = if ($scope.id) { $scope.id } else { [guid]::NewGuid().Guid }
-        $scope.value = $EntraScopeName
-        $scope.type = "User"
-        $scope.isEnabled = $true
-        $scope.adminConsentDisplayName = $EntraScopeAdminConsentDisplayName
-        $scope.adminConsentDescription = $EntraScopeAdminConsentDescription
-        $scope.userConsentDisplayName = $EntraScopeUserConsentDisplayName
-        $scope.userConsentDescription = $EntraScopeUserConsentDescription
-    }
-
-    $currentApi.api.requestedAccessTokenVersion = 2
-    $patchBody = @{ api = $currentApi.api } | ConvertTo-Json -Depth 10 -Compress
-    az rest `
-        --method patch `
-        --url "https://graph.microsoft.com/v1.0/applications/$entraObjectId" `
-        --body $patchBody `
-        --headers "Content-Type=application/json" `
-        --output none | Out-Null
-
-    if (-not (Test-AzCommand { az ad sp show --id $EntraAppId --output none 2>$null })) {
-        Write-Host ">>> Creating Entra service principal for API app"
-        az ad sp create --id $EntraAppId --output none | Out-Null
-    }
-
-    if (-not $EntraTenantId) {
-        $EntraTenantId = $AccountTenantId
-    }
-    if (-not $EntraIssuerUrl) {
-        $EntraIssuerUrl = "https://login.microsoftonline.com/$EntraTenantId/v2.0"
-    }
-
-    if (-not $EntraClientSecret) {
-        if ($CreateEntraApp -or $ResetEntraClientSecret) {
-            Write-Host ">>> Creating or rotating Entra client secret for Easy Auth"
-            $EntraClientSecret = az ad app credential reset `
-                --id $EntraAppId `
-                --append `
-                --display-name $EntraClientSecretDisplayName `
-                --query password `
-                --output tsv
-        } else {
-            throw "EntraClientSecret is required unless -CreateEntraApp or -ResetEntraClientSecret is used."
-        }
-    }
-
-    Upsert-KeyVaultSecret -VaultName $KeyVaultName -SecretName $EntraClientSecretName -SecretValue $EntraClientSecret
-}
-
-function Configure-EasyAuth {
-    if (-not (Test-ContainerAppExists -Name $ApiAppName)) {
-        throw "API app $ApiAppName must exist before Easy Auth can be configured."
-    }
-
-    Ensure-EntraAppContract
-
-    Write-Host ">>> Storing Easy Auth client secrets on API app"
-    $easyAuthSecrets = @("$EntraClientSecretName=$EntraClientSecret")
-    az containerapp secret set `
-        --resource-group $ResourceGroup `
-        --name $ApiAppName `
-        --secrets $easyAuthSecrets `
-        --output none | Out-Null
-
-    Write-Host ">>> Configuring Container Apps authentication"
-    $loginParametersJson = $ExpectedLoginParameters | ConvertTo-Json -Compress
-    az containerapp auth update `
-        --resource-group $ResourceGroup `
-        --name $ApiAppName `
-        --enabled true `
-        --unauthenticated-client-action AllowAnonymous `
-        --require-https true `
-        --proxy-convention Standard `
-        --excluded-paths "/health,/health/readiness" `
-        --set "identityProviders.azureActiveDirectory.login.loginParameters=$loginParametersJson" `
-        --yes `
-        --output none | Out-Null
-
-    $authConfigId = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup/providers/Microsoft.App/containerApps/$ApiAppName/authConfigs/current"
-    $auth = az rest `
-        --method get `
-        --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" `
-        --output json | ConvertFrom-Json
-    $authProperties = if ($auth.properties) { $auth.properties } else { $auth }
-    $loginSettings = @{}
-    if ($authProperties.login) {
-        foreach ($property in $authProperties.login.PSObject.Properties) {
-            $loginSettings[$property.Name] = $property.Value
-        }
-    }
-    $loginSettings["allowedExternalRedirectUrls"] = @($ExpectedAllowedExternalRedirectUrls)
-    $authProperties.login = $loginSettings
-
-    $azureActiveDirectory = @{}
-    if ($authProperties.identityProviders.azureActiveDirectory) {
-        foreach ($property in $authProperties.identityProviders.azureActiveDirectory.PSObject.Properties) {
-            $azureActiveDirectory[$property.Name] = $property.Value
-        }
-    }
-    $azureActiveDirectory["enabled"] = $true
-    $aadLogin = @{}
-    if ($azureActiveDirectory.login) {
-        foreach ($property in $azureActiveDirectory.login.PSObject.Properties) {
-            $aadLogin[$property.Name] = $property.Value
-        }
-    }
-    $aadLogin["loginParameters"] = @($ExpectedLoginParameters)
-    $azureActiveDirectory["login"] = $aadLogin
-    $aadRegistration = @{}
-    if ($azureActiveDirectory.registration) {
-        foreach ($property in $azureActiveDirectory.registration.PSObject.Properties) {
-            $aadRegistration[$property.Name] = $property.Value
-        }
-    }
-    $aadRegistration["clientId"] = $EntraAppId
-    $aadRegistration["clientSecretSettingName"] = $EntraClientSecretName
-    $aadRegistration["openIdIssuer"] = $EntraIssuerUrl
-    $azureActiveDirectory["registration"] = $aadRegistration
-    $aadValidation = @{}
-    if ($azureActiveDirectory.validation) {
-        foreach ($property in $azureActiveDirectory.validation.PSObject.Properties) {
-            $aadValidation[$property.Name] = $property.Value
-        }
-    }
-    $aadValidation["allowedAudiences"] = @($ExpectedAllowedAudiences)
-    $azureActiveDirectory["validation"] = $aadValidation
-
-    $authProperties.identityProviders = @{ azureActiveDirectory = $azureActiveDirectory }
-
-    $authPatchBody = @{ properties = $authProperties } | ConvertTo-Json -Depth 100 -Compress
-    az rest `
-        --method put `
-        --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" `
-        --body $authPatchBody `
-        --headers "Content-Type=application/json" `
-        --output none | Out-Null
-}
-
-function Verify-Phase3Contract {
-    if (-not $ConfigureEasyAuth) {
-        return
-    }
-
-    Write-Host ">>> Reading back final auth and ingress state"
-    $apiApp = az containerapp show `
-        --resource-group $ResourceGroup `
-        --name $ApiAppName `
-        --output json | ConvertFrom-Json
-    $workerApp = az containerapp show `
-        --resource-group $ResourceGroup `
-        --name $WorkerAppName `
-        --output json | ConvertFrom-Json
-    $authConfigId = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup/providers/Microsoft.App/containerApps/$ApiAppName/authConfigs/current"
-    $auth = az rest `
-        --method get `
-        --uri "https://management.azure.com$authConfigId?api-version=2025-07-01" `
-        --output json | ConvertFrom-Json
-    $auth = if ($auth.properties) { $auth.properties } else { $auth }
-    $microsoftAuth = az containerapp auth microsoft show `
-        --resource-group $ResourceGroup `
-        --name $ApiAppName `
-        --output json | ConvertFrom-Json
-    $appRegistration = az ad app show `
-        --id $EntraAppId `
-        --output json | ConvertFrom-Json
-
-    $expectedAppOrigin = "https://$AppPublicHostname"
-    $errors = [System.Collections.Generic.List[string]]::new()
-
-    if (-not $auth.platform.enabled) {
-        $errors.Add("Easy Auth is not enabled on the API app.")
-    }
-    if ($auth.globalValidation.unauthenticatedClientAction -ne "AllowAnonymous") {
-        $errors.Add("Unexpected unauthenticated action: $($auth.globalValidation.unauthenticatedClientAction)")
-    }
-    $requireHttps = $auth.httpSettings.requireHttps
-    if ($null -eq $requireHttps) {
-        $requireHttps = $null -ne $auth.httpSettings.routes.apiPrefix
-    }
-    if ($requireHttps -ne $true) {
-        $errors.Add("Easy Auth HTTPS enforcement is not enabled.")
-    }
-
-    $proxyConvention = $auth.httpSettings.forwardProxy.convention
-    if ($null -eq $proxyConvention) {
-        $proxyConvention = $auth.httpSettings.forwardProxy.proxyConvention
-    }
-    if ($proxyConvention -ne "Standard") {
-        $errors.Add("Unexpected proxy convention: $proxyConvention")
-    }
-
-    $excludedPaths = @($auth.globalValidation.excludedPaths)
-    if (@("/health", "/health/readiness") -join "," -ne ($excludedPaths | Sort-Object) -join ",") {
-        $errors.Add("Unexpected excluded auth paths: $($excludedPaths -join ', ')")
-    }
-
-    $actualLoginParameters = @($auth.identityProviders.azureActiveDirectory.login.loginParameters)
-    if (($actualLoginParameters -join "|") -ne ($ExpectedLoginParameters -join "|")) {
-        $errors.Add("Unexpected login parameters: $($actualLoginParameters -join ', ')")
-    }
-
-    $actualAllowedExternalRedirectUrls = @($auth.login.allowedExternalRedirectUrls) | Sort-Object
-    if (($actualAllowedExternalRedirectUrls -join "|") -ne (($ExpectedAllowedExternalRedirectUrls | Sort-Object) -join "|")) {
-        $errors.Add("Unexpected allowed external redirect URLs: $($actualAllowedExternalRedirectUrls -join ', ')")
-    }
-
-    if ($microsoftAuth.registration.clientId -ne $EntraAppId) {
-        $errors.Add("Unexpected Entra client ID: $($microsoftAuth.registration.clientId)")
-    }
-    if ($microsoftAuth.registration.clientSecretSettingName -ne $EntraClientSecretName) {
-        $errors.Add("Unexpected Entra client secret setting name: $($microsoftAuth.registration.clientSecretSettingName)")
-    }
-    if ($microsoftAuth.registration.openIdIssuer -ne $EntraIssuerUrl) {
-        $errors.Add("Unexpected issuer URI: $($microsoftAuth.registration.openIdIssuer)")
-    }
-
-    $actualAllowedAudiences = @($microsoftAuth.validation.allowedAudiences) | Sort-Object
-    $expectedAllowedAudiences = @($ExpectedAllowedAudiences) | Sort-Object
-    if (($actualAllowedAudiences -join "|") -ne ($expectedAllowedAudiences -join "|")) {
-        $errors.Add("Unexpected allowed audiences: $($actualAllowedAudiences -join ', ')")
-    }
-
-    $redirectUris = @($appRegistration.web.redirectUris)
-    if ($redirectUris -notcontains $ExpectedCallbackUrl) {
-        $errors.Add("Expected callback URL $ExpectedCallbackUrl was not found in app registration redirect URIs: $($redirectUris -join ', ')")
-    }
-
-    if ($apiApp.properties.configuration.ingress.external -ne $false) {
-        $errors.Add("API app ingress is not internal-only.")
-    }
-    if ($apiApp.properties.configuration.ingress.targetPort -ne 8000) {
-        $errors.Add("Unexpected API target port: $($apiApp.properties.configuration.ingress.targetPort)")
-    }
-    $corsPolicy = $apiApp.properties.configuration.ingress.corsPolicy
-    $corsAllowedOrigins = @($corsPolicy.allowedOrigins) | Sort-Object
-    if (($corsAllowedOrigins -join "|") -ne $expectedAppOrigin) {
-        $errors.Add("Ingress CORS allowed origins do not match the expected app origin.")
-    }
-    if ($corsPolicy.allowCredentials -ne $true) {
-        $errors.Add("Ingress CORS allowCredentials is not enabled.")
-    }
-    $corsAllowedMethods = @($corsPolicy.allowedMethods) | Sort-Object
-    if (($corsAllowedMethods -join "|") -ne ((@("DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT") | Sort-Object) -join "|")) {
-        $errors.Add("Ingress CORS allowed methods do not match the expected browser contract.")
-    }
-    $corsAllowedHeaders = @($corsPolicy.allowedHeaders) | Sort-Object
-    if (($corsAllowedHeaders -join "|") -ne "*") {
-        $errors.Add("Ingress CORS allowed headers do not match the expected browser contract.")
-    }
-    if ($corsPolicy.maxAge -ne 600) {
-        $errors.Add("Ingress CORS maxAge is not 600.")
-    }
-    $workerIngress = $workerApp.properties.configuration.ingress
-    if ($null -ne $workerIngress -and $workerIngress.PSObject.Properties.Count -gt 0) {
-        $errors.Add("Worker app should not expose ingress.")
-    }
-
-    $secretNames = @($apiApp.properties.configuration.secrets | ForEach-Object { $_.name })
-    if ($secretNames -notcontains $EntraClientSecretName) {
-        $errors.Add("Missing API secret setting $EntraClientSecretName.")
-    }
-
-    if ($errors.Count -gt 0) {
-        throw ($errors -join [Environment]::NewLine)
-    }
-
-    Write-Host ">>> Phase 3 auth contract verified successfully"
-}
-
 Write-Host ">>> Checking Azure login context..."
 if (-not (Test-AzCommand { az account show --output none 2>$null })) {
     throw "Azure CLI is not logged in. Run: az login --use-device-code"
@@ -1183,11 +778,11 @@ if ($RolloutMode -in @("promote", "rollback")) {
 
         Write-Host ">>> Ensuring API app: $ApiAppName"
         if (-not (Test-ContainerAppExists -Name $ApiAppName)) {
-            $apiEnvVars = @(
-                "APP_ROLE=api",
-                "CORS_ORIGINS=https://$AppPublicHostname",
-                "REQUIRE_PLATFORM_AUTH=true"
-            )
+                $apiEnvVars = @(
+                    "APP_ROLE=api",
+                    "CORS_ORIGINS=https://$AppPublicHostname",
+                    "REQUIRE_EDGE_AUTH=true"
+                )
             $apiSecretArgs = @()
             if ($EdgeOriginSecret) {
                 $apiEnvVars += "EDGE_ORIGIN_SECRET=secretref:$EdgeOriginSecretName"
@@ -1283,12 +878,6 @@ if ($RolloutMode -in @("promote", "rollback")) {
         Ensure-TunnelConnectorContract
     }
 
-    if ($ConfigureEasyAuth) {
-        Assert-EasyAuthHostname
-        Configure-EasyAuth
-        Verify-Phase3Contract
-    }
-
     $CandidateRevision = Get-LatestRevisionName
     $StableRevision = Get-StableRevisionName -CandidateRevision $CandidateRevision
 }
@@ -1318,25 +907,12 @@ Write-Host "=========================================="
 Write-Host "ACA environment: $ContainerAppEnvironment"
 Write-Host "Default private domain: $defaultDomain"
 Write-Host "Private DNS zone: $PrivateDnsZone"
-if ($ConfigureEasyAuth) {
-    Write-Host "Easy Auth hostname: https://$ApiPublicHostname"
-    Write-Host "Entra app id: $EntraAppId"
-    Write-Host "Entra audience: $ApiAppIdUri"
-}
 Write-Host ""
-if ($ConfigureEasyAuth) {
-    Write-Host "Next validation steps:"
-    Write-Host "1. Run scripts/validate-aca-phase3-auth.ps1 with the same environment inputs."
-    Write-Host "2. Verify browser login reaches $ExpectedCallbackUrl."
-    Write-Host "3. Verify /.auth/me returns identity after login and /api/* returns 401 when unauthenticated."
-    Write-Host "4. Verify wrong-audience and staging tokens are rejected before promotion."
-    Write-Host "5. Run docs/runbooks/origin-bypass-verification.md and confirm no FastAPI log entry exists for direct-origin probes."
-} else {
-    Write-Host "Next Cloudflare steps:"
-    Write-Host "1. Create a remotely managed tunnel for this environment."
-    Write-Host "2. Add public hostnames app.<domain> and api.<domain> to the tunnel."
-    Write-Host "3. Point app.<domain> to the frontend private origin in ACA."
-    Write-Host "4. Point api.<domain> to the API private origin in ACA."
-    Write-Host "5. If Easy Auth depends on the public host, set the origin request host header to api.<domain>."
-    Write-Host "6. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
-}
+Write-Host "Next Cloudflare steps:"
+Write-Host "1. Create a remotely managed tunnel for this environment."
+Write-Host "2. Add public hostnames app.<domain> and api.<domain> to the tunnel."
+Write-Host "3. Point app.<domain> to the frontend private origin in ACA."
+Write-Host "4. Point api.<domain> to the API private origin in ACA."
+Write-Host "5. Keep WAF, rate limiting, cache bypass, and optional X-Edge-Secret injection on api.<domain>."
+Write-Host "6. Run scripts/validate-aca-phase3-auth.ps1 and docs/runbooks/origin-bypass-verification.md before promotion."
+Write-Host "7. Confirm direct-origin probes fail at the network layer and tunnel failover remains healthy."

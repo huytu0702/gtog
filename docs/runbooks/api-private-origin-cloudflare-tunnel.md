@@ -2,11 +2,11 @@
 
 ## Goal
 
-Publish `https://api.<domain>` through Cloudflare without leaving the ACA API origin publicly reachable on the Internet.
+Publish `https://api.<domain>` through Cloudflare without exposing the ACA API origin directly to the public Internet.
 
 Target state:
 
-- `api.<domain>` is a Cloudflare Tunnel public hostname
+- `api.<domain>` is served through Cloudflare Tunnel
 - API and worker run in a private ACA environment
 - API ingress is internal only
 - ACA public network access is disabled
@@ -22,77 +22,49 @@ Use one of:
 Recommended flow:
 
 1. Provision or reuse a Log Analytics workspace.
-2. Provision a VNet with:
-   - delegated ACA infrastructure subnet
-   - private endpoint subnet
+2. Provision a VNet with a delegated ACA infrastructure subnet and a private endpoint subnet.
 3. Create a workload-profile ACA environment with `internal-only` enabled.
 4. Disable public network access on the ACA environment.
 5. Create the ACA private endpoint and private DNS zone link.
-6. Deploy:
+6. Deploy or reconcile:
+   - `ca-gtog-frontend-{env}`
    - `ca-gtog-api-{env}`
    - `ca-gtog-worker-{env}`
    - `ca-gtog-tunnel-{env}`
-7. Configure backend-only Easy Auth on the API app using the same script path, not a separate deployment path.
 
-### Phase 3 inputs
+The provisioning scripts now reconcile these guarantees on every run:
 
-Phase 3 freezes the identity contract per environment:
-
-- one Entra app registration per environment
-- Easy Auth callback host fixed to `https://api.<domain>`
-- Microsoft callback path: `https://api.<domain>/.auth/login/aad/callback`
-- Microsoft `allowedAudiences` fixed to the environment-specific API App ID URI (`api://<backend-app-id>`)
-- staging and production must not share Entra audiences
-
-The provisioning scripts support both pre-created and script-created Entra registrations.
-
-### Phase 3 script flags and environment variables
-
-Use the provisioning script with:
-
-- `CONFIGURE_EASY_AUTH=true` / `-ConfigureEasyAuth`
-- `API_PUBLIC_HOSTNAME=api.<domain>` / `-ApiPublicHostname`
-- either:
-  - `ENTRA_APP_ID`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_SECRET`, `API_APP_ID_URI`, `ALLOWED_AUDIENCES`
-  - or `CREATE_ENTRA_APP=true` / `-CreateEntraApp` with `ENTRA_APP_DISPLAY_NAME`
-
-Optional but recommended:
-
-- `RESET_ENTRA_CLIENT_SECRET=true` / `-ResetEntraClientSecret` when rotating the Entra Easy Auth secret
-- `AAD_LOGIN_PARAMETERS_JSON` / `-AadLoginParametersJson` when you need to override the default Microsoft login parameter payload
-
-The scripts reconcile these platform guarantees on every run:
-
+- frontend ingress stays internal-only
 - API ingress stays internal-only
 - worker ingress stays disabled
-- Easy Auth stays enabled on the API app only
-- unauthenticated `api.<domain>/api/*` requests return `401`
-- the configured `allowedAudiences` exactly match the environment contract
+- tunnel connector keeps the expected `cloudflared tunnel --no-autoupdate run` contract
+- API runtime keeps `CORS_ORIGINS=https://app.<domain>` and `REQUIRE_EDGE_AUTH=true`
 
 ## Cloudflare Configuration
 
 1. Create a remotely managed tunnel for the environment.
 2. Store the tunnel token in Key Vault and pass it to the tunnel connector app.
-3. Add public hostname:
-   - `api.<domain>` -> the tunnel
-4. Point the tunnel service to the API private origin:
-   - internal ACA URL or private ACA environment FQDN
-5. If Easy Auth or cookie behavior depends on the public host, set the origin request host header to `api.<domain>`.
-6. Keep WAF, rate limits, and cache bypass rules on `api.<domain>`.
-7. If the backend secondary guard is enabled, inject `X-Edge-Secret` on the Cloudflare side.
+3. Add public hostnames:
+   - `app.<domain>`
+   - `api.<domain>`
+4. Point the tunnel routes to the ACA private origins.
+5. Keep WAF, rate limiting, and cache bypass rules on the public hosts.
+6. If the secondary backend guard is enabled, inject `X-Edge-Secret` on the Cloudflare side.
 
 ## Validation
 
-1. Run `scripts/validate-aca-phase3-auth.sh` or `.ps1` with the environment inputs, including `TUNNEL_APP_NAME`, to verify the API, worker, and tunnel connector contracts together. If the tunnel app uses a non-default secret reference name, also pass `TUNNEL_SECRET_REF_NAME`.
-2. From the public Internet, direct probes to the ACA API origin must fail at the network layer.
-3. `https://api.<domain>/.auth/me` must still work through Cloudflare.
-4. Browser login, logout, and token retrieval must remain on `api.<domain>`.
-5. CRUD, upload, indexing, query, and SSE flows must pass through the tunnel path.
-6. Stop one tunnel replica and confirm traffic still succeeds.
-7. Confirm logs include:
-   - `Cf-Ray`
-   - app `request_id`
-   - tunnel connector health and reconnect events
+1. Run `scripts/validate-aca-phase3-auth.sh` or `.ps1` with:
+   - `APP_PUBLIC_HOSTNAME`
+   - `API_PUBLIC_HOSTNAME`
+   - `API_APP_NAME`
+   - `WORKER_APP_NAME`
+   - `TUNNEL_APP_NAME`
+   - optional `PROBE_ORIGIN_URLS`
+2. Confirm `https://api.<domain>/health` succeeds through Cloudflare.
+3. Confirm direct-origin probes fail before reaching an HTTP handler.
+4. Confirm CRUD, upload, indexing, query, and SSE flows succeed through the public hosts.
+5. Stop one tunnel replica and confirm traffic still succeeds.
+6. Confirm logs include request correlation and tunnel reconnect evidence.
 
 ## Rotation and Break-Glass
 
@@ -103,4 +75,3 @@ The scripts reconcile these platform guarantees on every run:
    - tunnel route rollback
    - tunnel token rollback
    - ACA revision rollback
-5. Any temporary public-origin re-enable must be time-bounded, approved, and followed by a post-incident cleanup.

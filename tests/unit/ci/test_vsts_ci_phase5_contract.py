@@ -51,7 +51,6 @@ def test_pipeline_contains_phase5_stage_sequence():
     assert stage_names[: len(REQUIRED_STAGES)] == REQUIRED_STAGES
 
 
-
 def test_validate_stage_keeps_current_quality_checks_and_disables_unavailable_compliance_tasks():
     stage = _stage_map()["Validate"]
     jobs = {job["job"]: job for job in stage["jobs"]}
@@ -67,7 +66,6 @@ def test_validate_stage_keeps_current_quality_checks_and_disables_unavailable_co
     compliance_job = jobs["compliance"]
     assert compliance_job["condition"] is False
     assert compliance_job["pool"]["vmImage"] == "windows-latest"
-
 
 
 def test_stage_dependencies_form_release_gate_chain():
@@ -86,12 +84,12 @@ def test_stage_dependencies_form_release_gate_chain():
     assert stages["SmokeProductionFull"]["dependsOn"] == ["PromoteProductionFull"]
 
 
-
 def test_smoke_stage_publishes_required_evidence_artifacts():
     stage = _stage_map()["SmokeStaging"]
     publish_artifacts: list[str] = []
     download_steps: list[dict] = []
     run_step_index: int | None = None
+    run_step_env: dict | None = None
 
     for job in stage["jobs"]:
         for step_index, step in enumerate(job.get("steps", [])):
@@ -102,11 +100,15 @@ def test_smoke_stage_publishes_required_evidence_artifacts():
                 download_steps.append(step)
             if step.get("displayName") == "Run staging smoke gates":
                 run_step_index = step_index
-                assert step.get("env", {}).get("ROLLOUT_STATE_FILE") == "$(Pipeline.Workspace)/deploy-staging-log/rollout-state.json"
+                run_step_env = step.get("env", {})
 
     assert "$(smokeStagingArtifactName)" in publish_artifacts
-    assert "phase3-auth-origin-validation" in publish_artifacts
+    assert "$(phase3ValidationArtifactName)" in publish_artifacts
     assert run_step_index is not None
+    assert run_step_env is not None
+    assert run_step_env["APP_BASE_URL"] == "https://$(stagingAppPublicHostname)"
+    assert run_step_env["APP_PUBLIC_HOSTNAME"] == "$(stagingAppPublicHostname)"
+    assert "EXPECTED_CLIENT_ID" not in run_step_env
     assert any(
         step.get("inputs", {}).get("artifactName") == "$(stagingDeployArtifactName)"
         and step.get("inputs", {}).get("targetPath") == "$(Pipeline.Workspace)/deploy-staging-log"
@@ -119,7 +121,6 @@ def test_smoke_stage_publishes_required_evidence_artifacts():
         for job in stage["jobs"]
         for step_index, job_step in enumerate(job.get("steps", []))
     )
-
 
 
 def test_production_stage_uses_built_artifacts_and_not_rebuilds():

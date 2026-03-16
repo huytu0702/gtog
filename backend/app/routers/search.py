@@ -436,7 +436,7 @@ async def agent_search_stream_get(
     """
     Perform an agent-routed search with SSE streaming (EventSource compatible).
 
-    Auth is expected to come from Easy Auth cookies at the platform layer.
+    Streaming requests are expected to reach this route through the configured edge.
     """
     request = AgentSearchRequest(
         query=query,

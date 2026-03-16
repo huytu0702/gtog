@@ -71,7 +71,6 @@ RATE_LIMIT_REQUESTS_PER_MINUTE=120
 Notes:
 - `EDGE_ORIGIN_SECRET` is a secondary backend guard for `X-Edge-Secret`, not a substitute for a private API origin.
 - Production deployment should route `api.<domain>` through Cloudflare Tunnel to a private ACA API origin.
-- When `EDGE_ORIGIN_SECRET` is configured, backend also requires `X-MS-CLIENT-PRINCIPAL` on `/api/*`.
 - Keep `EDGE_ORIGIN_SECRET` empty for local development and tests.
 - Backward compatibility: the backend still accepts legacy `AFD_ORIGIN_SECRET` as an env alias during migration.
 - The tunnel connector uses its own `CLOUDFLARE_TUNNEL_TOKEN` secret outside the backend runtime.

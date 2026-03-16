@@ -1,35 +1,13 @@
 """Pytest configuration for backend tests."""
 
-import base64
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 
 @pytest.fixture
-def valid_easy_auth_principal() -> str:
-    principal = {
-        "auth_typ": "aad",
-        "name_typ": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
-        "role_typ": "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
-        "claims": [
-            {
-                "typ": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-                "val": "user-123",
-            },
-            {
-                "typ": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
-                "val": "test.user@example.com",
-            },
-        ],
-    }
-    return base64.b64encode(json.dumps(principal).encode("utf-8")).decode("ascii")
-
-
-@pytest.fixture
-def valid_easy_auth_headers(valid_easy_auth_principal: str) -> dict[str, str]:
-    return {"X-MS-CLIENT-PRINCIPAL": valid_easy_auth_principal}
+def valid_edge_secret_headers() -> dict[str, str]:
+    return {"X-Edge-Secret": "secret-123"}
 
 
 @pytest.fixture(autouse=True)

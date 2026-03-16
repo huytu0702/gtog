@@ -1,6 +1,5 @@
-"""Tests for API guards, fallback rate limit, and readiness endpoint."""
+"""Tests for edge-secret guard, fallback rate limit, and readiness endpoint."""
 
-import base64
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +12,9 @@ from backend.app.main import app
 
 @pytest.mark.asyncio
 async def test_api_rejects_missing_edge_secret_when_configured():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -28,8 +29,10 @@ async def test_api_rejects_missing_edge_secret_when_configured():
 
 
 @pytest.mark.asyncio
-async def test_api_rejects_missing_principal_when_edge_secret_matches():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+async def test_api_rejects_wrong_edge_secret_when_configured():
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -37,188 +40,93 @@ async def test_api_rejects_missing_principal_when_edge_secret_matches():
         ) as client:
             response = await client.post(
                 "/api/collections/test-collection/search/web",
-                headers={"X-Edge-Secret": "secret-123"},
+                headers={"X-Edge-Secret": "wrong-secret"},
                 json={"query": "hello", "stream": False},
             )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_api_rejects_missing_principal_when_platform_auth_required():
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                response = await client.post(
-                    "/api/collections/test-collection/search/web",
-                    json={"query": "hello", "stream": False},
-                )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_api_returns_cors_headers_on_401_when_platform_auth_required():
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                response = await client.post(
-                    "/api/collections/test-collection/search/web",
-                    headers={"Origin": main.allowed_origins[0]},
-                    json={"query": "hello", "stream": False},
-                )
-
-    assert response.status_code == 401
-    assert response.headers["access-control-allow-origin"] == main.allowed_origins[0]
-
-
-@pytest.mark.asyncio
-async def test_api_rejects_malformed_base64_principal_when_platform_auth_required():
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                response = await client.post(
-                    "/api/collections/test-collection/search/web",
-                    headers={"X-MS-CLIENT-PRINCIPAL": "%%%not-base64%%%"},
-                    json={"query": "hello", "stream": False},
-                )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_api_rejects_non_json_principal_when_platform_auth_required():
-    non_json_principal = base64.b64encode(b"not-json").decode("ascii")
-
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                response = await client.post(
-                    "/api/collections/test-collection/search/web",
-                    headers={"X-MS-CLIENT-PRINCIPAL": non_json_principal},
-                    json={"query": "hello", "stream": False},
-                )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_api_rejects_structurally_invalid_principal_when_platform_auth_required():
-    invalid_principal = base64.b64encode(
-        json.dumps({"auth_typ": "aad", "claims": [{"typ": "name"}]}).encode("utf-8")
-    ).decode("ascii")
-
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                response = await client.post(
-                    "/api/collections/test-collection/search/web",
-                    headers={"X-MS-CLIENT-PRINCIPAL": invalid_principal},
-                    json={"query": "hello", "stream": False},
-                )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_api_allows_request_with_valid_principal_when_platform_auth_required(
-    valid_easy_auth_headers,
-):
-    mock_result = MagicMock()
-    mock_result.response = "ok"
-    mock_result.sources = []
-
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
-            with patch("backend.app.routers.search.web_search_service") as mock_web:
-                mock_web.search = AsyncMock(return_value=mock_result)
-                transport = httpx.ASGITransport(app=app)
-                async with httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                ) as client:
-                    response = await client.post(
-                        "/api/collections/test-collection/search/web",
-                        headers=valid_easy_auth_headers,
-                        json={"query": "hello", "stream": False},
-                    )
-
-    assert response.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_api_allows_request_when_platform_auth_disabled():
-    mock_result = MagicMock()
-    mock_result.response = "ok"
-    mock_result.sources = []
-
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", False):
-            with patch("backend.app.routers.search.web_search_service") as mock_web:
-                mock_web.search = AsyncMock(return_value=mock_result)
-                transport = httpx.ASGITransport(app=app)
-                async with httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                ) as client:
-                    response = await client.post(
-                        "/api/collections/test-collection/search/web",
-                        json={"query": "hello", "stream": False},
-                    )
-
-    assert response.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_api_rejects_wrong_edge_secret_even_with_principal_when_platform_auth_required(
-    valid_easy_auth_headers,
-):
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
-        with patch.object(main.settings, "require_platform_auth", True):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                response = await client.post(
-                    "/api/collections/test-collection/search/web",
-                    headers={
-                        **valid_easy_auth_headers,
-                        "X-Edge-Secret": "wrong-secret",
-                    },
-                    json={"query": "hello", "stream": False},
-                )
 
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_api_allows_request_when_guards_present(valid_easy_auth_headers):
+async def test_api_returns_cors_headers_on_403_for_allowed_origin():
+    allowed_origin = main.allowed_origins[0]
+
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            response = await client.post(
+                "/api/collections/test-collection/search/web",
+                headers={"Origin": allowed_origin},
+                json={"query": "hello", "stream": False},
+            )
+
+    assert response.status_code == 403
+    assert response.headers["access-control-allow-origin"] == allowed_origin
+
+
+@pytest.mark.asyncio
+async def test_api_does_not_return_cors_headers_for_unknown_origin_on_403():
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            response = await client.post(
+                "/api/collections/test-collection/search/web",
+                headers={"Origin": "https://evil.example.com"},
+                json={"query": "hello", "stream": False},
+            )
+
+    assert response.status_code == 403
+    assert "access-control-allow-origin" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_api_allows_request_with_valid_edge_secret_when_configured(
+    valid_edge_secret_headers,
+):
     mock_result = MagicMock()
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
+        with patch("backend.app.routers.search.web_search_service") as mock_web:
+            mock_web.search = AsyncMock(return_value=mock_result)
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/web",
+                    headers=valid_edge_secret_headers,
+                    json={"query": "hello", "stream": False},
+                )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_ignores_unrelated_header_when_edge_secret_matches(
+    valid_edge_secret_headers,
+):
+    mock_result = MagicMock()
+    mock_result.response = "ok"
+    mock_result.sources = []
+
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
         with patch("backend.app.routers.search.web_search_service") as mock_web:
             mock_web.search = AsyncMock(return_value=mock_result)
             transport = httpx.ASGITransport(app=app)
@@ -229,8 +137,8 @@ async def test_api_allows_request_when_guards_present(valid_easy_auth_headers):
                 response = await client.post(
                     "/api/collections/test-collection/search/web",
                     headers={
-                        **valid_easy_auth_headers,
-                        "X-Edge-Secret": "secret-123",
+                        **valid_edge_secret_headers,
+                        "X-Unrelated-Header": "ignored",
                     },
                     json={"query": "hello", "stream": False},
                 )
@@ -239,9 +147,36 @@ async def test_api_allows_request_when_guards_present(valid_easy_auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_api_does_not_return_cors_headers_for_unknown_origin_on_401():
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "require_platform_auth", True):
+async def test_api_allows_request_without_edge_secret_for_local_origins_only():
+    mock_result = MagicMock()
+    mock_result.response = "ok"
+    mock_result.sources = []
+
+    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
+        main.settings, "require_edge_auth", False
+    ):
+        with patch.object(main, "allowed_origins", ["http://localhost:3000"]):
+            with patch("backend.app.routers.search.web_search_service") as mock_web:
+                mock_web.search = AsyncMock(return_value=mock_result)
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.post(
+                        "/api/collections/test-collection/search/web",
+                        json={"query": "hello", "stream": False},
+                    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_returns_503_without_edge_secret_for_non_local_origins():
+    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
+        main.settings, "require_edge_auth", False
+    ):
+        with patch.object(main, "allowed_origins", ["https://app.example.com"]):
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
@@ -249,56 +184,68 @@ async def test_api_does_not_return_cors_headers_for_unknown_origin_on_401():
             ) as client:
                 response = await client.post(
                     "/api/collections/test-collection/search/web",
-                    headers={"Origin": "https://evil.example.com"},
+                    headers={"Origin": "https://app.example.com"},
                     json={"query": "hello", "stream": False},
                 )
 
-    assert response.status_code == 401
-    assert "access-control-allow-origin" not in response.headers
+    assert response.status_code == 503
+    assert response.headers["access-control-allow-origin"] == "https://app.example.com"
 
 
 @pytest.mark.asyncio
-async def test_api_returns_cors_headers_on_403_for_allowed_origin():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(
-            transport=transport,
-            base_url="http://testserver",
-        ) as client:
-            response = await client.post(
-                "/api/collections/test-collection/search/web",
-                headers={"Origin": main.allowed_origins[0]},
-                json={"query": "hello", "stream": False},
-            )
+async def test_api_allows_request_when_edge_secret_has_surrounding_whitespace(
+    valid_edge_secret_headers,
+):
+    mock_result = MagicMock()
+    mock_result.response = "ok"
+    mock_result.sources = []
 
-    assert response.status_code == 403
-    assert response.headers["access-control-allow-origin"] == main.allowed_origins[0]
+    with patch.object(main.settings, "edge_origin_secret", "  secret-123  "), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
+        with patch("backend.app.routers.search.web_search_service") as mock_web:
+            mock_web.search = AsyncMock(return_value=mock_result)
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/web",
+                    headers=valid_edge_secret_headers,
+                    json={"query": "hello", "stream": False},
+                )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_fallback_rate_limiter_returns_429():
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "rate_limit_enabled", True):
-            with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
-                with patch("backend.app.routers.search.web_search_service") as mock_web:
-                    mock_result = MagicMock()
-                    mock_result.response = "ok"
-                    mock_result.sources = []
-                    mock_web.search = AsyncMock(return_value=mock_result)
+async def test_fallback_rate_limiter_returns_429_for_local_origins_without_secret():
+    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
+        main.settings, "require_edge_auth", False
+    ):
+        with patch.object(main, "allowed_origins", ["http://localhost:3000"]):
+            with patch.object(main.settings, "rate_limit_enabled", True):
+                with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
+                    with patch("backend.app.routers.search.web_search_service") as mock_web:
+                        mock_result = MagicMock()
+                        mock_result.response = "ok"
+                        mock_result.sources = []
+                        mock_web.search = AsyncMock(return_value=mock_result)
 
-                    transport = httpx.ASGITransport(app=app)
-                    async with httpx.AsyncClient(
-                        transport=transport,
-                        base_url="http://testserver",
-                    ) as client:
-                        first = await client.post(
-                            "/api/collections/test-collection/search/web",
-                            json={"query": "hello", "stream": False},
-                        )
-                        second = await client.post(
-                            "/api/collections/test-collection/search/web",
-                            json={"query": "hello", "stream": False},
-                        )
+                        transport = httpx.ASGITransport(app=app)
+                        async with httpx.AsyncClient(
+                            transport=transport,
+                            base_url="http://testserver",
+                        ) as client:
+                            first = await client.post(
+                                "/api/collections/test-collection/search/web",
+                                json={"query": "hello", "stream": False},
+                            )
+                            second = await client.post(
+                                "/api/collections/test-collection/search/web",
+                                json={"query": "hello", "stream": False},
+                            )
 
     assert first.status_code == 200
     assert second.status_code == 429
@@ -306,33 +253,38 @@ async def test_fallback_rate_limiter_returns_429():
 
 @pytest.mark.asyncio
 async def test_rate_limiter_returns_cors_headers_on_429_for_allowed_origin():
-    with patch.object(main.settings, "edge_origin_secret", ""):
-        with patch.object(main.settings, "rate_limit_enabled", True):
-            with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
-                with patch("backend.app.routers.search.web_search_service") as mock_web:
-                    mock_result = MagicMock()
-                    mock_result.response = "ok"
-                    mock_result.sources = []
-                    mock_web.search = AsyncMock(return_value=mock_result)
+    allowed_origin = "http://localhost:3000"
 
-                    transport = httpx.ASGITransport(app=app)
-                    async with httpx.AsyncClient(
-                        transport=transport,
-                        base_url="http://testserver",
-                    ) as client:
-                        await client.post(
-                            "/api/collections/test-collection/search/web",
-                            headers={"Origin": main.allowed_origins[0]},
-                            json={"query": "hello", "stream": False},
-                        )
-                        response = await client.post(
-                            "/api/collections/test-collection/search/web",
-                            headers={"Origin": main.allowed_origins[0]},
-                            json={"query": "hello", "stream": False},
-                        )
+    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
+        main.settings, "require_edge_auth", False
+    ):
+        with patch.object(main, "allowed_origins", [allowed_origin]):
+            with patch.object(main.settings, "rate_limit_enabled", True):
+                with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
+                    with patch("backend.app.routers.search.web_search_service") as mock_web:
+                        mock_result = MagicMock()
+                        mock_result.response = "ok"
+                        mock_result.sources = []
+                        mock_web.search = AsyncMock(return_value=mock_result)
+
+                        transport = httpx.ASGITransport(app=app)
+                        async with httpx.AsyncClient(
+                            transport=transport,
+                            base_url="http://testserver",
+                        ) as client:
+                            await client.post(
+                                "/api/collections/test-collection/search/web",
+                                headers={"Origin": allowed_origin},
+                                json={"query": "hello", "stream": False},
+                            )
+                            response = await client.post(
+                                "/api/collections/test-collection/search/web",
+                                headers={"Origin": allowed_origin},
+                                json={"query": "hello", "stream": False},
+                            )
 
     assert response.status_code == 429
-    assert response.headers["access-control-allow-origin"] == main.allowed_origins[0]
+    assert response.headers["access-control-allow-origin"] == allowed_origin
 
 
 @pytest.mark.asyncio
@@ -426,7 +378,9 @@ async def test_cors_preflight_allows_configured_origin():
 async def test_cors_preflight_allows_configured_origin_when_edge_secret_enabled():
     allowed_origin = main.allowed_origins[0]
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -448,7 +402,9 @@ async def test_cors_preflight_allows_configured_origin_when_edge_secret_enabled(
 async def test_cors_preflight_does_not_bypass_api_guards():
     allowed_origin = main.allowed_origins[0]
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -473,7 +429,9 @@ async def test_cors_preflight_does_not_bypass_api_guards():
 
 @pytest.mark.asyncio
 async def test_public_health_endpoint_does_not_open_api_access():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"):
+    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
+        main.settings, "require_edge_auth", True
+    ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -517,7 +475,9 @@ async def test_request_logging_includes_cloudflare_headers(caplog):
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", ""):
+    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
+        main.settings, "require_edge_auth", False
+    ):
         with patch.object(main.settings, "rate_limit_enabled", False):
             with patch("backend.app.routers.search.web_search_service") as mock_web:
                 mock_web.search = AsyncMock(return_value=mock_result)
@@ -550,5 +510,5 @@ async def test_request_logging_includes_cloudflare_headers(caplog):
     assert payload is not None
     assert payload["cf_ray"] == "abc123"
     assert payload["cf_connecting_ip"] == "203.0.113.10"
-    assert payload["client_ip"] == "203.0.113.10"
+    assert payload["client_ip"] == "127.0.0.1"
     assert payload["request_id"]

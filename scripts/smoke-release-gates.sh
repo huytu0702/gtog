@@ -11,15 +11,9 @@ SUBSCRIPTION="${SUBSCRIPTION:-}"
 API_APP_NAME="${API_APP_NAME:-}"
 WORKER_APP_NAME="${WORKER_APP_NAME:-}"
 TUNNEL_APP_NAME="${TUNNEL_APP_NAME:-}"
-EXPECTED_CLIENT_ID="${EXPECTED_CLIENT_ID:-}"
-EXPECTED_ISSUER_URL="${EXPECTED_ISSUER_URL:-}"
-EXPECTED_ALLOWED_AUDIENCES="${EXPECTED_ALLOWED_AUDIENCES:-}"
-EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS="${EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS:-https://${APP_PUBLIC_HOSTNAME}}"
-WRONG_AUDIENCE_TOKEN="${WRONG_AUDIENCE_TOKEN:-}"
-PRODUCTION_REJECTION_TOKEN="${PRODUCTION_REJECTION_TOKEN:-}"
 PROBE_ORIGIN_URLS="${PROBE_ORIGIN_URLS:-}"
 SMOKE_ARTIFACT_NAME="${SMOKE_ARTIFACT_NAME:-smoke-staging-report}"
-PHASE3_VALIDATION_ARTIFACT_NAME="${PHASE3_VALIDATION_ARTIFACT_NAME:-phase3-auth-origin-validation}"
+PHASE3_VALIDATION_ARTIFACT_NAME="${PHASE3_VALIDATION_ARTIFACT_NAME:-edge-origin-validation}"
 SMOKE_PHASE_LABEL="${SMOKE_PHASE_LABEL:-staging}"
 ROLLOUT_STATE_FILE="${ROLLOUT_STATE_FILE:-}"
 EVIDENCE_DIR="${EVIDENCE_DIR:-$(pwd)/artifacts/${SMOKE_ARTIFACT_NAME}}"
@@ -59,26 +53,6 @@ expect_status() {
     exit 1
   fi
   record_result "$name" "$status"
-}
-
-api_json() {
-  local method="$1"
-  local path="$2"
-  local body="${3:-}"
-  local output_file="${4:-}"
-  if [[ -n "$body" ]]; then
-    curl --silent --show-error --fail \
-      -X "$method" \
-      -H "Authorization: Bearer ${AUTH_BEARER_TOKEN}" \
-      -H 'Content-Type: application/json' \
-      -d "$body" \
-      "${API_BASE_URL}${path}"
-  else
-    curl --silent --show-error --fail \
-      -X "$method" \
-      -H "Authorization: Bearer ${AUTH_BEARER_TOKEN}" \
-      "${API_BASE_URL}${path}"
-  fi > "$output_file"
 }
 
 api_status() {
@@ -125,11 +99,6 @@ require_var SUBSCRIPTION
 require_var API_APP_NAME
 require_var WORKER_APP_NAME
 require_var TUNNEL_APP_NAME
-require_var EXPECTED_CLIENT_ID
-require_var EXPECTED_ISSUER_URL
-require_var EXPECTED_ALLOWED_AUDIENCES
-require_var WRONG_AUDIENCE_TOKEN
-require_var PRODUCTION_REJECTION_TOKEN
 require_var PROBE_ORIGIN_URLS
 
 printf 'smoke document for %s\n' "$COLLECTION_ID" > "$UPLOAD_FILE"
@@ -137,23 +106,6 @@ printf 'smoke document for %s\n' "$COLLECTION_ID" > "$UPLOAD_FILE"
 expect_status "app_health" "200" "${APP_BASE_URL}/api/health"
 expect_status "health" "200" "${API_BASE_URL}/health"
 expect_status "readiness" "200" "${API_BASE_URL}/health/readiness"
-
-auth_me_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "${API_BASE_URL}/.auth/me")"
-case "$auth_me_status" in
-  200|401|403) ;;
-  *)
-    echo "/.auth/me returned unexpected status $auth_me_status" >&2
-    exit 1
-    ;;
-esac
-record_result "auth_me" "$auth_me_status"
-
-collections_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "${API_BASE_URL}/api/collections")"
-if [[ "$collections_status" != "401" ]]; then
-  echo "unauthenticated /api/collections expected 401, got $collections_status" >&2
-  exit 1
-fi
-record_result "unauthenticated_collections" "$collections_status"
 
 create_status="$(api_status POST "/api/collections" "201" "{\"name\":\"${COLLECTION_ID}\",\"description\":\"Phase 5 smoke collection\"}" "$EVIDENCE_DIR/create-collection.json")"
 record_result "create_collection" "$create_status"
@@ -224,14 +176,8 @@ SUBSCRIPTION="$SUBSCRIPTION" \
 API_APP_NAME="$API_APP_NAME" \
 WORKER_APP_NAME="$WORKER_APP_NAME" \
 TUNNEL_APP_NAME="$TUNNEL_APP_NAME" \
+APP_PUBLIC_HOSTNAME="$APP_PUBLIC_HOSTNAME" \
 API_PUBLIC_HOSTNAME="$API_PUBLIC_HOSTNAME" \
-EXPECTED_CLIENT_ID="$EXPECTED_CLIENT_ID" \
-EXPECTED_ISSUER_URL="$EXPECTED_ISSUER_URL" \
-EXPECTED_ALLOWED_AUDIENCES="$EXPECTED_ALLOWED_AUDIENCES" \
-EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS" \
-TEST_ACCESS_TOKEN="$AUTH_BEARER_TOKEN" \
-WRONG_AUDIENCE_TOKEN="$WRONG_AUDIENCE_TOKEN" \
-PRODUCTION_REJECTION_TOKEN="$PRODUCTION_REJECTION_TOKEN" \
 PROBE_ORIGIN_URLS="$PROBE_ORIGIN_URLS" \
 TUNNEL_SECRET_REF_NAME="$TUNNEL_SECRET_REF_NAME" \
 bash "$(dirname "$0")/validate-aca-phase3-auth.sh" > "$PHASE3_OUTPUT_FILE" 2>&1

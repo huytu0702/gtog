@@ -9,15 +9,9 @@ param(
     [string]$ApiAppName = "",
     [string]$WorkerAppName = "",
     [string]$TunnelAppName = "",
-    [string]$ExpectedClientId = "",
-    [string]$ExpectedIssuerUrl = "",
-    [string]$ExpectedAllowedAudiences = "",
-    [string]$ExpectedAllowedExternalRedirectUrls = "",
-    [string]$WrongAudienceToken = "",
-    [string]$ProductionRejectionToken = "",
     [string]$ProbeOriginUrls = "",
     [string]$SmokeArtifactName = "smoke-staging-report",
-    [string]$Phase3ValidationArtifactName = "phase3-auth-origin-validation",
+    [string]$Phase3ValidationArtifactName = "edge-origin-validation",
     [string]$SmokePhaseLabel = "staging",
     [string]$RolloutStateFile = "",
     [string]$EvidenceDir = "",
@@ -33,9 +27,6 @@ if (-not $EvidenceDir) {
 }
 if (-not $CollectionId) {
     $CollectionId = "smoke-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-}
-if (-not $ExpectedAllowedExternalRedirectUrls) {
-    $ExpectedAllowedExternalRedirectUrls = "https://$AppPublicHostname"
 }
 
 $phase3ArtifactName = $Phase3ValidationArtifactName
@@ -114,11 +105,6 @@ Require-Value -Name "Subscription" -Value $Subscription
 Require-Value -Name "ApiAppName" -Value $ApiAppName
 Require-Value -Name "WorkerAppName" -Value $WorkerAppName
 Require-Value -Name "TunnelAppName" -Value $TunnelAppName
-Require-Value -Name "ExpectedClientId" -Value $ExpectedClientId
-Require-Value -Name "ExpectedIssuerUrl" -Value $ExpectedIssuerUrl
-Require-Value -Name "ExpectedAllowedAudiences" -Value $ExpectedAllowedAudiences
-Require-Value -Name "WrongAudienceToken" -Value $WrongAudienceToken
-Require-Value -Name "ProductionRejectionToken" -Value $ProductionRejectionToken
 Require-Value -Name "ProbeOriginUrls" -Value $ProbeOriginUrls
 
 $appHealthStatus = Invoke-StatusCheck -Url "$AppBaseUrl/api/health"
@@ -132,14 +118,6 @@ Add-Result -Name "health" -Status "$healthStatus"
 $readinessStatus = Invoke-StatusCheck -Url "$ApiBaseUrl/health/readiness"
 if ($readinessStatus -ne 200) { throw "readiness expected 200, got $readinessStatus" }
 Add-Result -Name "readiness" -Status "$readinessStatus"
-
-$authMeStatus = Invoke-StatusCheck -Url "$ApiBaseUrl/.auth/me"
-if ($authMeStatus -notin @(200, 401, 403)) { throw "/.auth/me returned unexpected status $authMeStatus" }
-Add-Result -Name "auth_me" -Status "$authMeStatus"
-
-$unauthStatus = Invoke-StatusCheck -Url "$ApiBaseUrl/api/collections"
-if ($unauthStatus -ne 401) { throw "Expected unauthenticated /api/collections to return 401, got $unauthStatus" }
-Add-Result -Name "unauthenticated_collections" -Status "$unauthStatus"
 
 $createBody = @{ name = $CollectionId; description = "Phase 5 smoke collection" } | ConvertTo-Json -Compress
 $createResponse = Invoke-JsonRequest -Method Post -Url "$ApiBaseUrl/api/collections" -Body $createBody -OutFile (Join-Path $EvidenceDir "create-collection.json")
@@ -205,14 +183,8 @@ Add-Result -Name "sse" -Status "$([int]$sseResponse.StatusCode)"
     -WorkerAppName $WorkerAppName `
     -TunnelAppName $TunnelAppName `
     -TunnelSecretRefName $TunnelSecretRefName `
+    -AppPublicHostname $AppPublicHostname `
     -ApiPublicHostname $ApiPublicHostname `
-    -ExpectedClientId $ExpectedClientId `
-    -ExpectedIssuerUrl $ExpectedIssuerUrl `
-    -ExpectedAllowedAudiences $ExpectedAllowedAudiences `
-    -ExpectedAllowedExternalRedirectUrls $ExpectedAllowedExternalRedirectUrls `
-    -TestAccessToken $AuthBearerToken `
-    -WrongAudienceToken $WrongAudienceToken `
-    -ProductionRejectionToken $ProductionRejectionToken `
     -ProbeOriginUrls $ProbeOriginUrls *> $phase3OutputFile
 
 $payload = [ordered]@{

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
+import hmac
 import json
 import logging
 from collections import defaultdict, deque
@@ -11,6 +10,7 @@ from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
 from typing import Deque
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -87,7 +87,13 @@ def _parse_cors_origins(raw_origins: str) -> list[str]:
     return origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
-def _client_ip(request: Request) -> str:
+def _connection_ip(request: Request) -> str:
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _trusted_client_ip(request: Request) -> str:
     cf_connecting_ip = request.headers.get("cf-connecting-ip")
     if cf_connecting_ip:
         return cf_connecting_ip.strip()
@@ -96,48 +102,26 @@ def _client_ip(request: Request) -> str:
         first = forwarded_for.split(",")[0].strip()
         if first:
             return first
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    return _connection_ip(request)
 
 
-def _has_valid_easy_auth_principal(request: Request) -> bool:
-    encoded_principal = request.headers.get("x-ms-client-principal")
-    if not encoded_principal:
-        return False
+def _is_local_origin(origin: str) -> bool:
+    hostname = urlparse(origin).hostname
+    return hostname in {"localhost", "127.0.0.1"}
 
-    try:
-        decoded_principal = base64.b64decode(encoded_principal, validate=True)
-        principal = json.loads(decoded_principal.decode("utf-8"))
-    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return False
 
-    if not isinstance(principal, dict):
-        return False
+def _auth_configuration_error() -> str | None:
+    if settings.require_edge_auth:
+        if not settings.edge_origin_secret.strip():
+            return "EDGE_ORIGIN_SECRET is required when REQUIRE_EDGE_AUTH=true."
+        return None
 
-    auth_type = principal.get("auth_typ")
-    claims = principal.get("claims")
-    if not isinstance(auth_type, str) or not auth_type.strip():
-        return False
-    if not isinstance(claims, list) or not claims:
-        return False
+    if not allowed_origins or any(not _is_local_origin(origin) for origin in allowed_origins):
+        return (
+            "REQUIRE_EDGE_AUTH=false is only supported with explicit localhost CORS origins."
+        )
 
-    for field in ("name_typ", "role_typ"):
-        value = principal.get(field)
-        if value is not None and not isinstance(value, str):
-            return False
-
-    for claim in claims:
-        if not isinstance(claim, dict):
-            return False
-        claim_type = claim.get("typ")
-        claim_value = claim.get("val")
-        if not isinstance(claim_type, str) or not claim_type.strip():
-            return False
-        if not isinstance(claim_value, str) or not claim_value.strip():
-            return False
-
-    return True
+    return None
 
 
 def _apply_cors_headers(request: Request, response: Response) -> None:
@@ -246,6 +230,10 @@ async def lifespan(app: FastAPI):
         settings.collections_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Storage directory: {settings.collections_dir}")
 
+    auth_configuration_error = _auth_configuration_error()
+    if auth_configuration_error:
+        raise RuntimeError(auth_configuration_error)
+
     yield
 
     logger.info("Shutting down GraphRAG FastAPI backend...")
@@ -277,7 +265,7 @@ async def security_and_logging_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or uuid4().hex
     cf_ray = request.headers.get("cf-ray")
     cf_connecting_ip = request.headers.get("cf-connecting-ip")
-    client_ip = _client_ip(request)
+    client_ip = _connection_ip(request)
     path = request.url.path
     method = request.method
     started_at = monotonic()
@@ -290,7 +278,24 @@ async def security_and_logging_middleware(request: Request, call_next):
 
     try:
         if path.startswith("/api/") and not is_cors_preflight:
-            if settings.rate_limit_enabled:
+            auth_configuration_error = _auth_configuration_error()
+            if auth_configuration_error:
+                response = JSONResponse(
+                    status_code=503,
+                    content={"detail": "Service unavailable"},
+                )
+            elif settings.require_edge_auth:
+                expected_secret = settings.edge_origin_secret.strip()
+                provided_secret = request.headers.get("x-edge-secret", "").strip()
+                if not hmac.compare_digest(provided_secret, expected_secret):
+                    response = JSONResponse(
+                        status_code=403,
+                        content={"detail": "Forbidden"},
+                    )
+                else:
+                    client_ip = _trusted_client_ip(request)
+
+            if response is None and settings.rate_limit_enabled:
                 is_allowed, retry_after = _rate_limiter.allow(client_ip)
                 if not is_allowed:
                     response = JSONResponse(
@@ -298,22 +303,6 @@ async def security_and_logging_middleware(request: Request, call_next):
                         content={"detail": "Rate limit exceeded"},
                     )
                     response.headers["Retry-After"] = str(retry_after)
-
-            if response is None:
-                expected_secret = settings.edge_origin_secret.strip()
-                provided_secret = request.headers.get("x-edge-secret", "")
-                if expected_secret and provided_secret != expected_secret:
-                    response = JSONResponse(
-                        status_code=403,
-                        content={"detail": "Forbidden"},
-                    )
-                elif (
-                    expected_secret or settings.require_platform_auth
-                ) and not _has_valid_easy_auth_principal(request):
-                    response = JSONResponse(
-                        status_code=401,
-                        content={"detail": "Unauthorized"},
-                    )
 
         if response is None:
             response = await call_next(request)

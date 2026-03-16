@@ -4,133 +4,47 @@
 
 Prove that the ACA API origin is not publicly reachable and that `api.<domain>` is served only through Cloudflare Tunnel.
 
-## Scope
-
-This runbook covers:
-- public probe procedure
-- script-assisted validation for Phase 3 private-origin checks
-- expected failure modes
-- evidence capture format
-- pass/fail criteria
-- recommended validation cadence
-
 ## Verification Goal
 
-The production claim is not merely that the API requires auth or a secret header. The stronger claim is that the ACA API origin itself is not publicly reachable from the internet.
-
-## Test Targets
-
-Probe any known or candidate direct-origin paths that should not be publicly reachable, including:
-- ACA API default endpoints if known
-- direct ACA ingress endpoints if known
-- any previously used public API hostname or origin path
-
-Do not use normal `api.<domain>` traffic as the proof of origin isolation. That hostname is expected to work through Cloudflare Tunnel.
+The production claim is stronger than “the backend rejects unauthorized requests.” The claim is that the ACA API origin itself is not reachable from the public Internet outside the Cloudflare path.
 
 ## Public Probe Procedure
 
-### 1. Confirm normal public path still works
-As a control, verify that the expected public path works:
-- `https://api.<domain>/health`
-- `https://api.<domain>/.auth/me`
+1. Confirm the intended public path still works:
+   - `https://api.<domain>/health`
+   - `https://api.<domain>/health/readiness`
+2. Run `scripts/validate-aca-phase3-auth.sh` or `.ps1` first to confirm the private-origin contract and optional direct-origin probes.
+3. From a public network path, attempt to reach known ACA origin endpoints directly.
+4. Record whether the probe fails due to DNS failure, timeout, refusal, or another network-layer denial.
+5. Confirm the probe did not generate an application request in backend logs.
 
-This confirms the service is available through the intended route and that the Easy Auth host contract still resolves on the public hostname.
+## Pass Criteria
 
-### 2. Run the Phase 3 validation helper first
-Use one of:
-- `scripts/validate-aca-phase3-auth.sh`
-- `scripts/validate-aca-phase3-auth.ps1`
-
-Provide at minimum:
-- the environment API public hostname
-- expected Entra client ID
-- expected issuer URL
-- expected allowed audiences
-- one or more candidate direct-origin probe URLs when they are known
-
-If you also want backend evidence that no probe reached the app layer, provide the Log Analytics workspace and query inputs supported by the helper.
-
-The helper verifies the platform contract before manual evidence review:
-- API ingress stays internal-only
-- worker ingress stays disabled
-- Easy Auth is enabled on the API app
-- unauthenticated `https://api.<domain>/api/*` requests return `401`
-- `allowedAudiences` and login parameters match the environment-specific identity contract
-- direct-origin probes fail before they reach an HTTP handler
-
-### 3. Attempt direct-origin access from a public network
-From a public network path outside the private Azure boundary, attempt to reach the ACA API origin using known origin endpoints.
-
-### 4. Record the failure mode
-Capture whether the probe fails due to:
-- DNS resolution failure
-- connection timeout
-- connection refused
-- platform-level inaccessibility before app handling
-
-### 5. Confirm the request did not reach the app layer
-Check backend logs to confirm the direct-origin probe did not generate application request handling for the attempted origin path.
-
-## Expected Failure Modes
-
-Acceptable pass outcomes include:
-- cannot resolve public endpoint
-- cannot establish network connection
-- connection refused or timed out before application handling
-- no application-layer request evidence for the probe
-
-The following are not sufficient to claim success:
-- the request reaches the app and receives `401`
-- the request reaches the app and fails due to missing `EDGE_ORIGIN_SECRET`
-- the request reaches the app and returns any application-level response
-
-Those outcomes mean origin isolation is not complete.
-
-## Pass / Fail Criteria
-
-### Pass
 Origin bypass verification passes only when:
-- direct public-origin probes fail at the network layer or before application handling
-- no application request path is opened by the probe
-- the intended public API hostname still works through Cloudflare Tunnel
 
-### Fail
-Origin bypass verification fails when:
-- a public direct-origin path is reachable
-- the probe reaches FastAPI, Easy Auth, or header validation logic
-- the proof depends only on application-layer rejection
+- direct-origin probes fail before application handling
+- no backend request evidence exists for the probe
+- the intended public hostname still works through Cloudflare Tunnel
 
-## Evidence Capture Format
+The following are not sufficient:
 
-For each verification run, capture:
+- the request reaches FastAPI and returns `401`
+- the request reaches FastAPI and fails due to missing `X-Edge-Secret`
+- the request reaches any application handler at all
+
+## Evidence to Capture
+
+For each run, retain:
+
 - date and environment
-- operator name
 - tested origin identifiers
 - exact probe commands or validation-helper output
 - observed failure mode
-- backend log check result
+- backend log query output
 - final pass/fail conclusion
 
-Preferred evidence artifacts:
+Preferred artifacts:
+
 - terminal output
-- screenshots if useful
-- output from `scripts/validate-aca-phase3-auth.sh` or `.ps1`
-- log query output showing absence of app handling for the probe
-- pipeline artifact if run as part of release validation
-
-## Recommended Validation Cadence
-
-Run this verification:
-- before production sign-off
-- after networking or ACA ingress changes
-- after tunnel topology changes
-- after major auth or domain changes
-- after incident remediation that touched ingress or routing
-
-## Escalation
-
-If this verification fails:
-- stop release progression immediately
-- do not rely on `EDGE_ORIGIN_SECRET` or `401` responses as a substitute
-- fix the networking or ingress path first
-- rerun verification before promotion continues
+- `scripts/validate-aca-phase3-auth.sh` or `.ps1` output
+- pipeline artifact when this is part of release validation

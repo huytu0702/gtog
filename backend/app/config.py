@@ -105,7 +105,7 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("EDGE_ORIGIN_SECRET", "AFD_ORIGIN_SECRET"),
     )
-    require_platform_auth: bool = False
+    require_edge_auth: bool = False
     rate_limit_enabled: bool = True
     rate_limit_requests_per_minute: int = 120
 

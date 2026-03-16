@@ -1,209 +1,62 @@
-# GToG Production Implementation Plan
+# Production Implementation Plan
 
-> This document translates the deployment architecture into an execution-ready production delivery plan. It freezes key decisions, defines system contracts, sets validation requirements, and establishes release and runbook requirements for staging and production rollout.
+## Core Decisions
 
-## 1. Scope
+### Cloudflare ingress model
 
-This document turns the target deployment architecture into an execution-ready production plan.
+Use Cloudflare as the only public edge for both frontend and API.
 
-### In scope
+- `https://app.<domain>` goes through Cloudflare to the frontend private origin
+- `https://api.<domain>` goes through Cloudflare Tunnel to the API private origin
+- no ACA application origin is exposed publicly
 
-- Frontend, API, worker, and tunnel deployment model
-- Auth and hostname model
-- Queue and worker orchestration
-- Private backend networking
-- Cloudflare edge policy
-- CI/CD promotion gates
-- Validation, rollback, and runbooks
+### Edge secret stance
 
-### Out of scope
+Use `EDGE_ORIGIN_SECRET` only as secondary defense in depth.
 
-- Re-provisioning the existing data layer from scratch
-- Replacing Azure AI Search Free SKU in this release
-- Adopting Cloudflare paid-only features in the initial rollout
+- keep a different value per environment
+- store it in Key Vault
+- do not treat it as the primary origin lock
 
-### Referenced docs
+### Data-service stance
 
-- `docs/development_plan_v2.md`
-- `docs/topo_v3.md`
+- reuse Cosmos DB, Blob Storage, Key Vault, and Azure AI Search
+- Azure AI Search Free SKU remains an accepted temporary production risk
 
----
+## System Contracts
 
-## 2. Frozen Production Decisions
+### Frontend to API
 
-### Queue choice
+- frontend UI is served from `https://app.<domain>`
+- API traffic is served from `https://api.<domain>/api/*`
+- frontend build config must set `NEXT_PUBLIC_API_BASE_URL=https://api.<domain>`
+- CORS allows only `https://app.<domain>`
+- SSE stays on the API host and must emit heartbeat events
 
-Use **Azure Storage Queue** for background dispatch.
+### API to Worker
 
-- Cosmos DB is the source of truth for job state.
-- Queue messages are dispatch signals only.
-- Retry/backoff and poison handling are implemented in worker logic.
+- API remains synchronous and stateless for request handling
+- long-running work is dispatched asynchronously
+- API writes job metadata first, then enqueues queue messages
+- worker owns indexing and other long-running execution
 
-### API hostname and domain binding
+### Security boundary
 
-Use `https://api.<domain>` as the public API hostname, owned at the **Cloudflare edge**.
+- `api.<domain>` is reachable only through Cloudflare Tunnel
+- ACA API ingress is internal-only
+- direct-origin probes must fail at the network layer or before application handling
+- `REQUIRE_EDGE_AUTH=true` is the runtime default for deployed API apps
+- staging and production stay isolated for tunnels, secrets, and app settings
 
-- The ACA API remains **internal-only**.
-- Do not expose the ACA API as a separate public custom-domain origin.
-- Browser traffic always targets `api.<domain>`.
-
-### Cloudflare Tunnel ownership model
-
-Use **one dedicated tunnel per environment**, managed as infrastructure.
-
-- Staging tunnel: `gtog-stg-api`
-- Production tunnel: `gtog-prod-api`
-- Run at least **2 tunnel connector replicas** per environment.
-- Store tunnel tokens in Key Vault.
-
-### Easy Auth callback model
-
-Use **backend-only Easy Auth** on `api.<domain>`.
-
-- Canonical callbacks:
-  - `https://api.<domain>/.auth/login/aad/callback`
-- Frontend initiates Microsoft login and logout through the backend host.
-- Frontend reads session state from `https://api.<domain>/.auth/me`.
-
-### AI Search private-network stance
-
-Keep **Azure AI Search Free SKU** for the initial rollout.
-
-- This is an **accepted temporary production risk**.
-- Full private-network alignment for Search is deferred to a later hardening phase.
-- This exception must appear in release records and sign-off artifacts.
-
-### `EDGE_ORIGIN_SECRET` production stance
-
-Enable `EDGE_ORIGIN_SECRET` in production as a secondary defense-in-depth control.
-
-- Use a different value per environment.
-- Store it in Key Vault.
-- Never log the secret value.
-- Rotate it on schedule and after incidents.
-
-### Cloudflare plan stance
-
-Use **Cloudflare Free** for the initial rollout.
-
-- Supported in this design:
-  - proxied DNS for `app.<domain>`
-  - Tunnel for `api.<domain>`
-  - Free Managed Ruleset
-  - limited custom WAF rules
-  - one rate-limiting rule
-- Backend fallback protections remain required because Free-tier edge policy is limited.
-
----
-
-## 3. System Contracts
-
-### Frontend ↔ API contract
-
-- Frontend UI is served from `https://app.<domain>`.
-- API and auth endpoints are served from `https://api.<domain>`.
-- Frontend login redirects:
-  - `https://api.<domain>/.auth/login/aad?post_login_redirect_uri=https://app.<domain>/`
-- Frontend logout redirect:
-  - `https://api.<domain>/.auth/logout?post_logout_redirect_uri=https://app.<domain>/`
-- Session inspection:
-  - `GET https://api.<domain>/.auth/me`
-- Standard API calls target:
-  - `https://api.<domain>/api/*`
-- Bearer token is used for normal API calls when available.
-- SSE uses Easy Auth cookie on `api.<domain>`.
-- CORS allows only:
-  - `https://app.<domain>`
-
-### API ↔ Worker contract
-
-- The API stays synchronous and stateless for request handling.
-- Long-running work is dispatched asynchronously.
-- API flow:
-  1. validate request
-  2. create job record in Cosmos DB
-  3. enqueue dispatch message to Azure Storage Queue
-  4. return `job_id` immediately
-
-### Worker ↔ Queue contract
-
-- Queue messages contain only minimal routing metadata:
-  - `job_id`
-  - `job_type`
-  - `attempt`
-- Worker loads authoritative state from Cosmos DB.
-- Worker updates job state before deleting the queue message.
-
-### Worker ↔ Cosmos contract
-
-Cosmos DB stores:
-
-- job metadata
-- lifecycle state
-- retry count
-- lease ownership
-- timestamps
-- sanitized error summary
-- resumability state
-
-Required job states:
-
-- `queued`
-- `running`
-- `retrying`
-- `failed`
-- `completed`
-- `cancelled`
-
-### Lease and recovery contract
-
-- Only one worker may own an active lease at a time.
-- Lease record must include:
-  - `lease_owner_id`
-  - `lease_acquired_at`
-  - `lease_expires_at`
-  - `heartbeat_at`
-- Expired leases may be reclaimed.
-- Recovery after worker crash must rely on Cosmos state, not memory.
-- Reprocessing must be idempotent.
-
-### Health and readiness contract
-
-- `GET /health` is liveness-only.
-- `GET /health/readiness` checks:
-  - Cosmos DB
-  - Key Vault
-  - Blob Storage
-  - Azure AI Search
-- External LLM providers and Tavily are excluded from readiness.
-- Frontend exposes:
-  - `app/api/health/route.ts`
-  - returns `{ "status": "ok" }`
-
-### Security boundary contract
-
-- `api.<domain>` is reachable only through Cloudflare Tunnel.
-- ACA API ingress is internal-only.
-- Direct public-origin probes must fail at the network layer.
-- Backend Easy Auth protects authenticated API access.
-- `EDGE_ORIGIN_SECRET` is secondary control only.
-- Staging and production are isolated for:
-  - tunnels
-  - secrets
-  - Entra registrations
-  - app settings
-
-### Logging and correlation contract
-
-All backend and worker logs must be structured JSON.
+### Logging and correlation
 
 Required fields where available:
 
-- application request ID
+- request ID
 - `Cf-Ray`
 - `CF-Connecting-IP`
-- principal ID
 - `job_id`
+- service role
 
 Never log:
 
@@ -211,636 +64,142 @@ Never log:
 - tokens
 - raw credential material
 
----
+## Delivery Phases
 
-## 4. Delivery Phases
+### Phase 1: Boundary alignment
 
-### Phase 1: Application boundary changes
+Goal:
 
-**Goal:** Align frontend and backend behavior with the dual-host production model.
+- align frontend and backend with the dual-host production model
 
-**Deliverables**
+Deliverables:
 
-- Frontend uses `NEXT_PUBLIC_API_BASE_URL=https://api.<domain>`
-- Frontend login/logout/session flows target backend auth host
-- Backend replaces wildcard CORS with `CORS_ORIGINS`
-- Backend adds `/health/readiness`
-- Backend logs `Cf-Ray` and `CF-Connecting-IP`
-- SSE emits heartbeat events and disables caching/buffering
+- `NEXT_PUBLIC_API_BASE_URL` is environment-specific
+- backend CORS allowlist is explicit
+- readiness endpoint is available
+- SSE heartbeats and anti-buffering headers are present
+- request logs capture Cloudflare correlation headers
 
-**Exit criteria**
+### Phase 2: Worker durability
 
-- No remaining same-host assumption between UI and API
-- Auth flow shape matches production host model
-- CORS and health behavior are validated
+Goal:
 
-**Implementation plan**
+- move long-running work off the API process
 
-1. **Confirm frontend dual-host boundaries**
-   - Verify `frontend/lib/api.ts` uses `NEXT_PUBLIC_API_BASE_URL` for all API and auth-facing paths.
-   - Verify login, logout, and session inspection target `https://api.<domain>/.auth/*`.
-   - Verify `frontend/components/ui/AuthLinks.tsx` and `frontend/components/ui/NBLayout.tsx` do not assume same-host API routing.
-   - Verify `frontend/next.config.ts` allows the backend origin in the deployed CSP/connect policy.
+Deliverables:
 
-2. **Lock backend boundary controls**
-   - Verify `backend/app/config.py` exposes `CORS_ORIGINS` and `backend/app/main.py` parses it into an explicit allowlist.
-   - Verify `backend/app/main.py` applies `CORSMiddleware` with the configured origins only.
-   - Verify `/health` remains liveness-only and `/health/readiness` checks Cosmos DB, Blob Storage, Key Vault, and Azure AI Search.
-   - Verify request logging captures the `Cf-Ray` and `CF-Connecting-IP` headers as structured fields such as `cf_ray` and `cf_connecting_ip` without logging secrets or tokens.
+- durable job records in Cosmos DB
+- queue-backed dispatch
+- worker runtime for indexing
+- lease ownership and retry behavior
 
-3. **Close the SSE production gap**
-   - Update `backend/app/routers/search.py` SSE responses to emit heartbeat events on a fixed cadence during long-lived streams.
-   - Preserve anti-buffering and anti-caching headers for Cloudflare and proxy compatibility, including `Cache-Control: no-cache` and `X-Accel-Buffering: no`.
-   - Verify SSE endpoints continue to support the backend-auth-host cookie model.
+### Phase 3: Private ACA topology
 
-4. **Add validation coverage before phase sign-off**
-   - Extend backend tests to cover allowed-origin and rejected-origin CORS behavior.
-   - Extend readiness tests to preserve the 200/503 dependency contract.
-   - Add or update SSE tests to verify heartbeat events and buffering/cache headers.
-   - Add request logging assertions for `Cf-Ray` and `CF-Connecting-IP` when those headers are present.
+Goal:
 
-5. **Align deployment-facing configuration and docs**
-   - Verify frontend build/runtime configuration sets `NEXT_PUBLIC_API_BASE_URL` per environment.
-   - Verify backend environment examples and deployment manifests document `CORS_ORIGINS` and `EDGE_ORIGIN_SECRET` consistently.
-   - Record Phase 1 evidence in the release checklist and validation bundle.
+- enforce private-origin deployment for frontend, API, and worker
 
-**Recommended execution order**
+Deliverables:
 
-1. Implement SSE heartbeat support and associated tests.
-2. Complete CORS, readiness, and logging validation coverage.
-3. Reconcile deployment configuration examples and documentation.
-4. Run Phase 1 smoke validation against the staging host split.
+- private ACA environment
+- frontend and API with internal ingress only
+- worker with no ingress
+- tunnel connector with at least two replicas
 
-**Phase 1 validation evidence**
+Exit criteria:
 
-- Frontend login, logout, and `/.auth/me` flow evidence against `api.<domain>`
-- Backend CORS allowlist test evidence
-- `/health` and `/health/readiness` verification output
-- Structured log sample showing `Cf-Ray` and `CF-Connecting-IP`
-- SSE stream evidence showing heartbeat cadence and no-buffering headers
+- direct-origin probes fail before app handling
+- API and frontend work only through Cloudflare
+- tunnel failover succeeds
 
-**Phase 1 risks and focus points**
+### Phase 4: Cloudflare hardening
 
-- The primary remaining implementation risk is SSE idle-stream stability through Cloudflare without heartbeat traffic.
-- Configuration drift between local compose, environment examples, and deployed settings can reintroduce same-host assumptions.
-- Phase sign-off should be blocked if any auth path, CORS rule, or readiness dependency still depends on local-only defaults.
+Goal:
 
----
+- make Cloudflare the stable ingress boundary
 
-### Phase 2: Worker and job orchestration
+Deliverables:
 
-**Goal:** Move indexing and long-running graph work off the synchronous API path.
+- proxied DNS and tunnel routes
+- managed rules
+- API rate limiting
+- cache bypass for API and SSE
+- optional `X-Edge-Secret` injection
 
-**Deliverables**
+### Phase 5: CI/CD and release gates
 
-- Job records persisted in Cosmos DB
-- Dispatch messages sent to Azure Storage Queue
-- Worker consumes queued jobs
-- Durable lifecycle states and lease ownership implemented
-- Retry and poison/failure handling implemented
-- Job status endpoint available
+Goal:
 
-**Exit criteria**
+- automate validation, deployment, smoke testing, and promotion gates
 
-- API returns immediately after job submission
-- Job state survives worker restart
-- Duplicate dispatch does not create duplicate final artifacts
+Smoke coverage must include:
 
-**Current readiness and gap assessment**
+- health and readiness
+- CRUD flow
+- upload flow
+- indexing submission and polling
+- query methods
+- SSE behavior
+- direct-origin denial
+- tunnel failover
 
-- `backend/app/repositories/control_plane_repository.py` already provides Cosmos-backed control-plane persistence for indexing jobs, but Phase 2 still requires lease fields and a richer lifecycle transition model.
-- `backend/app/routers/indexing.py` and `backend/app/services/indexing_service.py` already expose indexing start and status behavior, but long-running work is still launched from the API process instead of a dedicated worker.
-- `frontend/lib/api.ts` and `frontend/components/collection-documents.tsx` already support the submit-and-poll interaction pattern, so Phase 2 can preserve the current frontend flow while strengthening backend job durability.
-- `scripts/provision-azure-db.sh` and `scripts/provision-azure-db.ps1` already provision Cosmos resources, but Cosmos must be reachable and contain the required control-plane containers before Phase 2 work can be validated.
-- No Azure Storage Queue integration, worker entrypoint, poison-message handling, or lease-recovery path is implemented yet.
+Required evidence:
 
-**Implementation plan**
+- validate report
+- image metadata
+- deploy logs
+- smoke report
+- private-origin validation helper output
+- rollback drill evidence
 
-1. **Revalidate the Phase 2 control plane before coding**
-   - Confirm Cosmos DB is reachable from the backend and that the expected database and control-plane containers still exist.
-   - If Cosmos resources were removed or disabled, rerun `scripts/provision-azure-db.sh` or `scripts/provision-azure-db.ps1` and re-verify environment settings before continuing.
-   - Confirm current readiness behavior still surfaces Cosmos availability clearly so Phase 2 failures are not masked by stale local configuration.
+## Validation Matrix
 
-2. **Extend the durable job model in Cosmos DB**
-   - Update `backend/app/repositories/control_plane_repository.py` to support the required Phase 2 lifecycle states: `queued`, `running`, `retrying`, `failed`, `completed`, and `cancelled`.
-   - Add durable lease metadata to each job record, including `lease_owner_id`, `lease_acquired_at`, `lease_expires_at`, and `heartbeat_at`.
-   - Add repository operations for lease acquisition, heartbeat renewal, expiry-based lease reclamation, and direct lookup by `job_id`.
-
-3. **Add queue-backed dispatch as the API-side execution boundary**
-   - Extend `backend/app/config.py` and `backend/.env.example` with Azure Storage Queue configuration, including queue name, visibility timeout, polling interval, and retry limits.
-   - Introduce a queue service module under `backend/app/services/` that can enqueue minimal dispatch messages containing `job_id`, `job_type`, and `attempt`.
-   - Refactor `backend/app/services/indexing_service.py` so the API path creates the Cosmos job record first, enqueues a dispatch message second, and returns immediately without starting long-running work in-process.
-
-4. **Create a dedicated worker runtime for indexing jobs**
-   - Add a worker entrypoint under `backend/app/` that continuously polls Azure Storage Queue and processes indexing work outside the API server lifecycle.
-   - Split worker execution concerns from request-handling concerns so the worker is responsible for dequeueing, acquiring the Cosmos lease, transitioning lifecycle state, running indexing, renewing heartbeat, and finalizing the job state.
-   - Ensure the queue message is deleted only after Cosmos reflects the durable final or retry state for that processing attempt.
-
-5. **Implement retry, poison, and idempotency controls**
-   - Add worker-side retry logic that transitions jobs into `retrying` on transient failures and preserves a sanitized error summary in Cosmos.
-   - Mark jobs as `failed` after the configured retry threshold and document how poison-message conditions are detected and surfaced operationally.
-   - Guard the worker path against duplicate queue deliveries by making lease ownership and job-state transitions the source of truth for idempotency.
-
-6. **Strengthen API status contracts without breaking the frontend**
-   - Keep the current collection-oriented status flow in `backend/app/routers/indexing.py` for frontend compatibility.
-   - Add or formalize a canonical job-by-ID status endpoint backed by Cosmos so operations and automation can inspect worker progress directly.
-   - Update response models in `backend/app/models/` so new lifecycle states and retry metadata are visible to clients where appropriate.
-
-7. **Wire the worker into deployment and runtime configuration**
-   - Update `backend/Dockerfile` and the ACA provisioning scripts (`scripts/provision-aca-private-origin.sh` and `.ps1`) so the worker app runs a worker command instead of the API server command.
-   - Ensure both API and worker receive the required Cosmos, queue, storage, and secret configuration through the same environment and Key Vault patterns planned for staging and production.
-   - Preserve the Phase 1 boundary assumptions so the API remains stateless and the worker remains non-public.
-
-**Recommended execution order**
-
-1. Revalidate or reprovision Cosmos DB and confirm the control-plane containers are available.
-2. Extend the Cosmos job schema and repository transitions, including lease operations.
-3. Add queue configuration and a queue service abstraction.
-4. Refactor API indexing submission to dispatch-only semantics.
-5. Add the worker entrypoint and execution loop.
-6. Add retry, poison, and idempotency behavior.
-7. Finalize status API updates and deployment wiring.
-8. Run Phase 2 integration and restart-recovery validation.
-
-**Phase 2 validation evidence**
-
-- Evidence that job submission returns immediately while the job continues asynchronously.
-- Cosmos records showing lifecycle state transitions and lease metadata across a worker run.
-- Integration output demonstrating worker restart recovery without losing authoritative job state.
-- Duplicate-dispatch test evidence showing no duplicate final artifacts are produced.
-- Retry and poison-path evidence showing sanitized failures and correct terminal state handling.
-- Queue and worker deployment evidence showing the worker runtime is separate from the API runtime.
-
-**Phase 2 risks and focus points**
-
-- Phase 2 should not be signed off while Cosmos DB is unavailable, misconfigured, or missing the required control-plane containers.
-- A partial refactor that leaves `asyncio.create_task(...)` or equivalent in the API path would undermine the production durability goal.
-- Queue message deletion must remain downstream of durable Cosmos state updates or failures will become non-recoverable.
-- Idempotency must be enforced through durable state and lease ownership rather than assumptions about single delivery from Azure Storage Queue.
-
----
-
-### Phase 3: Private networking and identity
-
-**Goal:** Deploy backend components into a private ACA environment with backend-only Easy Auth.
-
-**Deliverables**
-
-- Private ACA backend environment
-- API with internal ingress only
-- Worker with no public ingress
-- Entra app registration and backend Easy Auth config
-- Allowed audience configuration enforced
-
-**Exit criteria**
-
-- Direct-origin probes fail before app layer
-- Easy Auth callback works on `api.<domain>`
-- Staging token is rejected by production
-
----
-
-### Phase 4: Cloudflare edge and tunnel hardening
-
-**Goal:** Make Cloudflare the stable public edge for both application hosts.
-
-**Deliverables**
-
-- `app.<domain>` proxied through Cloudflare
-- `api.<domain>` published through Tunnel
-- Two tunnel connector replicas
-- Free Managed Ruleset enabled
-- Cache bypass configured for:
-  - `/api/*`
-  - `/.auth/*`
-  - SSE routes
-- Initial rate-limiting rule configured
-- `EDGE_ORIGIN_SECRET` header injection configured if enabled
-
-**Exit criteria**
-
-- API is reachable only through Tunnel
-- Tunnel failover works
-- SSE remains stable through Cloudflare
-
----
-
-### Phase 5: CI/CD and security release gates
-
-**Goal:** Automate validation, deployment, smoke testing, and promotion gates.
-
-**Deliverables**
-
-- Azure DevOps stages:
-  - `Validate`
-  - `BuildImages`
-  - `DeployStaging`
-  - `SmokeStaging`
-  - `ManualApproval`
-  - `DeployProduction`
-- Smoke suite covers:
-  - health
-  - auth
-  - CRUD
-  - upload
-  - indexing
-  - status polling
-  - query methods
-  - SSE
-  - direct-origin denial
-  - audience isolation
-  - tunnel failover
-- Rollback drill completed in staging
-
-**Exit criteria**
-
-- Staging deployment is repeatable through pipeline only
-- Production requires explicit manual approval
-- Rollback path is tested and documented
-
-**Current readiness and gap assessment**
-
-- `.vsts-ci.yml` currently provides only a `Compliance` stage and does not yet implement the required release stages for validation, image build, staging deployment, smoke testing, approval, and production promotion.
-- `scripts/provision-aca-private-origin.sh` and `scripts/provision-aca-private-origin.ps1` already provide deploy-time controls for the private ACA API, worker, tunnel connector contract, Entra/Easy Auth setup, and environment-specific settings.
-- `scripts/validate-aca-phase3-auth.sh` and `scripts/validate-aca-phase3-auth.ps1` already validate key Phase 5 security gates, including unauthenticated API rejection, audience isolation, and tunnel connector configuration, and they also support direct-origin denial and cross-environment token-rejection checks when the required probe URLs and test tokens are supplied.
-- `scripts/harden-azure-phase5.sh` and `scripts/harden-azure-phase5.ps1` already cover baseline production hardening for managed identity, Key Vault, service settings, and alert creation, but they are not yet wired into a gated release workflow.
-- `backend/Dockerfile` and `frontend/Dockerfile` already define production container images, and the backend image already supports both API and worker runtime selection through `APP_ROLE`.
-- `docs/runbooks/release-promotion-checklist.md`, `docs/runbooks/rollback.md`, `docs/runbooks/origin-bypass-verification.md`, `docs/runbooks/backup-restore.md`, and `docs/runbooks/cloudflare-tunnel-rotation.md` already define the operational expectations for promotion, rollback, and evidence retention, but the pipeline still needs to enforce those expectations as release gates.
-- The main remaining gap is not architectural readiness; it is release automation, smoke coverage, evidence publication, and approval enforcement.
-
-**Implementation plan**
-
-1. **Expand Azure DevOps from compliance-only into a full release pipeline**
-   - Replace or extend `.vsts-ci.yml` so it defines the required stages:
-     - `Validate`
-     - `BuildImages`
-     - `DeployStaging`
-     - `SmokeStaging`
-     - `ManualApproval`
-     - `DeployProduction`
-   - Keep the existing compliance/security scanning work, but move it under the broader `Validate` stage so code-quality, security, and release validation live in a single promotion flow.
-   - Ensure stage dependencies make staging smoke success a hard prerequisite for approval and production deployment.
-
-2. **Define the Validate-stage contract before deployment is allowed**
-   - In `.vsts-ci.yml`, run the repository's required static and automated checks before any image build or deployment step.
-   - The Validate stage should include, at minimum:
-     - Python dependency sync or install
-     - backend and library tests
-     - frontend build validation where applicable
-     - linting and formatting checks
-     - type-checking or equivalent static analysis
-     - existing compliance/security scan tasks already present in `.vsts-ci.yml`
-   - Publish a retained validation artifact summarizing test, lint, and scan results for later release review.
-
-3. **Standardize image build and publish behavior for API, worker, and frontend**
-   - In `.vsts-ci.yml`, add a `BuildImages` stage that builds and publishes the deployable images used by staging and production.
-   - Use `backend/Dockerfile` for the backend image and preserve the `APP_ROLE` runtime split so the same backend image can serve both API and worker roles.
-   - Use `frontend/Dockerfile` for the frontend image and pass the environment-specific `NEXT_PUBLIC_API_BASE_URL` at build time.
-   - Publish image metadata, including commit SHA, tags, and digests, as release evidence so staging and production can be proven to use the same artifacts.
-
-4. **Wire deployment stages to the existing ACA provisioning scripts**
-   - Use `scripts/provision-aca-private-origin.sh` and `scripts/provision-aca-private-origin.ps1` as the deployment entrypoints for `DeployStaging` and `DeployProduction`.
-   - Keep environment-specific values separate for staging and production, including:
-     - tunnel token secret references
-     - Entra app registration values
-     - allowed audiences
-     - API public hostname
-     - `EDGE_ORIGIN_SECRET`
-     - Key Vault references
-   - Ensure the pipeline deploys the API, worker, and tunnel connector contract together so release gates verify the full private-origin topology rather than only the API app.
-
-5. **Add a release-smoke harness that maps directly to the Phase 5 deliverables**
-   - Add dedicated smoke scripts under `scripts/` for release-gate execution, with both Bash and PowerShell variants so the workflow remains operable from Linux and Windows runners.
-   - Reuse `scripts/validate-aca-phase3-auth.sh` and `scripts/validate-aca-phase3-auth.ps1` inside the smoke stage rather than duplicating the identity and origin-isolation logic.
-   - Treat the helper's optional inputs as mandatory pipeline inputs for the release-gate paths that validate wrong-audience rejection, cross-environment rejection, and direct-origin denial.
-   - The smoke suite should cover the full Phase 5 contract:
-     - health and readiness
-     - login and `/.auth/me`
-     - unauthenticated `/api/*` returns `401`
-     - CRUD flow
-     - upload flow
-     - indexing submission
-     - job status polling
-     - query methods
-     - SSE behavior
-     - direct-origin denial
-     - audience isolation
-     - tunnel failover
-   - Persist smoke outputs as pipeline artifacts so promotion is evidence-driven rather than based on console-only logs.
-
-6. **Turn runbook expectations into hard promotion gates**
-   - Align `.vsts-ci.yml` with `docs/runbooks/release-promotion-checklist.md` so the evidence bundle listed in the runbook is produced and published automatically.
-   - Require the staging deployment to retain or reference:
-     - validate-stage report
-     - image-build metadata
-     - staging deploy log
-     - smoke report
-     - Phase 3 validation helper output
-     - direct-origin denial evidence
-     - audience isolation evidence
-     - SSE evidence
-     - tunnel failover evidence
-     - rollback drill evidence
-     - restore drill evidence where required by release policy
-     - accepted-risk record for Azure AI Search Free SKU
-   - Block production promotion if any required artifact or validation result is missing.
-
-7. **Enforce manual approval and controlled production promotion**
-   - Configure the `ManualApproval` stage so production deployment cannot begin until an explicit approver reviews the staging evidence bundle.
-   - Require production deployment to consume the already-built artifacts from `BuildImages` rather than rebuilding from source.
-   - Record the approval event and attach it to the release record so production sign-off is auditable.
-
-8. **Run and retain a staging rollback drill before Phase 5 sign-off**
-   - Execute the rollback process described in `docs/runbooks/rollback.md` against staging after a pipeline-driven deployment.
-   - Verify that the previously known-good revision can be restored and that post-rollback smoke checks still pass.
-   - Attach rollback drill evidence to the same promotion record referenced by `docs/runbooks/release-promotion-checklist.md`.
-
-9. **Finalize alerting and operational evidence for promotion readiness**
-   - Use `scripts/harden-azure-phase5.sh` and `scripts/harden-azure-phase5.ps1` to ensure the baseline monitor and alert configuration exists before production promotion.
-   - Verify alert routing, Log Analytics availability, and the operational visibility required by the runbooks.
-   - Retain alert configuration evidence alongside the release artifacts so promotion approval includes both application and operational readiness.
-
-**Recommended execution order**
-
-1. Expand `.vsts-ci.yml` into the required multi-stage release pipeline.
-2. Define and stabilize the `Validate` stage artifact contract.
-3. Add `BuildImages` artifact publication for backend, worker, and frontend images.
-4. Wire staging deployment to `scripts/provision-aca-private-origin.sh` and `.ps1`.
-5. Add release-smoke scripts and integrate the Phase 3 validation helper.
-6. Add manual approval and artifact-presence gates for production.
-7. Run a full staging pipeline rehearsal and capture the evidence bundle.
-8. Execute and document the staging rollback drill.
-9. Use the validated pipeline path as the only promotion route going into Phase 6.
-
-**Phase 5 validation evidence**
-
-- Pipeline run showing successful execution of `Validate`, `BuildImages`, `DeployStaging`, and `SmokeStaging`.
-- Published validation artifact containing test, lint, and compliance/security scan output.
-- Image build artifact containing backend, worker, and frontend image tags and digests.
-- Staging deployment logs showing the API, worker, and tunnel connector contract was applied successfully.
-- Smoke report covering health, auth, CRUD, upload, indexing, status polling, query methods, and SSE.
-- `scripts/validate-aca-phase3-auth.sh` or `.ps1` output showing unauthenticated rejection, audience isolation, cross-environment rejection, and direct-origin denial.
-- Tunnel failover evidence showing continued availability through the Cloudflare-managed route.
-- Rollback drill evidence showing successful restoration of the last known-good staging revision.
-- Alert configuration or alert-routing evidence produced after hardening validation.
-- Manual approval record showing that production promotion required explicit human sign-off.
-
-**Phase 5 risks and focus points**
-
-- Phase 5 should not be signed off if production deployment can still occur outside the approved pipeline path.
-- A smoke suite that omits direct-origin denial, audience isolation, or rollback validation would create a false sense of release readiness.
-- Rebuilding images in production instead of promoting the exact staging artifacts would weaken release traceability and should be avoided.
-- Manual approval must review retained evidence, not just a green pipeline summary.
-- The AI Search Free SKU exception remains an accepted risk and must stay visible in Phase 5 artifacts and sign-off records.
-
----
-
-### Phase 6: Production validation and controlled rollout
-
-**Goal:** Promote to production with canary rollout, evidence-based sign-off, and immediate rollback readiness.
-
-**Deliverables**
-
-- Production deployment through approved pipeline path
-- Canary traffic split before full promotion
-- Active monitoring during rollout
-- Final evidence bundle retained with release record
-
-**Exit criteria**
-
-- Canary is healthy
-- Full promotion succeeds
-- Accepted risks are documented
-- Rollback remains available during rollout
-
----
-
-## 5. Validation Matrix
-
-Each critical requirement must define:
-
-- control
-- validation method
-- expected result
-- retained evidence artifact
-
-### Mandatory validation areas
+Mandatory validation areas:
 
 - frontend reachability at `app.<domain>`
 - API reachability at `api.<domain>`
-- direct-origin denial for ACA API
-- unauthenticated `/api/`* returns `401`
-- wrong-audience token rejection
-- staging token rejection in production
+- direct-origin denial for ACA frontend and API
 - CORS restriction to `app.<domain>`
 - `EDGE_ORIGIN_SECRET` enforcement when enabled
-- Easy Auth callback success
-- `/.auth/me` session correctness
-- SSE stability for long-running streams
+- SSE stability through Cloudflare
 - tunnel failover behavior
-- tunnel health observability
 - backend log correlation fields
-- readiness/liveness correctness
+- readiness and liveness behavior
 - async job dispatch behavior
 - durable job state across worker restart
-- idempotency and duplicate protection
-- retry/failure handling
-- CRUD/upload/index/query flow
-- ToG debug endpoint disabled by default
-- rollback drill success
-- restore drill success
-- alert configuration and routing
-- AI Search Free SKU exception documented
+- CRUD, upload, indexing, query, and streaming flows
 
-### Minimum evidence bundle
-
-- staging smoke report
-- production smoke report
-- direct-origin denial evidence
-- auth audience isolation result
-- SSE stream evidence
-- tunnel failover evidence
-- rollback drill evidence
-- restore drill evidence
-- alert evidence
-- accepted-risk record for AI Search Free SKU
-
----
-
-## 6. Release Checklist
+## Release Checklist
 
 ### Configuration and secrets
 
-- All required environment variables exist for frontend, API, worker, and tunnel
-- Staging and production use separate tunnel tokens, Entra registrations, and secrets
+- all required environment variables exist for frontend, API, worker, and tunnel
+- staging and production use separate tunnel tokens and secrets
 - Key Vault references resolve successfully
-- No secrets are hardcoded in code, images, or pipeline YAML
 
 ### Networking and origin isolation
 
-- `app.<domain>` is proxied through Cloudflare
+- `app.<domain>` is served through Cloudflare
 - `api.<domain>` is served through Cloudflare Tunnel
-- ACA API ingress is internal-only
-- Public-origin probes fail at the network layer
-- No public-origin fallback path remains enabled
-- At least two tunnel replicas are running
-
-### Authentication and authorization
-
-- Backend Easy Auth is enabled
-- Microsoft callback works at `https://api.<domain>/.auth/login/aad/callback`
-- `/.auth/me` works after Microsoft login
-- Unauthenticated `/api/*` requests return `401`
-- Wrong-audience tokens are rejected
-- Staging tokens are rejected by production
+- frontend and API ACA ingress are internal-only
+- worker has no ingress
+- direct-origin probes fail at the network layer
+- at least two tunnel replicas are running
 
 ### Application behavior
 
-- Frontend uses `https://api.<domain>`
+- frontend uses `https://api.<domain>`
 - CORS allows only `https://app.<domain>`
 - `/health` works as liveness
 - `/health/readiness` checks required dependencies
 - SSE works through Cloudflare with heartbeat events
-- Long-running jobs run through worker path only
+- long-running jobs run through the worker path only
 
-### Background job durability
+### Release controls
 
-- API writes job metadata before queue dispatch
-- Worker processes queue messages successfully
-- Job lifecycle transitions are correct
-- Lease expiry and recovery are validated
-- Duplicate dispatch does not duplicate artifacts
-- Poison/failure path is tested
-
-### Cloudflare edge policy
-
-- Free Managed Ruleset is enabled
-- Cache bypass is configured
-- Initial rate-limiting rule is active
-- Required custom WAF rules fit within Free-tier limits
-- `EDGE_ORIGIN_SECRET` enforcement is active when enabled
-
-### CI/CD and release controls
-
-- Validate stage passes
-- BuildImages stage passes
-- DeployStaging stage passes
-- SmokeStaging stage passes
-- Manual approval is recorded before production
-- Canary rollout is used before full promotion
-- Rollback has been tested in staging
-
-### Observability and alerting
-
-- Backend logs are structured JSON
-- Logs include Cloudflare correlation fields
-- Worker logs include lifecycle state transitions
-- Tunnel health and reconnect events are visible
-- Alert rules exist and route correctly
-
-### Recovery and operations
-
-- Rollback runbook exists and is current
-- Backup and restore runbook exists and is current
-- Tunnel rotation runbook exists and is current
-- Origin-bypass verification runbook exists and is current
-- Release promotion checklist exists and is current
-
-### Accepted risks
-
-- Azure AI Search Free SKU exception is documented
-- No undocumented production exceptions remain
-
----
-
-## 7. Required Runbook Set
-
-### `docs/runbooks/rollback.md`
-
-Must cover:
-
-- rollback triggers
-- ACA revision rollback steps
-- post-rollback verification
-- approval rules for break-glass actions
-
-### `docs/runbooks/backup-restore.md`
-
-Must cover:
-
-- Cosmos restore
-- Blob recovery
-- AI Search rebuild
-- restore verification
-- target RPO and RTO
-- drill cadence
-
-### `docs/runbooks/cloudflare-tunnel-rotation.md`
-
-Must cover:
-
-- token ownership and storage location
-- planned rotation steps
-- rollback steps
-- emergency rotation process
-
-### `docs/runbooks/origin-bypass-verification.md`
-
-Must cover:
-
-- public probe procedure
-- expected failure modes
-- evidence capture format
-- pass/fail criteria
-
-### `docs/runbooks/release-promotion-checklist.md`
-
-Must cover:
-
-- promotion prerequisites
-- mandatory evidence bundle
-- canary approval steps
-- full promotion criteria
-- rollback decision points
-
-### Optional: `docs/runbooks/incident-triage.md`
-
-Recommended contents:
-
-- first logs and dashboards to inspect
-- common failure patterns
-- immediate containment actions
-- escalation path
-
----
-
-## 8. Accepted Risks and Deferred Improvements
-
-### Accepted risk
-
-The initial production rollout keeps **Azure AI Search Free SKU** as a temporary exception.
-
-This means:
-
-- full private-network alignment is not yet achieved for Search
-- the exception must be documented in release records
-- the exception must be revisited in a later hardening phase
-
-### Deferred improvements
-
-- Upgrade AI Search to a SKU that supports stronger private-network alignment
-- Expand Cloudflare protections if Free-tier limits become insufficient
-- Revisit worker autoscaling after real production traffic is observed
-
----
-
-## 9. Production Sign-off Rule
-
-Production is ready only when:
-
-1. mandatory checklist items are complete,
-2. validation evidence exists for critical controls,
-3. required runbooks exist and are current,
-4. accepted risks are explicitly documented,
-5. rollback has been tested and remains available.
-
+- validate stage passes
+- build stage passes
+- deploy staging passes
+- smoke staging passes
+- manual approval is recorded before production
+- canary or staged production rollout retains rollback state
