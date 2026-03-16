@@ -71,6 +71,11 @@ ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION="${ENTRA_SCOPE_ADMIN_CONSENT_DESCRIPTION:-
 ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME="${ENTRA_SCOPE_USER_CONSENT_DISPLAY_NAME:-Access ${API_APP_NAME}}"
 ENTRA_SCOPE_USER_CONSENT_DESCRIPTION="${ENTRA_SCOPE_USER_CONSENT_DESCRIPTION:-Allow the app to access ${API_APP_NAME} on your behalf.}"
 AAD_LOGIN_PARAMETERS_JSON="${AAD_LOGIN_PARAMETERS_JSON:-}"
+GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
+GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-}"
+GOOGLE_CLIENT_SECRET_NAME="${GOOGLE_CLIENT_SECRET_NAME:-google-client-secret}"
+GOOGLE_ALLOWED_AUDIENCES="${GOOGLE_ALLOWED_AUDIENCES:-${GOOGLE_CLIENT_ID:-}}"
+GOOGLE_LOGIN_SCOPES_JSON="${GOOGLE_LOGIN_SCOPES_JSON:-}"
 
 if [[ -z "${AZURE_CONFIG_DIR:-}" ]]; then
   export AZURE_CONFIG_DIR="$(pwd)/.azure"
@@ -86,6 +91,8 @@ IDENTITY_PRINCIPAL_ID=""
 EXPECTED_ALLOWED_AUDIENCES_JSON="[]"
 EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="[]"
 EXPECTED_LOGIN_PARAMETERS_JSON="[]"
+EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON="[]"
+EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="[]"
 EXPECTED_SCOPE_VALUE=""
 EXPECTED_CALLBACK_URL=""
 
@@ -113,6 +120,11 @@ require_api_runtime_contract_hostname() {
 
 require_easy_auth_hostname() {
   require_var API_PUBLIC_HOSTNAME
+}
+
+require_google_easy_auth_contract() {
+  require_var GOOGLE_CLIENT_ID
+  require_var GOOGLE_CLIENT_SECRET
 }
 
 ensure_subnet() {
@@ -654,11 +666,18 @@ ensure_entra_app_contract() {
   EXPECTED_CALLBACK_URL="https://${API_PUBLIC_HOSTNAME}/.auth/login/aad/callback"
   EXPECTED_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$ALLOWED_AUDIENCES")"
   EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$(csv_to_json_array "https://${APP_PUBLIC_HOSTNAME}")"
+  EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON="$(csv_to_json_array "$GOOGLE_ALLOWED_AUDIENCES")"
 
   if [[ -n "$AAD_LOGIN_PARAMETERS_JSON" ]]; then
     EXPECTED_LOGIN_PARAMETERS_JSON="$AAD_LOGIN_PARAMETERS_JSON"
   else
     EXPECTED_LOGIN_PARAMETERS_JSON="$(build_default_login_parameters_json "$EXPECTED_SCOPE_VALUE")"
+  fi
+
+  if [[ -n "$GOOGLE_LOGIN_SCOPES_JSON" ]]; then
+    EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="$GOOGLE_LOGIN_SCOPES_JSON"
+  else
+    EXPECTED_GOOGLE_LOGIN_SCOPES_JSON='["openid", "profile", "email"]'
   fi
 
   echo ">>> Reconciling Entra app registration contract"
@@ -796,11 +815,16 @@ configure_easy_auth() {
 
   ensure_entra_app_contract
 
-  echo ">>> Storing Easy Auth client secret on API app"
+  echo ">>> Storing Easy Auth client secrets on API app"
+  local easy_auth_secret_args=("${ENTRA_CLIENT_SECRET_NAME}=${ENTRA_CLIENT_SECRET}")
+  if [[ -n "$GOOGLE_CLIENT_SECRET" ]]; then
+    easy_auth_secret_args+=("${GOOGLE_CLIENT_SECRET_NAME}=${GOOGLE_CLIENT_SECRET}")
+  fi
+
   az containerapp secret set \
     --resource-group "$RESOURCE_GROUP" \
     --name "$API_APP_NAME" \
-    --secrets "${ENTRA_CLIENT_SECRET_NAME}=${ENTRA_CLIENT_SECRET}" \
+    --secrets "${easy_auth_secret_args[@]}" \
     --output none
 
   echo ">>> Configuring Container Apps authentication"
@@ -832,9 +856,13 @@ configure_easy_auth() {
   EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" \
   EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
   EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
+  EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON="$EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON" \
+  EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="$EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" \
   ENTRA_APP_ID="$ENTRA_APP_ID" \
   ENTRA_CLIENT_SECRET_NAME="$ENTRA_CLIENT_SECRET_NAME" \
   ENTRA_ISSUER_URL="$ENTRA_ISSUER_URL" \
+  GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+  GOOGLE_CLIENT_SECRET_NAME="$GOOGLE_CLIENT_SECRET_NAME" \
   python - <<'PY'
 import json
 import os
@@ -842,12 +870,12 @@ import os
 with open(os.environ["AUTH_CONFIG_FILE"], "r", encoding="utf-8") as handle:
     payload = json.load(handle)
 
-properties = payload.get("properties", payload)
-properties["login"] = dict(properties.get("login") or {})
-properties["login"]["allowedExternalRedirectUrls"] = json.loads(
+auth = payload.get("properties", payload)
+auth["login"] = dict(auth.get("login") or {})
+auth["login"]["allowedExternalRedirectUrls"] = json.loads(
     os.environ["EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON"]
 )
-identity_providers = dict(properties.get("identityProviders") or {})
+identity_providers = dict(auth.get("identityProviders") or {})
 aad = dict(identity_providers.get("azureActiveDirectory") or {})
 aad["enabled"] = True
 aad["login"] = dict(aad.get("login") or {})
@@ -859,10 +887,23 @@ aad["registration"]["openIdIssuer"] = os.environ["ENTRA_ISSUER_URL"]
 aad["validation"] = dict(aad.get("validation") or {})
 aad["validation"]["allowedAudiences"] = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
 identity_providers["azureActiveDirectory"] = aad
-properties["identityProviders"] = identity_providers
+
+if os.environ["GOOGLE_CLIENT_ID"]:
+    google = dict(identity_providers.get("google") or {})
+    google["enabled"] = True
+    google["registration"] = dict(google.get("registration") or {})
+    google["registration"]["clientId"] = os.environ["GOOGLE_CLIENT_ID"]
+    google["registration"]["clientSecretSettingName"] = os.environ["GOOGLE_CLIENT_SECRET_NAME"]
+    google["validation"] = dict(google.get("validation") or {})
+    google["validation"]["allowedAudiences"] = json.loads(os.environ["EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON"])
+    google["login"] = dict(google.get("login") or {})
+    google["login"]["scopes"] = json.loads(os.environ["EXPECTED_GOOGLE_LOGIN_SCOPES_JSON"])
+    identity_providers["google"] = google
+
+auth["identityProviders"] = identity_providers
 
 with open(os.environ["AUTH_CONFIG_PATCH_FILE"], "w", encoding="utf-8") as handle:
-    json.dump({"properties": properties}, handle)
+    json.dump({"properties": auth}, handle)
 PY
 
   local auth_config_patch_body
@@ -931,11 +972,15 @@ verify_phase3_contract() {
   EXPECTED_ALLOWED_AUDIENCES_JSON="$EXPECTED_ALLOWED_AUDIENCES_JSON" \
   EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON="$EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON" \
   EXPECTED_LOGIN_PARAMETERS_JSON="$EXPECTED_LOGIN_PARAMETERS_JSON" \
+  EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON="$EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON" \
+  EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="$EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" \
   EXPECTED_CALLBACK_URL="$EXPECTED_CALLBACK_URL" \
   APP_PUBLIC_HOSTNAME="$APP_PUBLIC_HOSTNAME" \
   ENTRA_APP_ID="$ENTRA_APP_ID" \
   ENTRA_CLIENT_SECRET_NAME="$ENTRA_CLIENT_SECRET_NAME" \
   ENTRA_ISSUER_URL="$ENTRA_ISSUER_URL" \
+  GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+  GOOGLE_CLIENT_SECRET_NAME="$GOOGLE_CLIENT_SECRET_NAME" \
   python - <<'PY'
 import json
 import os
@@ -947,6 +992,8 @@ auth = json.loads(os.environ["AUTH_JSON"])
 microsoft_auth = json.loads(os.environ["MICROSOFT_AUTH_JSON"])
 app_registration = json.loads(os.environ["APP_REGISTRATION_JSON"])
 expected_allowed = json.loads(os.environ["EXPECTED_ALLOWED_AUDIENCES_JSON"])
+expected_google_allowed = json.loads(os.environ["EXPECTED_GOOGLE_ALLOWED_AUDIENCES_JSON"])
+expected_google_login_scopes = json.loads(os.environ["EXPECTED_GOOGLE_LOGIN_SCOPES_JSON"])
 auth = auth.get("properties", auth)
 expected_allowed_external_redirect_urls = json.loads(
     os.environ["EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS_JSON"]
@@ -957,6 +1004,8 @@ expected_app_origin = f"https://{os.environ['APP_PUBLIC_HOSTNAME']}"
 expected_client_id = os.environ["ENTRA_APP_ID"]
 expected_secret_name = os.environ["ENTRA_CLIENT_SECRET_NAME"]
 expected_issuer = os.environ["ENTRA_ISSUER_URL"]
+expected_google_client_id = os.environ["GOOGLE_CLIENT_ID"]
+expected_google_secret_name = os.environ["GOOGLE_CLIENT_SECRET_NAME"]
 
 
 def get(obj, *path):
@@ -1017,6 +1066,29 @@ ensure(
     errors,
 )
 
+google = get(auth, "identityProviders", "google") or {}
+ensure(google.get("enabled") is True, "Google provider is not enabled", errors)
+ensure(
+    get(google, "registration", "clientId") == expected_google_client_id,
+    f"Configured Google clientId does not match the expected value: {get(google, 'registration', 'clientId')!r}",
+    errors,
+)
+ensure(
+    get(google, "registration", "clientSecretSettingName") == expected_google_secret_name,
+    f"Unexpected Google client secret setting name: {get(google, 'registration', 'clientSecretSettingName')!r}",
+    errors,
+)
+ensure(
+    sorted(get(google, "validation", "allowedAudiences") or []) == sorted(expected_google_allowed),
+    f"Google allowed audiences do not match expected values: {get(google, 'validation', 'allowedAudiences')!r}",
+    errors,
+)
+ensure(
+    (get(google, "login", "scopes") or []) == expected_google_login_scopes,
+    f"Google login scopes do not match expected values: {get(google, 'login', 'scopes')!r}",
+    errors,
+)
+
 client_id = get(microsoft_auth, "registration", "clientId")
 ensure(client_id == expected_client_id, f"Unexpected Entra client ID: {client_id!r}", errors)
 
@@ -1073,6 +1145,7 @@ ensure(worker_ingress in (None, {}), f"Worker app should not expose ingress: {wo
 secrets = get(api_app, "properties", "configuration", "secrets") or []
 secret_names = sorted(secret.get("name") for secret in secrets if isinstance(secret, dict) and secret.get("name"))
 ensure(expected_secret_name in secret_names, f"Missing API secret setting {expected_secret_name!r}", errors)
+ensure(expected_google_secret_name in secret_names, f"Missing API secret setting {expected_google_secret_name!r}", errors)
 
 if errors:
     for error in errors:
@@ -1445,6 +1518,7 @@ else
 
   if bool_true "$CONFIGURE_EASY_AUTH"; then
     require_easy_auth_hostname
+    require_google_easy_auth_contract
     configure_easy_auth
     verify_phase3_contract
   fi

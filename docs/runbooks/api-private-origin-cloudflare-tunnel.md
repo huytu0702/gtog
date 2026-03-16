@@ -39,11 +39,14 @@ Recommended flow:
 Phase 3 freezes the identity contract per environment:
 
 - one Entra app registration per environment
-- callback host fixed to `https://api.<domain>/.auth/login/aad/callback`
-- audience fixed to the environment-specific API App ID URI (`api://<backend-app-id>`)
-- staging and production must not share allowed audiences
+- Easy Auth callback host fixed to `https://api.<domain>`
+- Microsoft callback path: `https://api.<domain>/.auth/login/aad/callback`
+- Google callback path: `https://api.<domain>/.auth/login/google/callback`
+- Microsoft `allowedAudiences` fixed to the environment-specific API App ID URI (`api://<backend-app-id>`)
+- Google `allowedAudiences` fixed to the configured Google client ID unless explicitly overridden
+- staging and production must not share Entra audiences or Google client registrations
 
-The provisioning scripts support both pre-created and script-created Entra registrations. The runtime contract stays the same in either case.
+The provisioning scripts support both pre-created and script-created Entra registrations while reconciling Google provider settings in the same Easy Auth payload.
 
 ### Phase 3 script flags and environment variables
 
@@ -54,11 +57,15 @@ Use the provisioning script with:
 - either:
   - `ENTRA_APP_ID`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_SECRET`, `API_APP_ID_URI`, `ALLOWED_AUDIENCES`
   - or `CREATE_ENTRA_APP=true` / `-CreateEntraApp` with `ENTRA_APP_DISPLAY_NAME`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 
 Optional but recommended:
 
-- `RESET_ENTRA_CLIENT_SECRET=true` / `-ResetEntraClientSecret` when rotating the Easy Auth secret
-- `AAD_LOGIN_PARAMETERS_JSON` / `-AadLoginParametersJson` when you need to override the default login parameter payload
+- `GOOGLE_CLIENT_SECRET_NAME` / `-GoogleClientSecretName` if the API app should use a non-default secret reference name
+- `GOOGLE_ALLOWED_AUDIENCES` / `-GoogleAllowedAudiences` when Google `allowedAudiences` should differ from the client ID
+- `GOOGLE_LOGIN_SCOPES_JSON` / `-GoogleLoginScopesJson` when you need to override the default Google scope list (`["openid", "profile", "email"]`)
+- `RESET_ENTRA_CLIENT_SECRET=true` / `-ResetEntraClientSecret` when rotating the Entra Easy Auth secret
+- `AAD_LOGIN_PARAMETERS_JSON` / `-AadLoginParametersJson` when you need to override the default Microsoft login parameter payload
 
 The scripts reconcile these platform guarantees on every run:
 

@@ -60,7 +60,7 @@ This keeps the browser contract simple while moving origin trust to the network 
 4. Public edge: Cloudflare proxied DNS
 5. Public host model: dual subdomains (`app.<domain>` and `api.<domain>`)
 6. API origin model: Cloudflare Tunnel into a private ACA environment
-7. Auth: Entra ID OIDC for backend API
+7. Auth: ACA Easy Auth with Microsoft Entra ID and Google enabled on the backend API
 8. Auth pattern: ACA Managed Authentication (Easy Auth) on backend only
 9. Traffic profile (first 3 months): small (`<= 50 users/day`)
 10. API routing model: browser calls backend via `https://api.<domain>/api/*`
@@ -107,7 +107,7 @@ Out of scope for this doc: re-provision data layer from scratch.
 2. Use `NEXT_PUBLIC_API_BASE_URL=https://api.<domain>`
 3. Keep Easy Auth token flow against the backend host:
   - Call `GET https://api.<domain>/.auth/me` with credentials
-  - Redirect to `https://api.<domain>/.auth/login/aad?post_login_redirect_uri=https://app.<domain>/` when unauthenticated
+  - Start sign-in on `https://api.<domain>/.auth/login/aad` or `https://api.<domain>/.auth/login/google` with `post_login_redirect_uri=https://app.<domain>/`
   - Redirect logout to `https://api.<domain>/.auth/logout?post_logout_redirect_uri=https://app.<domain>/`
   - Attach `Authorization: Bearer <access_token>` to `/api/*` calls when token retrieval succeeds
 4. SSE (EventSource) auth:
@@ -150,7 +150,7 @@ How it works:
 
 - Frontend ACA is public and serves the UI
 - API ACA requires authentication and returns `401` for unauthenticated API requests
-- Frontend starts login by redirecting users to `https://api.<domain>/.auth/login/aad`
+- Frontend starts login by redirecting users to `https://api.<domain>/.auth/login/aad` or `https://api.<domain>/.auth/login/google`
 - Easy Auth validates the session before request reaches FastAPI
 - Frontend gets token from `https://api.<domain>/.auth/me` and sends Bearer token to `/api/*`
 
@@ -307,7 +307,7 @@ SSE auth note: `EventSource` does not support custom `Authorization` headers. SS
   - `gtog-backend-api-prod`
 2. Backend exposes scope `api://<backend-app-id>/access_as_user`
 3. Backend Easy Auth `allowedAudiences` must include `api://<backend-app-id>` to accept tokens issued for the backend scope
-4. Backend ACA Easy Auth action: `Return401`
+4. Backend ACA Easy Auth action: `AllowAnonymous` at the platform layer, with backend route guards still returning `401` for unauthenticated `/api/*` requests
 5. Redirect URIs include the backend auth host callback for each environment
 6. Token isolation smoke test: staging token must fail on prod backend
 7. Validation step: test token flow with `az rest` or Postman before wiring frontend login UI

@@ -20,8 +20,10 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 The frontend calls:
 - `${NEXT_PUBLIC_API_BASE_URL}/api/*` for backend APIs
-- `${NEXT_PUBLIC_API_BASE_URL}/.auth/me` for Easy Auth token retrieval
-- `${NEXT_PUBLIC_API_BASE_URL}/.auth/login/aad` and `/.auth/logout` for auth UI actions
+- `${NEXT_PUBLIC_API_BASE_URL}/.auth/me` for Easy Auth session inspection
+- `${NEXT_PUBLIC_API_BASE_URL}/.auth/login/aad` for Microsoft Entra sign-in
+- `${NEXT_PUBLIC_API_BASE_URL}/.auth/login/google` for Google sign-in
+- `${NEXT_PUBLIC_API_BASE_URL}/.auth/logout` for sign-out
 
 In the Cloudflare deployment model:
 

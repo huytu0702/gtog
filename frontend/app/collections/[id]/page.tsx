@@ -3,7 +3,7 @@
 import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { collectionsApi } from '@/lib/api';
+import { collectionsApi, fetchEasyAuthUser } from '@/lib/api';
 import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { CollectionDocuments } from '@/components/collection-documents';
@@ -17,16 +17,39 @@ export default function CollectionDetailsPage() {
     const id = params.id as string;
     const [activeTab, setActiveTab] = React.useState<'documents' | 'chat'>('documents');
 
+    const { data: user, isLoading: authLoading } = useQuery({
+        queryKey: ['easy-auth-user'],
+        queryFn: fetchEasyAuthUser,
+        staleTime: 60_000,
+        gcTime: 5 * 60_000,
+        retry: false,
+    });
+
     const { data: collection, isLoading, error } = useQuery({
         queryKey: ['collection', id],
         queryFn: () => collectionsApi.get(id),
+        enabled: user?.isAuthenticated === true,
     });
 
-    if (isLoading) {
+    if (authLoading || (user?.isAuthenticated && isLoading)) {
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-12 h-12 animate-spin text-main" />
             </div>
+        );
+    }
+
+    if (!user?.isAuthenticated) {
+        return (
+            <NBCard className="max-w-2xl bg-white">
+                <h1 className="text-3xl font-black mb-3">Sign in to open collections</h1>
+                <p className="text-lg font-medium text-gray-600 mb-4">
+                    This screen only loads after Easy Auth confirms the current session.
+                </p>
+                <NBButton onClick={() => router.push('/')} variant="outline">
+                    Go Back
+                </NBButton>
+            </NBCard>
         );
     }
 

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collectionsApi } from '@/lib/api';
+import { collectionsApi, fetchEasyAuthUser } from '@/lib/api';
 import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { NBInput } from '@/components/ui/NBInput';
@@ -14,10 +14,19 @@ export default function Dashboard() {
   const [newCollectionName, setNewCollectionName] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
 
+  const { data: user, isLoading: authLoading } = useQuery({
+    queryKey: ['easy-auth-user'],
+    queryFn: fetchEasyAuthUser,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    retry: false,
+  });
+
   // Fetch Collections
   const { data, isLoading, error } = useQuery({
     queryKey: ['collections'],
     queryFn: collectionsApi.list,
+    enabled: user?.isAuthenticated === true,
   });
 
   // Create Collection Mutation
@@ -44,7 +53,7 @@ export default function Dashboard() {
     createMutation.mutate({ name: newCollectionName });
   };
 
-  if (isLoading) {
+  if (authLoading || (user?.isAuthenticated && isLoading)) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-12 h-12 animate-spin text-main" />
@@ -57,6 +66,17 @@ export default function Dashboard() {
       <div className="bg-destruct/10 border-3 border-destruct p-6 text-destruct font-bold">
         Error loading collections: {(error as Error).message}
       </div>
+    );
+  }
+
+  if (!user?.isAuthenticated) {
+    return (
+      <NBCard className="max-w-2xl mx-auto bg-white">
+        <h1 className="text-4xl font-black mb-3">Sign in to view collections</h1>
+        <p className="text-lg font-medium text-gray-600">
+          Collections are global today, but the UI requires an authenticated Easy Auth session before listing or managing them.
+        </p>
+      </NBCard>
     );
   }
 

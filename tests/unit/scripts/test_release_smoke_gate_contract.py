@@ -23,6 +23,9 @@ def test_bash_script_requires_frontend_phase3_inputs_and_emits_artifact_names():
     assert "API_BASE_URL" in content
     assert "API_PUBLIC_HOSTNAME" in content
     assert "EXPECTED_ALLOWED_EXTERNAL_REDIRECT_URLS" in content
+    assert "EXPECTED_GOOGLE_CLIENT_ID" in content
+    assert "EXPECTED_GOOGLE_ALLOWED_AUDIENCES" in content
+    assert "EXPECTED_GOOGLE_LOGIN_SCOPES_JSON" in content
     assert "WRONG_AUDIENCE_TOKEN" in content
     assert "PRODUCTION_REJECTION_TOKEN" in content
     assert "PROBE_ORIGIN_URLS" in content
@@ -31,6 +34,9 @@ def test_bash_script_requires_frontend_phase3_inputs_and_emits_artifact_names():
     assert "SMOKE_PHASE_LABEL" in content
     assert "ROLLOUT_STATE_FILE" in content
     assert "validate-aca-phase3-auth.sh" in content
+    assert 'EXPECTED_GOOGLE_CLIENT_ID="$EXPECTED_GOOGLE_CLIENT_ID"' in content
+    assert 'EXPECTED_GOOGLE_ALLOWED_AUDIENCES="$EXPECTED_GOOGLE_ALLOWED_AUDIENCES"' in content
+    assert 'EXPECTED_GOOGLE_LOGIN_SCOPES_JSON="$EXPECTED_GOOGLE_LOGIN_SCOPES_JSON"' in content
 
 
 
@@ -55,6 +61,9 @@ def test_powershell_script_requires_frontend_phase3_inputs_and_reuses_validator(
     assert "ApiBaseUrl" in content
     assert "ApiPublicHostname" in content
     assert "ExpectedAllowedExternalRedirectUrls" in content
+    assert "ExpectedGoogleClientId" in content
+    assert "ExpectedGoogleAllowedAudiences" in content
+    assert "ExpectedGoogleLoginScopesJson" in content
     assert "WrongAudienceToken" in content
     assert "ProductionRejectionToken" in content
     assert "ProbeOriginUrls" in content
@@ -63,6 +72,9 @@ def test_powershell_script_requires_frontend_phase3_inputs_and_reuses_validator(
     assert "SmokePhaseLabel" in content
     assert "RolloutStateFile" in content
     assert "validate-aca-phase3-auth.ps1" in content
+    assert "-ExpectedGoogleClientId $ExpectedGoogleClientId" in content
+    assert "-ExpectedGoogleAllowedAudiences $ExpectedGoogleAllowedAudiences" in content
+    assert "-ExpectedGoogleLoginScopesJson $ExpectedGoogleLoginScopesJson" in content
 
 
 
