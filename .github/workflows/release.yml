@@ -28,8 +28,8 @@ env:
   PRODUCTION_DEPLOY_ARTIFACT_NAME: deploy-production-log
   SMOKE_STAGING_ARTIFACT_NAME: smoke-staging-report
   SMOKE_PRODUCTION_ARTIFACT_NAME: smoke-production-report
-    PHASE3_VALIDATION_ARTIFACT_NAME: edge-origin-validation
-    PHASE3_PRODUCTION_VALIDATION_ARTIFACT_NAME: edge-origin-validation-production
+  PHASE3_VALIDATION_ARTIFACT_NAME: edge-origin-validation
+  PHASE3_PRODUCTION_VALIDATION_ARTIFACT_NAME: edge-origin-validation-production
   VALIDATE_REPORT_ARTIFACT_NAME: validate-stage-report
 
 jobs:
@@ -189,10 +189,10 @@ jobs:
           KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
           EDGE_ORIGIN_SECRET: ${{ secrets.EDGE_ORIGIN_SECRET }}
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
-            CREATE_APPS: "true"
-          run: |
-            set -euo pipefail
-            artifact_dir="$RUNNER_TEMP/deploy-staging-log"
+          CREATE_APPS: "true"
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/deploy-staging-log"
           mkdir -p "$artifact_dir"
           ROLLOUT_MODE=reconcile \
           ROLLOUT_STATE_FILE="$artifact_dir/rollout-state.json" \
@@ -235,17 +235,17 @@ jobs:
           API_BASE_URL: https://${{ vars.API_PUBLIC_HOSTNAME }}
           API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
           AUTH_BEARER_TOKEN: ${{ secrets.AUTH_BEARER_TOKEN }}
-            PROBE_ORIGIN_URLS: ${{ vars.PROBE_ORIGIN_URLS }}
-            RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-            SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-            API_APP_NAME: ${{ vars.API_APP_NAME }}
-            WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
-            TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
-            SMOKE_ARTIFACT_NAME: smoke-staging-report
-            PHASE3_VALIDATION_ARTIFACT_NAME: edge-origin-validation
-            SMOKE_PHASE_LABEL: staging
-            ROLLOUT_STATE_FILE: ${{ runner.temp }}/deploy-staging-log/rollout-state.json
-            EVIDENCE_DIR: ${{ runner.temp }}/smoke-staging-report
+          PROBE_ORIGIN_URLS: ${{ vars.PROBE_ORIGIN_URLS }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          API_APP_NAME: ${{ vars.API_APP_NAME }}
+          WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
+          TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
+          SMOKE_ARTIFACT_NAME: smoke-staging-report
+          PHASE3_VALIDATION_ARTIFACT_NAME: edge-origin-validation
+          SMOKE_PHASE_LABEL: staging
+          ROLLOUT_STATE_FILE: ${{ runner.temp }}/deploy-staging-log/rollout-state.json
+          EVIDENCE_DIR: ${{ runner.temp }}/smoke-staging-report
         run: |
           set -euo pipefail
           chmod +x ./scripts/smoke-release-gates.sh
@@ -261,9 +261,9 @@ jobs:
       - name: Upload staging phase 3 evidence
         uses: actions/upload-artifact@v4
         with:
-            name: edge-origin-validation
-            path: ${{ runner.temp }}/smoke-staging-report
-            if-no-files-found: error
+          name: edge-origin-validation
+          path: ${{ runner.temp }}/smoke-staging-report
+          if-no-files-found: error
 
   await_prod_approval:
     name: Await production approval
@@ -316,10 +316,10 @@ jobs:
           KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
           EDGE_ORIGIN_SECRET: ${{ secrets.EDGE_ORIGIN_SECRET }}
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
-            CREATE_APPS: "true"
-          run: |
-            set -euo pipefail
-            artifact_dir="$RUNNER_TEMP/deploy-production-log"
+          CREATE_APPS: "true"
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/deploy-production-log"
           mkdir -p "$artifact_dir"
           ROLLOUT_MODE=reconcile \
           ROLLOUT_STATE_FILE="$artifact_dir/rollout-state.json" \
@@ -363,17 +363,17 @@ jobs:
           API_BASE_URL: https://${{ vars.API_PUBLIC_HOSTNAME }}
           API_PUBLIC_HOSTNAME: ${{ vars.API_PUBLIC_HOSTNAME }}
           AUTH_BEARER_TOKEN: ${{ secrets.AUTH_BEARER_TOKEN }}
-            PROBE_ORIGIN_URLS: ${{ vars.PROBE_ORIGIN_URLS }}
-            RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-            SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-            API_APP_NAME: ${{ vars.API_APP_NAME }}
-            WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
-            TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
-            SMOKE_ARTIFACT_NAME: smoke-production-report
-            PHASE3_VALIDATION_ARTIFACT_NAME: edge-origin-validation-production
-            SMOKE_PHASE_LABEL: production
-            ROLLOUT_STATE_FILE: ${{ runner.temp }}/deploy-production-log/rollout-state.json
-            EVIDENCE_DIR: ${{ runner.temp }}/smoke-production-report
+          PROBE_ORIGIN_URLS: ${{ vars.PROBE_ORIGIN_URLS }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          API_APP_NAME: ${{ vars.API_APP_NAME }}
+          WORKER_APP_NAME: ${{ vars.WORKER_APP_NAME }}
+          TUNNEL_APP_NAME: ${{ vars.TUNNEL_APP_NAME }}
+          SMOKE_ARTIFACT_NAME: smoke-production-report
+          PHASE3_VALIDATION_ARTIFACT_NAME: edge-origin-validation-production
+          SMOKE_PHASE_LABEL: production
+          ROLLOUT_STATE_FILE: ${{ runner.temp }}/deploy-production-log/rollout-state.json
+          EVIDENCE_DIR: ${{ runner.temp }}/smoke-production-report
         run: |
           set -euo pipefail
           chmod +x ./scripts/smoke-release-gates.sh
@@ -389,6 +389,6 @@ jobs:
       - name: Upload production phase 3 evidence
         uses: actions/upload-artifact@v4
         with:
-            name: edge-origin-validation-production
-            path: ${{ runner.temp }}/smoke-production-report
-            if-no-files-found: error
+          name: edge-origin-validation-production
+          path: ${{ runner.temp }}/smoke-production-report
+          if-no-files-found: error
