@@ -5,7 +5,7 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, cast
 
 import pandas as pd
 from azure.core.credentials import AzureKeyCredential
@@ -18,9 +18,11 @@ from ..config import settings
 from ..repositories import get_control_plane_repository, get_serving_repository
 from ..azure_runtime import (
     blob_account_url,
+    cosmos_account_url,
     create_blob_service_client,
     get_default_credential,
     is_managed_identity_enabled,
+    resolve_cosmos_connection_string,
     resolve_storage_connection_string,
 )
 
@@ -55,28 +57,26 @@ def _blob_storage_cli_overrides(conn_str: str, container_name: str) -> dict[str,
         "reporting.base_dir": "logs",
     }
     if conn_str:
-        overrides.update(
-            {
-                "input.storage.connection_string": conn_str,
-                "output.connection_string": conn_str,
-                "cache.connection_string": conn_str,
-                "reporting.connection_string": conn_str,
-            }
-        )
+        overrides.update({
+            "input.storage.connection_string": conn_str,
+            "output.connection_string": conn_str,
+            "cache.connection_string": conn_str,
+            "reporting.connection_string": conn_str,
+        })
         return overrides
 
     account_url = blob_account_url()
     if not account_url:
-        raise ValueError("Blob storage runtime requires Azure storage account URL for managed identity.")
+        raise ValueError(
+            "Blob storage runtime requires Azure storage account URL for managed identity."
+        )
 
-    overrides.update(
-        {
-            "input.storage.storage_account_blob_url": account_url,
-            "output.storage_account_blob_url": account_url,
-            "cache.storage_account_blob_url": account_url,
-            "reporting.storage_account_blob_url": account_url,
-        }
-    )
+    overrides.update({
+        "input.storage.storage_account_blob_url": account_url,
+        "output.storage_account_blob_url": account_url,
+        "cache.storage_account_blob_url": account_url,
+        "reporting.storage_account_blob_url": account_url,
+    })
     return overrides
 
 
@@ -108,7 +108,9 @@ def read_parquet_from_blob(collection_id: str, blob_path: str) -> pd.DataFrame:
     """Download a parquet file from blob and return as DataFrame."""
     client = _blob_client()
     if client is None:
-        raise FileNotFoundError(f"Azure storage not configured, cannot read {blob_path}")
+        raise FileNotFoundError(
+            f"Azure storage not configured, cannot read {blob_path}"
+        )
     container = client.get_container_client(_collection_container(collection_id))
     data = container.get_blob_client(blob_path).download_blob().readall()
     return pd.read_parquet(io.BytesIO(data))
@@ -137,7 +139,9 @@ _REQUIRED_PROMPT_FILES: tuple[str, ...] = (
 def _validate_shared_prompt_files(prompt_dir: Path) -> None:
     """Fail fast when required shared prompt files are missing."""
     missing = [
-        filename for filename in _REQUIRED_PROMPT_FILES if not (prompt_dir / filename).exists()
+        filename
+        for filename in _REQUIRED_PROMPT_FILES
+        if not (prompt_dir / filename).exists()
     ]
     if missing:
         missing_list = ", ".join(missing)
@@ -243,38 +247,78 @@ def _vector_store_cli_overrides(
     *,
     use_blob: bool,
     query_runtime: bool,
+    cloud_vector_store: bool,
 ) -> dict[str, object]:
     """Build runtime vector-store overrides for local vs cloud serving/indexing."""
     overrides: dict[str, object] = {
         "vector_store.default_vector_store.container_name": vector_index_name,
     }
-    cloud_query_runtime = (
-        query_runtime
-        and use_blob
+    cloud_vector_runtime = (
+        use_blob
         and settings.query_context_mode.lower() == "cosmos_only"
+        and (query_runtime or cloud_vector_store)
     )
-    if not cloud_query_runtime:
+    if not cloud_vector_runtime:
         return overrides
 
-    endpoint = settings.azure_search_endpoint.strip()
-    if not endpoint:
-        raise ValueError(
-            "Cloud/runtime query embeddings require AZURE_SEARCH_ENDPOINT for Azure AI Search."
-        )
-    if not settings.azure_search_api_key and not is_managed_identity_enabled():
-        raise ValueError(
-            "Cloud/runtime query embeddings require AZURE_SEARCH_API_KEY or Azure managed identity for Azure AI Search."
-        )
+    store_type = (
+        settings.cloud_vector_store_type.strip().lower()
+        or VectorStoreType.AzureAISearch.value
+    )
 
-    overrides.update(
-        {
+    if store_type == VectorStoreType.AzureAISearch.value:
+        endpoint = settings.azure_search_endpoint.strip()
+        if not endpoint:
+            raise ValueError(
+                "Cloud/runtime vector embeddings require AZURE_SEARCH_ENDPOINT for Azure AI Search."
+            )
+        if not settings.azure_search_api_key and not is_managed_identity_enabled():
+            raise ValueError(
+                "Cloud/runtime vector embeddings require AZURE_SEARCH_API_KEY or Azure managed identity for Azure AI Search."
+            )
+
+        overrides.update({
             "vector_store.default_vector_store.type": VectorStoreType.AzureAISearch.value,
             "vector_store.default_vector_store.db_uri": None,
             "vector_store.default_vector_store.url": endpoint,
-        }
-    )
-    if settings.azure_search_api_key:
-        overrides["vector_store.default_vector_store.api_key"] = settings.azure_search_api_key
+        })
+        if settings.azure_search_api_key:
+            overrides["vector_store.default_vector_store.api_key"] = (
+                settings.azure_search_api_key
+            )
+        return overrides
+
+    if store_type != VectorStoreType.CosmosDB.value:
+        raise ValueError(
+            "CLOUD_VECTOR_STORE_TYPE must be one of ['azure_ai_search', 'cosmosdb']."
+        )
+
+    endpoint = cosmos_account_url()
+    if not endpoint:
+        raise ValueError(
+            "Cloud/runtime vector embeddings require AZURE_COSMOS_ENDPOINT or AZURE_COSMOS_CONNECTION_STRING for Cosmos DB."
+        )
+    connection_string = resolve_cosmos_connection_string()
+    if not connection_string and not is_managed_identity_enabled():
+        raise ValueError(
+            "Cloud/runtime vector embeddings require AZURE_COSMOS_CONNECTION_STRING, AZURE_COSMOS_KEY, or Azure managed identity for Cosmos DB."
+        )
+    database_name = settings.azure_cosmos_database_name.strip()
+    if not database_name:
+        raise ValueError(
+            "Cloud/runtime vector embeddings require AZURE_COSMOS_DATABASE_NAME for Cosmos DB."
+        )
+
+    overrides.update({
+        "vector_store.default_vector_store.type": VectorStoreType.CosmosDB.value,
+        "vector_store.default_vector_store.db_uri": None,
+        "vector_store.default_vector_store.url": endpoint,
+        "vector_store.default_vector_store.database_name": database_name,
+    })
+    if connection_string:
+        overrides["vector_store.default_vector_store.connection_string"] = (
+            connection_string
+        )
     return overrides
 
 
@@ -283,6 +327,7 @@ def load_graphrag_config(
     version: str | None = None,
     *,
     query_runtime: bool = False,
+    cloud_vector_store: bool = False,
 ) -> GraphRagConfig:
     """
     Load shared GraphRAG configuration with collection-specific storage overrides.
@@ -295,11 +340,17 @@ def load_graphrag_config(
     # Keep one stable index prefix per collection to avoid index explosion
     # on Azure AI Search Free tier (max 3 indexes/service).
     vector_index_name = _build_vector_index_name(collection_id)
+    cli_overrides: dict[str, object]
 
     if use_blob:
         _ensure_blob_container(collection_id)
         container_name = _collection_container(collection_id)
-        cli_overrides = _blob_storage_cli_overrides(conn_str, container_name)
+        cli_overrides = {
+            key: cast(object, value)
+            for key, value in _blob_storage_cli_overrides(
+                conn_str, container_name
+            ).items()
+        }
     else:
         storage_root = settings.collections_dir.resolve()
         collection_dir = storage_root / collection_id
@@ -322,6 +373,7 @@ def load_graphrag_config(
             vector_index_name,
             use_blob=use_blob,
             query_runtime=query_runtime,
+            cloud_vector_store=cloud_vector_store,
         )
     )
 
@@ -347,7 +399,10 @@ def validate_collection_indexed(
             return False, f"Collection '{collection_id}' not found"
         version = collection.get("activeVersion")
         if not version:
-            return False, "Collection has not been indexed yet (no active serving version)"
+            return (
+                False,
+                "Collection has not been indexed yet (no active serving version)",
+            )
 
         required_datasets = ["entities", "communities", "community_reports"]
         if method in ["local", "drift", "tog"]:
@@ -355,11 +410,14 @@ def validate_collection_indexed(
 
         missing = []
         for dataset in required_datasets:
-            if serving_repo.count_rows(
-                collection_id=collection_id,
-                version=str(version),
-                dataset=dataset,
-            ) == 0:
+            if (
+                serving_repo.count_rows(
+                    collection_id=collection_id,
+                    version=str(version),
+                    dataset=dataset,
+                )
+                == 0
+            ):
                 missing.append(dataset)
 
         if missing:
@@ -383,7 +441,10 @@ def validate_collection_indexed(
     if use_blob:
         for fname in required_files:
             if not _blob_file_exists(collection_id, f"output/{fname}"):
-                return False, f"Collection has not been indexed yet (missing {fname} in blob)"
+                return (
+                    False,
+                    f"Collection has not been indexed yet (missing {fname} in blob)",
+                )
         return True, None
 
     collection_dir = settings.collections_dir / collection_id
@@ -412,7 +473,9 @@ def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
     if use_blob:
         paths = {key: Path(fname) for key, fname in file_names.items()}
 
-        if method == "local" and _blob_file_exists(collection_id, "output/covariates.parquet"):
+        if method == "local" and _blob_file_exists(
+            collection_id, "output/covariates.parquet"
+        ):
             paths["covariates"] = Path("covariates.parquet")
 
         if method == "tog":
@@ -442,7 +505,9 @@ def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
             if not (output_dir / f).exists()
         ]
         if missing:
-            raise FileNotFoundError(f"ToG search requires missing files: {', '.join(missing)}")
+            raise FileNotFoundError(
+                f"ToG search requires missing files: {', '.join(missing)}"
+            )
 
     return paths
 

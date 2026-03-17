@@ -80,6 +80,7 @@ class Settings(BaseSettings):
 
     # Query serving mode
     query_context_mode: str = "cosmos_only"
+    cloud_vector_store_type: str = "cosmosdb"
     serving_dataset_cache_max_entries: int = 96
     serving_cache_warm_on_index_complete: bool = True
 

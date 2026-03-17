@@ -12,7 +12,11 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 _SECRET_BINDINGS: tuple[tuple[str, str, str], ...] = (
-    ("graphrag_api_key", "azure_key_vault_graphrag_api_key_secret_name", "GRAPHRAG_API_KEY"),
+    (
+        "graphrag_api_key",
+        "azure_key_vault_graphrag_api_key_secret_name",
+        "GRAPHRAG_API_KEY",
+    ),
     ("openai_api_key", "azure_key_vault_openai_api_key_secret_name", "OPENAI_API_KEY"),
     ("google_api_key", "azure_key_vault_google_api_key_secret_name", "GOOGLE_API_KEY"),
     ("tavily_api_key", "azure_key_vault_tavily_api_key_secret_name", "TAVILY_API_KEY"),
@@ -26,7 +30,11 @@ _SECRET_BINDINGS: tuple[tuple[str, str, str], ...] = (
         "azure_key_vault_storage_account_key_secret_name",
         "AZURE_STORAGE_ACCOUNT_KEY",
     ),
-    ("azure_search_api_key", "azure_key_vault_search_api_key_secret_name", "AZURE_SEARCH_API_KEY"),
+    (
+        "azure_search_api_key",
+        "azure_key_vault_search_api_key_secret_name",
+        "AZURE_SEARCH_API_KEY",
+    ),
     (
         "azure_cosmos_connection_string",
         "azure_key_vault_cosmos_connection_string_secret_name",
@@ -67,7 +75,9 @@ def _key_vault_client():
             "Key Vault integration requires azure-keyvault-secrets. "
             "Install dependencies with `uv sync`."
         ) from exc
-    return SecretClient(vault_url=settings.azure_key_vault_url, credential=get_default_credential())
+    return SecretClient(
+        vault_url=settings.azure_key_vault_url, credential=get_default_credential()
+    )
 
 
 def _fetch_secret(secret_name: str) -> str:
@@ -170,6 +180,34 @@ def resolve_storage_connection_string() -> str:
     return ""
 
 
+def resolve_cosmos_connection_string() -> str:
+    """Resolve Cosmos connection string from direct value or endpoint/key fallback."""
+    bootstrap_runtime_secrets()
+    if settings.azure_cosmos_connection_string:
+        return settings.azure_cosmos_connection_string
+    if settings.azure_cosmos_endpoint and settings.azure_cosmos_key:
+        endpoint = settings.azure_cosmos_endpoint.rstrip("/") + "/"
+        return f"AccountEndpoint={endpoint};AccountKey={settings.azure_cosmos_key};"
+    return ""
+
+
+def cosmos_account_url() -> str:
+    """Resolve Cosmos account URL from direct endpoint or connection string."""
+    bootstrap_runtime_secrets()
+    if settings.azure_cosmos_endpoint:
+        return settings.azure_cosmos_endpoint.rstrip("/") + "/"
+
+    connection_string = settings.azure_cosmos_connection_string
+    if not connection_string:
+        return ""
+
+    for segment in connection_string.split(";"):
+        key, _, value = segment.partition("=")
+        if key.strip().lower() == "accountendpoint" and value.strip():
+            return value.strip().rstrip("/") + "/"
+    return ""
+
+
 def blob_account_url() -> str:
     """Resolve blob account URL for managed identity auth."""
     if settings.azure_storage_account_url:
@@ -184,7 +222,9 @@ def queue_account_url() -> str:
     if settings.azure_storage_account_url:
         base_url = settings.azure_storage_account_url.rstrip("/")
         if base_url.endswith(".blob.core.windows.net"):
-            account_name = base_url.removeprefix("https://").removesuffix(".blob.core.windows.net")
+            account_name = base_url.removeprefix("https://").removesuffix(
+                ".blob.core.windows.net"
+            )
             return f"https://{account_name}{_QUEUE_ENDPOINT_SUFFIX}"
         return base_url
     if settings.azure_storage_account_name:
@@ -203,7 +243,9 @@ def create_blob_service_client():
     if is_managed_identity_enabled():
         account_url = blob_account_url()
         if account_url:
-            return BlobServiceClient(account_url=account_url, credential=get_default_credential())
+            return BlobServiceClient(
+                account_url=account_url, credential=get_default_credential()
+            )
     return None
 
 
@@ -218,5 +260,7 @@ def create_queue_service_client():
     if is_managed_identity_enabled():
         account_url = queue_account_url()
         if account_url:
-            return QueueServiceClient(account_url=account_url, credential=get_default_credential())
+            return QueueServiceClient(
+                account_url=account_url, credential=get_default_credential()
+            )
     return None

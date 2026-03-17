@@ -8,7 +8,11 @@ import yaml
 
 from graphrag.config.enums import CacheType, ReportingType, StorageType, VectorStoreType
 
-from ..azure_runtime import is_managed_identity_enabled
+from ..azure_runtime import (
+    cosmos_account_url,
+    is_managed_identity_enabled,
+    resolve_cosmos_connection_string,
+)
 from ..config import settings
 
 PHASE0_COMPATIBILITY_CHECKS: tuple[str, ...] = (
@@ -16,7 +20,7 @@ PHASE0_COMPATIBILITY_CHECKS: tuple[str, ...] = (
     "input/output/cache/reporting type values match GraphRAG enums",
     "azure_ai_search vector store has required url",
     "cosmosdb vector store has required url + database_name",
-    "cloud/runtime query embeddings use Azure AI Search with required auth",
+    "cloud/runtime vector store uses Azure AI Search or Cosmos DB with required auth",
 )
 
 
@@ -35,21 +39,37 @@ def _validate_runtime_query_vector_store(
     if not cloud_runtime:
         return
 
-    if effective_store_type != VectorStoreType.AzureAISearch.value:
-        raise ValueError(
-            "Cloud/runtime query embeddings must use azure_ai_search, "
-            f"got {effective_store_type!r}."
-        )
+    if effective_store_type == VectorStoreType.AzureAISearch.value:
+        if not settings.azure_search_endpoint.strip():
+            raise ValueError(
+                "Cloud/runtime query embeddings require AZURE_SEARCH_ENDPOINT for Azure AI Search."
+            )
 
-    if not settings.azure_search_endpoint.strip():
-        raise ValueError(
-            "Cloud/runtime query embeddings require AZURE_SEARCH_ENDPOINT for Azure AI Search."
-        )
+        if not settings.azure_search_api_key and not is_managed_identity_enabled():
+            raise ValueError(
+                "Cloud/runtime query embeddings require AZURE_SEARCH_API_KEY or Azure managed identity for Azure AI Search."
+            )
+        return
 
-    if not settings.azure_search_api_key and not is_managed_identity_enabled():
-        raise ValueError(
-            "Cloud/runtime query embeddings require AZURE_SEARCH_API_KEY or Azure managed identity for Azure AI Search."
-        )
+    if effective_store_type == VectorStoreType.CosmosDB.value:
+        if not cosmos_account_url():
+            raise ValueError(
+                "Cloud/runtime query embeddings require AZURE_COSMOS_ENDPOINT or AZURE_COSMOS_CONNECTION_STRING for Cosmos DB."
+            )
+        if not settings.azure_cosmos_database_name.strip():
+            raise ValueError(
+                "Cloud/runtime query embeddings require AZURE_COSMOS_DATABASE_NAME for Cosmos DB."
+            )
+        if not resolve_cosmos_connection_string() and not is_managed_identity_enabled():
+            raise ValueError(
+                "Cloud/runtime query embeddings require AZURE_COSMOS_CONNECTION_STRING, AZURE_COSMOS_KEY, or Azure managed identity for Cosmos DB."
+            )
+        return
+
+    raise ValueError(
+        "Cloud/runtime query embeddings must use azure_ai_search or cosmosdb, "
+        f"got {effective_store_type!r}."
+    )
 
 
 def validate_graphrag_settings_compatibility(
@@ -71,7 +91,7 @@ def validate_graphrag_settings_compatibility(
     _require_enum(cache_type, {e.value for e in CacheType}, "cache.type")
     _require_enum(reporting_type, {e.value for e in ReportingType}, "reporting.type")
 
-    default_store = ((data.get("vector_store") or {}).get("default_vector_store") or {})
+    default_store = (data.get("vector_store") or {}).get("default_vector_store") or {}
 
     if "index_schema" in default_store:
         raise ValueError(
@@ -86,23 +106,29 @@ def validate_graphrag_settings_compatibility(
         "vector_store.default_vector_store.type",
     )
 
-    if store_type == VectorStoreType.AzureAISearch.value and not default_store.get("url"):
+    if store_type == VectorStoreType.AzureAISearch.value and not default_store.get(
+        "url"
+    ):
         raise ValueError(
             "vector_store.default_vector_store.url is required for azure_ai_search"
         )
 
     if store_type == VectorStoreType.CosmosDB.value:
         if not default_store.get("url"):
-            raise ValueError("vector_store.default_vector_store.url is required for cosmosdb")
+            raise ValueError(
+                "vector_store.default_vector_store.url is required for cosmosdb"
+            )
         if not default_store.get("database_name"):
             raise ValueError(
                 "vector_store.default_vector_store.database_name is required for cosmosdb"
             )
 
     runtime_cloud = False if cloud_runtime is None else cloud_runtime
-    runtime_store_type = (
-        VectorStoreType.AzureAISearch.value if runtime_cloud else store_type
-    ) if effective_store_type is None else effective_store_type
+    runtime_store_type: str = str(
+        (VectorStoreType.AzureAISearch.value if runtime_cloud else store_type)
+        if effective_store_type is None
+        else effective_store_type
+    )
     _validate_runtime_query_vector_store(
         cloud_runtime=runtime_cloud,
         effective_store_type=runtime_store_type,

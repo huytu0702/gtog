@@ -224,10 +224,15 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     logger.info("Starting GraphRAG FastAPI backend...")
     bootstrap_runtime_secrets()
+    cloud_runtime = (
+        bool(_blob_client()) and settings.query_context_mode.lower() == "cosmos_only"
+    )
     validate_graphrag_settings_compatibility(
         settings.settings_yaml_path,
-        cloud_runtime=bool(_blob_client())
-        and settings.query_context_mode.lower() == "cosmos_only",
+        cloud_runtime=cloud_runtime,
+        effective_store_type=(
+            settings.cloud_vector_store_type.strip().lower() if cloud_runtime else None
+        ),
     )
 
     if is_cosmos_configured():

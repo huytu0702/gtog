@@ -56,9 +56,15 @@ class IndexingService:
     @staticmethod
     def _next_attempt_at() -> str:
         return (
-            datetime.now(timezone.utc)
-            + timedelta(seconds=settings.azure_storage_queue_visibility_timeout_seconds)
-        ).replace(tzinfo=None).isoformat()
+            (
+                datetime.now(timezone.utc)
+                + timedelta(
+                    seconds=settings.azure_storage_queue_visibility_timeout_seconds
+                )
+            )
+            .replace(tzinfo=None)
+            .isoformat()
+        )
 
     def _require_control_plane(self) -> CosmosControlPlaneRepository:
         if self.control_plane is None:
@@ -80,7 +86,9 @@ class IndexingService:
                 "Configure storage connection settings or enable managed identity."
             )
 
-    def _status_to_response(self, collection_id: str, job: dict[str, Any]) -> IndexStatusResponse:
+    def _status_to_response(
+        self, collection_id: str, job: dict[str, Any]
+    ) -> IndexStatusResponse:
         status_map = {
             INDEX_JOB_QUEUED: IndexStatus.PENDING,
             INDEX_JOB_RUNNING: IndexStatus.RUNNING,
@@ -89,7 +97,9 @@ class IndexingService:
             INDEX_JOB_FAILED: IndexStatus.FAILED,
             INDEX_JOB_CANCELLED: IndexStatus.CANCELLED,
         }
-        response_status = status_map.get(str(job.get("status", "")), IndexStatus.PENDING)
+        response_status = status_map.get(
+            str(job.get("status", "")), IndexStatus.PENDING
+        )
         progress = float(job.get("progress") or 0.0)
         message = str(job.get("message") or "Indexing job queued")
 
@@ -107,7 +117,9 @@ class IndexingService:
             progress=progress,
             message=message,
             attempt=int(job.get("attempt", 0)),
-            max_attempts=int(job.get("maxAttempts", settings.indexing_job_max_attempts)),
+            max_attempts=int(
+                job.get("maxAttempts", settings.indexing_job_max_attempts)
+            ),
             started_at=self._parse_time(job.get("startedAt")),
             completed_at=self._parse_time(job.get("finishedAt")),
             retry_at=self._parse_time(job.get("nextAttemptAt")),
@@ -122,7 +134,9 @@ class IndexingService:
             collection_id=str(job["collectionId"]),
             status=str(job.get("status", INDEX_JOB_QUEUED)),
             attempt=int(job.get("attempt", 0)),
-            max_attempts=int(job.get("maxAttempts", settings.indexing_job_max_attempts)),
+            max_attempts=int(
+                job.get("maxAttempts", settings.indexing_job_max_attempts)
+            ),
             target_version=str(job.get("targetVersion") or ""),
             requested_at=self._parse_time(job.get("requestedAt")),
             started_at=self._parse_time(job.get("startedAt")),
@@ -154,7 +168,9 @@ class IndexingService:
 
         return self._status_to_response(collection_id, job)
 
-    async def execute_indexing_job(self, *, collection_id: str, job_id: str, worker_id: str) -> dict[str, Any]:
+    async def execute_indexing_job(
+        self, *, collection_id: str, job_id: str, worker_id: str
+    ) -> dict[str, Any]:
         """Run one indexing job as the active lease holder."""
         self._ensure_dispatch_enabled()
         control_plane = self._require_control_plane()
@@ -191,6 +207,7 @@ class IndexingService:
             config = load_graphrag_config(
                 collection_id,
                 version=target_version or None,
+                cloud_vector_store=True,
             )
 
             control_plane.renew_indexing_job_lease(
@@ -230,9 +247,11 @@ class IndexingService:
                 progress=70.0,
                 message="Materializing serving context...",
             )
-            materialized_counts = serving_materialization_service.materialize_collection_version(
-                collection_id=collection_id,
-                version=target_version,
+            materialized_counts = (
+                serving_materialization_service.materialize_collection_version(
+                    collection_id=collection_id,
+                    version=target_version,
+                )
             )
             control_plane.set_active_version(collection_id, target_version)
 
@@ -241,7 +260,9 @@ class IndexingService:
 
                 query_service.invalidate_collection_cache(collection_id)
                 if settings.serving_cache_warm_on_index_complete:
-                    await query_service._load_context_from_serving(collection_id, "global")
+                    await query_service._load_context_from_serving(
+                        collection_id, "global"
+                    )
             except Exception:
                 logger.exception(
                     "Failed to invalidate serving context cache for collection %s",
@@ -295,7 +316,9 @@ class IndexingService:
             raise ValueError(f"Indexing job '{job_id}' not found")
 
         attempt = int(current_job.get("attempt", 0))
-        max_attempts = int(current_job.get("maxAttempts", settings.indexing_job_max_attempts))
+        max_attempts = int(
+            current_job.get("maxAttempts", settings.indexing_job_max_attempts)
+        )
         if attempt < max_attempts:
             next_attempt_at = self._next_attempt_at()
             retrying_job = control_plane.transition_indexing_job(
@@ -336,7 +359,9 @@ class IndexingService:
             message="Indexing failed",
         )
 
-    async def _heartbeat_loop(self, *, collection_id: str, job_id: str, worker_id: str) -> None:
+    async def _heartbeat_loop(
+        self, *, collection_id: str, job_id: str, worker_id: str
+    ) -> None:
         """Renew lease ownership while a worker is actively processing a job."""
         control_plane = self._require_control_plane()
         while True:
