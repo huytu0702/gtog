@@ -1,6 +1,7 @@
 """Query service for GraphRAG search operations."""
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -49,13 +50,118 @@ def _preferred_entity_name_column(entities: pd.DataFrame) -> str:
             return col
     return entities.columns[0] if len(entities.columns) > 0 else "id"
 
+
+def _non_empty_text(value: Any) -> str:
+    if _is_missing_value(value):
+        return ""
+    return str(value).strip()
+
+
+def _coerce_findings(value: Any) -> list[dict[str, Any]]:
+    if _is_missing_value(value):
+        return []
+
+    parsed = value
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except json.JSONDecodeError:
+            return []
+    elif hasattr(parsed, "tolist") and not isinstance(parsed, (bytes, bytearray)):
+        try:
+            parsed = parsed.tolist()
+        except Exception:
+            return []
+
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        return []
+
+    return [item for item in parsed if isinstance(item, dict)]
+
+
+def _community_report_payload(row: pd.Series) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    raw_payload = row.get("full_content_json")
+    if isinstance(raw_payload, str) and raw_payload.strip():
+        try:
+            parsed = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            payload = parsed
+    elif isinstance(raw_payload, dict):
+        payload = raw_payload
+    return payload
+
+
+def _render_community_report_full_content(row: pd.Series) -> str:
+    payload = _community_report_payload(row)
+    title = (
+        _non_empty_text(payload.get("title") or row.get("title")) or "Community Report"
+    )
+    summary = _non_empty_text(payload.get("summary") or row.get("summary"))
+    findings = _coerce_findings(payload.get("findings") or row.get("findings"))
+    rating = payload.get("rating")
+    if _is_missing_value(rating):
+        rating = row.get("rank")
+    rating_text = _non_empty_text(rating)
+    rating_explanation = _non_empty_text(
+        payload.get("rating_explanation") or row.get("rating_explanation")
+    )
+
+    sections = [f"# {title}"]
+    if summary:
+        sections.append(summary)
+
+    for finding in findings:
+        finding_title = _non_empty_text(finding.get("summary")) or "Finding"
+        explanation = _non_empty_text(finding.get("explanation"))
+        if explanation:
+            sections.append(f"## {finding_title}\n\n{explanation}")
+
+    if rating_text or rating_explanation:
+        rating_body = rating_text
+        if rating_explanation:
+            rating_body = (
+                f"{rating_body}\n\n{rating_explanation}"
+                if rating_body
+                else rating_explanation
+            )
+        sections.append(f"## Impact Severity Rating\n\n{rating_body}")
+
+    rendered = "\n\n".join(section for section in sections if section)
+    return rendered.strip() or title
+
+
+def _normalize_community_reports_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+
+    normalized = frame.copy()
+    if "full_content" not in normalized.columns:
+        normalized["full_content"] = ""
+
+    missing_mask = normalized["full_content"].apply(_is_missing_value)
+    if missing_mask.any():
+        normalized.loc[missing_mask, "full_content"] = normalized.loc[
+            missing_mask
+        ].apply(
+            _render_community_report_full_content,
+            axis=1,
+        )
+
+    return normalized
+
+
 # Column name mappings: what to use as the "name" and "description" per dataset
 _CONTEXT_COLS: dict[str, tuple[str, str]] = {
-    "entities":      ("entity", "description"),
+    "entities": ("entity", "description"),
     "relationships": ("source", "description"),
-    "reports":       ("title", "summary"),
-    "sources":       ("text", "text"),
-    "covariates":    ("subject_id", "covariate_type"),
+    "reports": ("title", "summary"),
+    "sources": ("text", "text"),
+    "covariates": ("subject_id", "covariate_type"),
 }
 
 
@@ -78,7 +184,11 @@ def _serialize_context_records(
         for _, row in df.iterrows():
             short_id = str(row.get("id", ""))
             name = str(row.get(name_col, "")) if name_col in df.columns else short_id
-            desc = str(row.get(desc_col, "")) if desc_col and desc_col in df.columns else ""
+            desc = (
+                str(row.get(desc_col, ""))
+                if desc_col and desc_col in df.columns
+                else ""
+            )
             lookup[short_id] = {"name": name, "description": desc}
         result[key] = lookup
     return result or None
@@ -96,11 +206,17 @@ def _normalize_tog_citations(text: str, entity_names: set[str]) -> str:
     def _rewrite(match: re.Match) -> str:
         inner = match.group(1).strip()
         # Already in correct format: "Entities (...)" or "Relationships (...)"
-        if re.match(r"^(Entities|Relationships|Sources|Reports)\s*\(", inner, re.IGNORECASE):
+        if re.match(
+            r"^(Entities|Relationships|Sources|Reports)\s*\(", inner, re.IGNORECASE
+        ):
             return match.group(0)
         # Bare names: "GRAPHRAG, MICROSOFT RESEARCH" — check if they're entity names
         raw_names = [n.strip() for n in inner.split(",")]
-        matched = [name_map[n.lower()] if n.lower() in name_map else n for n in raw_names if n.strip()]
+        matched = [
+            name_map[n.lower()] if n.lower() in name_map else n
+            for n in raw_names
+            if n.strip()
+        ]
         if matched:
             return f"[Data: Entities ({', '.join(matched)})]"
         return match.group(0)
@@ -125,7 +241,9 @@ class QueryService:
         dataset: str,
     ) -> pd.DataFrame:
         if self.serving_repo is None:
-            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError(
+                "Cosmos serving repository is not configured"
+            )
 
         def _loader() -> pd.DataFrame:
             return self.serving_repo.load_dataframe(
@@ -164,7 +282,9 @@ class QueryService:
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
         if self.control_plane is None or self.serving_repo is None:
-            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError(
+                "Cosmos serving repository is not configured"
+            )
 
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
@@ -202,6 +322,8 @@ class QueryService:
                 version=str(active_version),
                 dataset=dataset,
             )
+            if dataset == "community_reports":
+                frame = _normalize_community_reports_frame(frame)
             if frame.empty:
                 raise ServingContextNotReadyError(
                     f"Serving context is incomplete for active version {active_version} "
@@ -245,8 +367,12 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        active_version, frames = await self._load_context_from_serving(collection_id, "global")
-        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "global"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, query_runtime=True
+        )
         entities = frames["entities"]
         communities = frames["communities"]
         community_reports = frames["community_reports"]
@@ -297,8 +423,12 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        active_version, frames = await self._load_context_from_serving(collection_id, "local")
-        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "local"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, query_runtime=True
+        )
         entities = frames["entities"]
         communities = frames["communities"]
         community_reports = frames["community_reports"]
@@ -350,8 +480,12 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        active_version, frames = await self._load_context_from_serving(collection_id, "tog")
-        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "tog"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, query_runtime=True
+        )
         entities = frames["entities"]
         relationships = frames["relationships"]
 
@@ -392,16 +526,25 @@ class QueryService:
                 for path in paths:
                     # Each path: "A --[rel]--> B | B --[rel2]--> C"
                     for segment in path.split(" | "):
-                        m = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment.strip())
+                        m = re.match(
+                            r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment.strip()
+                        )
                         if m:
-                            src, rel, tgt = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+                            src, rel, tgt = (
+                                m.group(1).strip(),
+                                m.group(2).strip(),
+                                m.group(3).strip(),
+                            )
                             entity_paths.setdefault(src, []).append(segment.strip())
                             entity_paths.setdefault(tgt, []).append(segment.strip())
                             known_entity_names.add(src)
                             known_entity_names.add(tgt)
                             rel_lookup[rel] = {"name": rel, "description": ""}
                 entity_lookup = {
-                    name: {"name": name, "description": " | ".join(dict.fromkeys(path_list))}
+                    name: {
+                        "name": name,
+                        "description": " | ".join(dict.fromkeys(path_list)),
+                    }
                     for name, path_list in entity_paths.items()
                 }
                 serialized = {}
@@ -441,8 +584,12 @@ class QueryService:
         Returns:
             SearchResponse with results
         """
-        active_version, frames = await self._load_context_from_serving(collection_id, "drift")
-        config = load_graphrag_config(collection_id, version=active_version, query_runtime=True)
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "drift"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, query_runtime=True
+        )
         entities = frames["entities"]
         communities = frames["communities"]
         community_reports = frames["community_reports"]
@@ -477,10 +624,14 @@ class QueryService:
             method=SearchMethod.DRIFT,
         )
 
-    def get_tog_entities_preview(self, collection_id: str, limit: int = 20) -> dict[str, Any]:
+    def get_tog_entities_preview(
+        self, collection_id: str, limit: int = 20
+    ) -> dict[str, Any]:
         """Return ToG entity preview for debugging."""
         if self.control_plane is None or self.serving_repo is None:
-            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError(
+                "Cosmos serving repository is not configured"
+            )
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
             raise FileNotFoundError(f"Collection '{collection_id}' not found")
@@ -516,13 +667,13 @@ class QueryService:
                 entity_id = row.get("id")
             if _is_missing_value(entity_id):
                 entity_id = row.get("name")
-            entities_info.append(
-                {
-                    "id": str(entity_id) if not _is_missing_value(entity_id) else "",
-                    "description": description[:100] + "..." if len(description) > 100 else description,
-                    "type": row.get("type", "unknown"),
-                }
-            )
+            entities_info.append({
+                "id": str(entity_id) if not _is_missing_value(entity_id) else "",
+                "description": description[:100] + "..."
+                if len(description) > 100
+                else description,
+                "type": row.get("type", "unknown"),
+            })
 
         return {
             "collection_id": collection_id,
