@@ -1,0 +1,16 @@
+dataset:
+  path: "qa_failed_retry.json"
+
+indexes:
+  tt2278388: "F:/KL/gtog-eval/eval/tt2278388"
+
+methods:
+  - tog
+
+output:
+  dir: "F:/KL/gtog-eval/eval_results_tt2278388_retry"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0
