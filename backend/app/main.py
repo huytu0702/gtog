@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import logging
 from collections import defaultdict, deque
@@ -110,16 +111,35 @@ def _is_local_origin(origin: str) -> bool:
     return hostname in {"localhost", "127.0.0.1"}
 
 
+def _is_trusted_tunnel_proxy(request: Request) -> bool:
+    """Allow remotely managed Cloudflare Tunnel traffic when origin is private-only."""
+    if not request.headers.get("cf-ray") or not request.headers.get("cf-connecting-ip"):
+        return False
+
+    try:
+        proxy_ip = ipaddress.ip_address(_connection_ip(request))
+    except ValueError:
+        return False
+
+    trusted_networks = (
+        ipaddress.ip_network("100.64.0.0/10"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+    )
+    return any(proxy_ip in network for network in trusted_networks)
+
+
 def _auth_configuration_error() -> str | None:
     if settings.require_edge_auth:
         if not settings.edge_origin_secret.strip():
             return "EDGE_ORIGIN_SECRET is required when REQUIRE_EDGE_AUTH=true."
         return None
 
-    if not allowed_origins or any(not _is_local_origin(origin) for origin in allowed_origins):
-        return (
-            "REQUIRE_EDGE_AUTH=false is only supported with explicit localhost CORS origins."
-        )
+    if not allowed_origins or any(
+        not _is_local_origin(origin) for origin in allowed_origins
+    ):
+        return "REQUIRE_EDGE_AUTH=false is only supported with explicit localhost CORS origins."
 
     return None
 
@@ -206,7 +226,8 @@ async def lifespan(app: FastAPI):
     bootstrap_runtime_secrets()
     validate_graphrag_settings_compatibility(
         settings.settings_yaml_path,
-        cloud_runtime=bool(_blob_client()) and settings.query_context_mode.lower() == "cosmos_only",
+        cloud_runtime=bool(_blob_client())
+        and settings.query_context_mode.lower() == "cosmos_only",
     )
 
     if is_cosmos_configured():
@@ -287,13 +308,15 @@ async def security_and_logging_middleware(request: Request, call_next):
             elif settings.require_edge_auth:
                 expected_secret = settings.edge_origin_secret.strip()
                 provided_secret = request.headers.get("x-edge-secret", "").strip()
-                if not hmac.compare_digest(provided_secret, expected_secret):
+                if hmac.compare_digest(provided_secret, expected_secret):
+                    client_ip = _trusted_client_ip(request)
+                elif _is_trusted_tunnel_proxy(request):
+                    client_ip = _trusted_client_ip(request)
+                else:
                     response = JSONResponse(
                         status_code=403,
                         content={"detail": "Forbidden"},
                     )
-                else:
-                    client_ip = _trusted_client_ip(request)
 
             if response is None and settings.rate_limit_enabled:
                 is_allowed, retry_after = _rate_limiter.allow(client_ip)

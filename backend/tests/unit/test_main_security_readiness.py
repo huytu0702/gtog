@@ -12,8 +12,9 @@ from backend.app.main import app
 
 @pytest.mark.asyncio
 async def test_api_rejects_missing_edge_secret_when_configured():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -30,8 +31,9 @@ async def test_api_rejects_missing_edge_secret_when_configured():
 
 @pytest.mark.asyncio
 async def test_api_rejects_wrong_edge_secret_when_configured():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -51,8 +53,9 @@ async def test_api_rejects_wrong_edge_secret_when_configured():
 async def test_api_returns_cors_headers_on_403_for_allowed_origin():
     allowed_origin = main.allowed_origins[0]
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -71,8 +74,9 @@ async def test_api_returns_cors_headers_on_403_for_allowed_origin():
 
 @pytest.mark.asyncio
 async def test_api_does_not_return_cors_headers_for_unknown_origin_on_403():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -97,8 +101,9 @@ async def test_api_allows_request_with_valid_edge_secret_when_configured(
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         with patch("backend.app.routers.search.web_search_service") as mock_web:
             mock_web.search = AsyncMock(return_value=mock_result)
@@ -117,6 +122,60 @@ async def test_api_allows_request_with_valid_edge_secret_when_configured(
 
 
 @pytest.mark.asyncio
+async def test_api_allows_request_from_trusted_tunnel_proxy_without_edge_secret():
+    mock_result = MagicMock()
+    mock_result.response = "ok"
+    mock_result.sources = []
+
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
+        patch("backend.app.main._connection_ip", return_value="100.100.0.64"),
+    ):
+        with patch("backend.app.routers.search.web_search_service") as mock_web:
+            mock_web.search = AsyncMock(return_value=mock_result)
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/web",
+                    headers={
+                        "CF-Ray": "test-ray",
+                        "CF-Connecting-IP": "203.0.113.10",
+                    },
+                    json={"query": "hello", "stream": False},
+                )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_rejects_public_proxy_headers_without_edge_secret():
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
+        patch("backend.app.main._connection_ip", return_value="198.51.100.20"),
+    ):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            response = await client.post(
+                "/api/collections/test-collection/search/web",
+                headers={
+                    "CF-Ray": "test-ray",
+                    "CF-Connecting-IP": "203.0.113.10",
+                },
+                json={"query": "hello", "stream": False},
+            )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_api_ignores_unrelated_header_when_edge_secret_matches(
     valid_edge_secret_headers,
 ):
@@ -124,8 +183,9 @@ async def test_api_ignores_unrelated_header_when_edge_secret_matches(
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         with patch("backend.app.routers.search.web_search_service") as mock_web:
             mock_web.search = AsyncMock(return_value=mock_result)
@@ -152,8 +212,9 @@ async def test_api_allows_request_without_edge_secret_for_local_origins_only():
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
-        main.settings, "require_edge_auth", False
+    with (
+        patch.object(main.settings, "edge_origin_secret", ""),
+        patch.object(main.settings, "require_edge_auth", False),
     ):
         with patch.object(main, "allowed_origins", ["http://localhost:3000"]):
             with patch("backend.app.routers.search.web_search_service") as mock_web:
@@ -173,8 +234,9 @@ async def test_api_allows_request_without_edge_secret_for_local_origins_only():
 
 @pytest.mark.asyncio
 async def test_api_returns_503_without_edge_secret_for_non_local_origins():
-    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
-        main.settings, "require_edge_auth", False
+    with (
+        patch.object(main.settings, "edge_origin_secret", ""),
+        patch.object(main.settings, "require_edge_auth", False),
     ):
         with patch.object(main, "allowed_origins", ["https://app.example.com"]):
             transport = httpx.ASGITransport(app=app)
@@ -200,8 +262,9 @@ async def test_api_allows_request_when_edge_secret_has_surrounding_whitespace(
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", "  secret-123  "), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "  secret-123  "),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         with patch("backend.app.routers.search.web_search_service") as mock_web:
             mock_web.search = AsyncMock(return_value=mock_result)
@@ -221,13 +284,18 @@ async def test_api_allows_request_when_edge_secret_has_surrounding_whitespace(
 
 @pytest.mark.asyncio
 async def test_fallback_rate_limiter_returns_429_for_local_origins_without_secret():
-    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
-        main.settings, "require_edge_auth", False
+    with (
+        patch.object(main.settings, "edge_origin_secret", ""),
+        patch.object(main.settings, "require_edge_auth", False),
     ):
         with patch.object(main, "allowed_origins", ["http://localhost:3000"]):
             with patch.object(main.settings, "rate_limit_enabled", True):
-                with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
-                    with patch("backend.app.routers.search.web_search_service") as mock_web:
+                with patch(
+                    "backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)
+                ):
+                    with patch(
+                        "backend.app.routers.search.web_search_service"
+                    ) as mock_web:
                         mock_result = MagicMock()
                         mock_result.response = "ok"
                         mock_result.sources = []
@@ -255,13 +323,18 @@ async def test_fallback_rate_limiter_returns_429_for_local_origins_without_secre
 async def test_rate_limiter_returns_cors_headers_on_429_for_allowed_origin():
     allowed_origin = "http://localhost:3000"
 
-    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
-        main.settings, "require_edge_auth", False
+    with (
+        patch.object(main.settings, "edge_origin_secret", ""),
+        patch.object(main.settings, "require_edge_auth", False),
     ):
         with patch.object(main, "allowed_origins", [allowed_origin]):
             with patch.object(main.settings, "rate_limit_enabled", True):
-                with patch("backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)):
-                    with patch("backend.app.routers.search.web_search_service") as mock_web:
+                with patch(
+                    "backend.app.main._rate_limiter", main.InMemoryRateLimiter(1)
+                ):
+                    with patch(
+                        "backend.app.routers.search.web_search_service"
+                    ) as mock_web:
                         mock_result = MagicMock()
                         mock_result.response = "ok"
                         mock_result.sources = []
@@ -378,8 +451,9 @@ async def test_cors_preflight_allows_configured_origin():
 async def test_cors_preflight_allows_configured_origin_when_edge_secret_enabled():
     allowed_origin = main.allowed_origins[0]
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -402,8 +476,9 @@ async def test_cors_preflight_allows_configured_origin_when_edge_secret_enabled(
 async def test_cors_preflight_does_not_bypass_api_guards():
     allowed_origin = main.allowed_origins[0]
 
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -429,8 +504,9 @@ async def test_cors_preflight_does_not_bypass_api_guards():
 
 @pytest.mark.asyncio
 async def test_public_health_endpoint_does_not_open_api_access():
-    with patch.object(main.settings, "edge_origin_secret", "secret-123"), patch.object(
-        main.settings, "require_edge_auth", True
+    with (
+        patch.object(main.settings, "edge_origin_secret", "secret-123"),
+        patch.object(main.settings, "require_edge_auth", True),
     ):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -475,8 +551,9 @@ async def test_request_logging_includes_cloudflare_headers(caplog):
     mock_result.response = "ok"
     mock_result.sources = []
 
-    with patch.object(main.settings, "edge_origin_secret", ""), patch.object(
-        main.settings, "require_edge_auth", False
+    with (
+        patch.object(main.settings, "edge_origin_secret", ""),
+        patch.object(main.settings, "require_edge_auth", False),
     ):
         with patch.object(main.settings, "rate_limit_enabled", False):
             with patch("backend.app.routers.search.web_search_service") as mock_web:
