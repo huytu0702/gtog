@@ -1,0 +1,16 @@
+dataset:
+  path: "tt2278388_one_question.json"
+
+indexes:
+  tt2278388: "F:/KL/gtog-eval/eval/tt2278388"
+
+methods:
+  - tog
+
+output:
+  dir: "eval_results_tt2278388_one_question"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0

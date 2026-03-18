@@ -326,10 +326,12 @@ class ToGSearch:
                 ]
                 current_path = self._node_to_path_string(node)
 
-                entity_scores, entity_metrics = await self.pruning_strategy.score_entities(
-                    query=query,
-                    current_path=current_path,
-                    entities=entity_candidates,
+                entity_scores, entity_metrics = (
+                    await self.pruning_strategy.score_entities(
+                        query=query,
+                        current_path=current_path,
+                        entities=entity_candidates,
+                    )
                 )
                 yield ("", [], entity_metrics, "", [])
 
@@ -344,19 +346,21 @@ class ToGSearch:
                     target_full_desc,
                     rel_full_desc,
                 ) in enumerate(candidate_data):
-                    entity_score = entity_scores[idx] if idx < len(entity_scores) else 5.0
+                    entity_score = (
+                        entity_scores[idx] if idx < len(entity_scores) else 5.0
+                    )
                     combined_score = rel_score * (max(entity_score, 0.0) / 10.0)
                     new_node = ExplorationNode(
-                            entity_id=target_id,
-                            entity_name=target_name,
-                            entity_description=target_full_desc,
-                            depth=next_depth,
-                            score=combined_score,
-                            parent=node,
-                            relation_from_parent=rel_desc,
-                            relation_full_description=rel_full_desc,
-                            entity_full_description=target_full_desc,
-                        )
+                        entity_id=target_id,
+                        entity_name=target_name,
+                        entity_description=target_full_desc,
+                        depth=next_depth,
+                        score=combined_score,
+                        parent=node,
+                        relation_from_parent=rel_desc,
+                        relation_full_description=rel_full_desc,
+                        entity_full_description=target_full_desc,
+                    )
                     next_level_nodes.append(new_node)
 
             # Add next level nodes to state
@@ -396,7 +400,9 @@ class ToGSearch:
             )
 
             if should_terminate and answer:
-                reasoning_paths = self.reasoning_module.get_reasoning_paths(frontier_nodes)
+                reasoning_paths = self.reasoning_module.get_reasoning_paths(
+                    frontier_nodes
+                )
                 early_context_text = self.reasoning_module._format_paths(
                     frontier_nodes,
                     text_units=frontier_text_units,
@@ -512,10 +518,12 @@ class ToGSearch:
             yield (answer, reasoning_paths, None, context_text, final_chunk_ids)
         except Exception as e:
             # Fallback response if reasoning fails
-            paths_summary = "\n".join([
-                f"- {node.entity_name}: {node.entity_description[:100]}..."
-                for node in all_paths[:5]
-            ])
+            paths_summary = "\n".join(
+                [
+                    f"- {node.entity_name}: {node.entity_description[:100]}..."
+                    for node in all_paths[:5]
+                ]
+            )
             yield (
                 f"""Error during reasoning: {str(e)}
 

@@ -30,6 +30,21 @@ class ToGReasoning:
         self.temperature = temperature
         self.reasoning_prompt = reasoning_prompt or TOG_REASONING_PROMPT
 
+    def _load_reasoning_prompt_template(self) -> str:
+        """Load the configured reasoning prompt template."""
+        if hasattr(
+            self.reasoning_prompt, "endswith"
+        ) and self.reasoning_prompt.endswith(".txt"):
+            import os
+
+            if os.path.exists(self.reasoning_prompt):
+                with open(self.reasoning_prompt, "r", encoding="utf-8") as f:
+                    return f.read()
+
+            return TOG_REASONING_PROMPT
+
+        return self.reasoning_prompt
+
     async def generate_answer(
         self,
         query: str,
@@ -48,25 +63,22 @@ class ToGReasoning:
 
         # Replace placeholders in the prompt
         try:
-            # If reasoning_prompt is a file path, read it
-            if hasattr(
-                self.reasoning_prompt, "endswith"
-            ) and self.reasoning_prompt.endswith(".txt"):
-                import os
-
-                if os.path.exists(self.reasoning_prompt):
-                    with open(self.reasoning_prompt, "r", encoding="utf-8") as f:
-                        prompt_template = f.read()
-                else:
-                    prompt_template = TOG_REASONING_PROMPT
-            else:
-                prompt_template = self.reasoning_prompt
-
-            history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
-            prompt = history_prefix + prompt_template.format(query=query, exploration_paths=paths_text)
+            prompt_template = self._load_reasoning_prompt_template()
+            history_prefix = (
+                f"{conversation_history_context}\n\n"
+                if conversation_history_context.strip()
+                else ""
+            )
+            prompt = history_prefix + prompt_template.format(
+                query=query, exploration_paths=paths_text
+            )
         except KeyError as e:
             # Fallback if prompt has different placeholders
-            history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
+            history_prefix = (
+                f"{conversation_history_context}\n\n"
+                if conversation_history_context.strip()
+                else ""
+            )
             prompt = f"""{history_prefix}You are an expert at synthesizing information from knowledge graph exploration to answer questions.
 
 Question: {query}
@@ -265,21 +277,33 @@ Structure your response as:
             current_nodes[:3], text_units=text_units or []
         )  # Check top 3 paths
 
-        history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
-        prompt = f"""{history_prefix}Question: {query}
+        history_prefix = (
+            f"{conversation_history_context}\n\n"
+            if conversation_history_context.strip()
+            else ""
+        )
+        try:
+            base_prompt = self._load_reasoning_prompt_template().format(
+                query=query,
+                exploration_paths=paths_text,
+            )
+        except KeyError:
+            base_prompt = TOG_REASONING_PROMPT.format(
+                query=query,
+                exploration_paths=paths_text,
+            )
 
-Current exploration paths:
-{paths_text}
+        prompt = f"""{history_prefix}{base_prompt}
 
-Can you answer the question with high confidence based on these paths?
-If yes, provide a complete answer that cites entities using [Data: Entities (EntityName1, EntityName2)] format.
-Only cite entity names that appear in the exploration paths above.
+Decide whether the current exploration is already sufficient to answer with high confidence.
 
-Respond with:
-- "YES: [answer with citations]" if you can answer confidently
-- "NO: [reason]" if more exploration is needed
+Respond with exactly one of these formats:
+- YES: [final answer]
+- NO: [brief reason more exploration is needed]
 
-Response:"""
+If you answer YES, keep the answer grounded in the provided context and preserve any citation style requested by the prompt above.
+If you answer NO, do not answer the question itself.
+"""
 
         metrics.prompt_tokens = len(prompt.split()) * 4 // 3
 
