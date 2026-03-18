@@ -11,11 +11,12 @@ import inspect
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from string import Template
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import yaml
 from dotenv import load_dotenv
@@ -31,7 +32,9 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8317/v1"
 DEFAULT_API_KEY = "proxypal-local"
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_MAX_RETRIES = 5
-DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[2] / "backend" / "settings.yaml"
+DEFAULT_SETTINGS_PATH = (
+    Path(__file__).resolve().parents[2] / "backend" / "settings.yaml"
+)
 DEFAULT_GRAPH_RAG_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 DEFAULT_EMBEDDING_MODEL_ID = "default_embedding_model"
 RAGAS_EMBEDDING_MODEL_NAME = "ragas_semantic_similarity_embedding"
@@ -47,6 +50,41 @@ class MetricScorer(Protocol):
 
     def score(self, **kwargs: Any) -> Any:
         """Score a single sample."""
+
+
+@dataclass(slots=True)
+class LLMCorrectnessScorer:
+    """LLM judge that rewards semantically correct short-answer responses."""
+
+    name: str
+    chat_model: Any
+
+    def score(self, **kwargs: Any) -> float:
+        question = str(kwargs.get("user_input", "")).strip()
+        response = str(kwargs.get("response", "")).strip()
+        reference = str(kwargs.get("reference", "")).strip()
+
+        prompt = (
+            "You are grading a short-answer QA system. "
+            "Judge whether the response answers the question correctly using the "
+            "reference answer as the expected fact. "
+            "Give a high score when the response is factually correct even if it is "
+            "paraphrased or longer than the reference. Ignore harmless extra detail. "
+            "Return only one number: 1.0 for correct, 0.5 for partially correct or "
+            "ambiguous, 0.0 for incorrect, missing, or contradictory.\n\n"
+            f"Question: {question}\n"
+            f"Reference answer: {reference}\n"
+            f"Model response: {response}"
+        )
+        result = self.chat_model.invoke(prompt)
+        content = getattr(result, "content", result)
+        text = content if isinstance(content, str) else str(content)
+        match = re.search(r"(?:0(?:\.0+)?|0\.5|1(?:\.0+)?)", text)
+        if match is None:
+            msg = f"Unable to parse correctness score from judge output: {text!r}"
+            raise ValueError(msg)
+        score = float(match.group(0))
+        return max(0.0, min(1.0, score))
 
 
 @dataclass(slots=True)
@@ -118,21 +156,19 @@ def parse_simple_results(
             normalized[field_name] = value
 
         if missing_fields:
-            skipped_rows.append(
-                {
-                    "row_index": index,
-                    "status": "skipped",
-                    "method": _normalize_text(row.get("method")) or "unknown",
-                    "question": _normalize_text(row.get("question")) or "",
-                    "response": _normalize_text(row.get("response")) or "",
-                    "ground_truth": _normalize_text(row.get("ground_truth")) or "",
-                    "context": _normalize_text(row.get("context")) or "",
-                    "context_text": _normalize_text(row.get("context_text")) or "",
-                    "error": (
-                        "Missing required fields: " + ", ".join(sorted(missing_fields))
-                    ),
-                }
-            )
+            skipped_rows.append({
+                "row_index": index,
+                "status": "skipped",
+                "method": _normalize_text(row.get("method")) or "unknown",
+                "question": _normalize_text(row.get("question")) or "",
+                "response": _normalize_text(row.get("response")) or "",
+                "ground_truth": _normalize_text(row.get("ground_truth")) or "",
+                "context": _normalize_text(row.get("context")) or "",
+                "context_text": _normalize_text(row.get("context_text")) or "",
+                "error": (
+                    "Missing required fields: " + ", ".join(sorted(missing_fields))
+                ),
+            })
             continue
 
         valid_rows.append(
@@ -185,12 +221,13 @@ def build_ragas_llm(
 ) -> Any:
     """Create a Ragas-compatible LLM wrapper backed by ChatOpenAI."""
     from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
     from ragas.llms.base import LangchainLLMWrapper
 
     return LangchainLLMWrapper(
         ChatOpenAI(
             model=model,
-            api_key=api_key,
+            api_key=SecretStr(api_key),
             base_url=base_url,
             timeout=timeout,
             max_retries=max_retries,
@@ -334,6 +371,9 @@ def build_ragas_scorers(
     settings_path: str | Path | None = None,
 ) -> dict[str, MetricScorer]:
     """Create the default Ragas scorers."""
+    from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
+
     evaluator_llm = build_ragas_llm(
         model=model,
         api_key=api_key,
@@ -347,9 +387,15 @@ def build_ragas_scorers(
     context_recall_cls = _import_ragas_metric("ContextRecall")
     faithfulness_cls = _import_ragas_metric("Faithfulness")
     answer_relevancy_cls = _import_ragas_metric("AnswerRelevancy")
-    answer_correctness_cls = _import_ragas_metric("AnswerCorrectness")
-    answer_similarity_cls = _import_ragas_metric("AnswerSimilarity")
-    answer_similarity = answer_similarity_cls(embeddings=ragas_embeddings)
+    answer_accuracy_cls = _import_ragas_metric("AnswerAccuracy")
+    factual_correctness_cls = _import_ragas_metric("FactualCorrectness")
+    correctness_judge = ChatOpenAI(
+        model=model,
+        api_key=SecretStr(api_key),
+        base_url=base_url,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
 
     return {
         "context_precision": context_precision_cls(llm=evaluator_llm),
@@ -359,10 +405,11 @@ def build_ragas_scorers(
             llm=evaluator_llm,
             embeddings=ragas_embeddings,
         ),
-        "answer_correctness": answer_correctness_cls(
-            llm=evaluator_llm,
-            embeddings=ragas_embeddings,
-            answer_similarity=answer_similarity,
+        "answer_accuracy": answer_accuracy_cls(llm=evaluator_llm),
+        "factual_correctness": factual_correctness_cls(llm=evaluator_llm),
+        "answer_correctness_custom": LLMCorrectnessScorer(
+            name="answer_correctness_custom",
+            chat_model=correctness_judge,
         ),
     }
 
@@ -376,13 +423,14 @@ def score_row(
     sample = build_single_turn_sample(row)
     scores: dict[str, float] = {}
     for metric_name, scorer in scorers.items():
-        if hasattr(scorer, "single_turn_score"):
-            metric_result = scorer.single_turn_score(sample)
+        single_turn_score = getattr(scorer, "single_turn_score", None)
+        if callable(single_turn_score):
+            metric_result = single_turn_score(sample)
         else:
             score_kwargs = _build_metric_kwargs(scorer, payload)
             metric_result = scorer.score(**score_kwargs)
         metric_value = getattr(metric_result, "value", metric_result)
-        scores[metric_name] = float(metric_value)
+        scores[metric_name] = float(cast(Any, metric_value))
     return scores
 
 
@@ -530,35 +578,31 @@ def run_ragas_evaluation(
         try:
             scores = score_row(row, scorers)
         except Exception as exc:  # noqa: BLE001
-            detailed_results.append(
-                {
-                    "row_index": row.row_index,
-                    "status": "failed",
-                    "method": row.method,
-                    "question": row.question,
-                    "response": row.response,
-                    "ground_truth": row.ground_truth,
-                    "context": row.context,
-                    "context_text": row.context_text,
-                    "error": str(exc),
-                }
-            )
-            logger.info("[row %s] failed: %s", row.row_index, exc)
-            continue
-
-        detailed_results.append(
-            {
+            detailed_results.append({
                 "row_index": row.row_index,
-                "status": "success",
+                "status": "failed",
                 "method": row.method,
                 "question": row.question,
                 "response": row.response,
                 "ground_truth": row.ground_truth,
                 "context": row.context,
                 "context_text": row.context_text,
-                "scores": scores,
-            }
-        )
+                "error": str(exc),
+            })
+            logger.info("[row %s] failed: %s", row.row_index, exc)
+            continue
+
+        detailed_results.append({
+            "row_index": row.row_index,
+            "status": "success",
+            "method": row.method,
+            "question": row.question,
+            "response": row.response,
+            "ground_truth": row.ground_truth,
+            "context": row.context,
+            "context_text": row.context_text,
+            "scores": scores,
+        })
         logger.info("[row %s] success", row.row_index)
 
     summary = aggregate_ragas_results(

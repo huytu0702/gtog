@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 from graphrag.eval.ragas_runner import (
     aggregate_ragas_results,
     build_ragas_scorers,
+    LLMCorrectnessScorer,
     main,
     parse_simple_results,
     resolve_settings_path,
@@ -67,7 +69,9 @@ def test_aggregate_ragas_results_groups_scores_by_method():
                 "context_precision": 1.0,
                 "context_recall": 1.0,
                 "answer_relevancy": 0.4,
-                "answer_correctness": 0.25,
+                "answer_accuracy": 0.25,
+                "factual_correctness": 0.5,
+                "answer_correctness_custom": 1.0,
             },
         },
         {
@@ -78,7 +82,9 @@ def test_aggregate_ragas_results_groups_scores_by_method():
                 "context_precision": 0.5,
                 "context_recall": 0.0,
                 "answer_relevancy": 0.8,
-                "answer_correctness": 0.75,
+                "answer_accuracy": 0.75,
+                "factual_correctness": 0.25,
+                "answer_correctness_custom": 0.5,
             },
         },
         {"status": "failed", "method": "local", "error": "boom"},
@@ -104,7 +110,9 @@ def test_aggregate_ragas_results_groups_scores_by_method():
     assert summary["by_method"]["tog"]["context_precision"] == 0.75
     assert summary["by_method"]["tog"]["context_recall"] == 0.5
     assert summary["by_method"]["tog"]["answer_relevancy"] == 0.6
-    assert summary["by_method"]["tog"]["answer_correctness"] == 0.5
+    assert summary["by_method"]["tog"]["answer_accuracy"] == 0.5
+    assert summary["by_method"]["tog"]["factual_correctness"] == 0.375
+    assert summary["by_method"]["tog"]["answer_correctness_custom"] == 0.75
     assert summary["by_method"]["local"]["fail_count"] == 1
     assert summary["by_method"]["basic"]["skip_count"] == 1
     assert summary["metadata"]["settings_path"].endswith("backend\\settings.yaml")
@@ -126,13 +134,18 @@ def test_build_ragas_scorers_uses_new_metric_keys(monkeypatch):
             self.args = args
             self.kwargs = kwargs
 
+    class FakeChatModel:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
     metric_classes = {
         "ContextPrecision": FakeMetric,
         "ContextRecall": FakeMetric,
         "Faithfulness": FakeMetric,
         "AnswerRelevancy": FakeMetric,
-        "AnswerCorrectness": FakeMetric,
-        "AnswerSimilarity": FakeMetric,
+        "AnswerAccuracy": FakeMetric,
+        "FactualCorrectness": FakeMetric,
     }
 
     monkeypatch.setattr(
@@ -146,6 +159,10 @@ def test_build_ragas_scorers_uses_new_metric_keys(monkeypatch):
     monkeypatch.setattr(
         "graphrag.eval.ragas_runner._import_ragas_metric",
         lambda name: metric_classes[name],
+    )
+    monkeypatch.setattr(
+        "langchain_openai.ChatOpenAI",
+        FakeChatModel,
     )
 
     scorers = build_ragas_scorers(
@@ -162,18 +179,42 @@ def test_build_ragas_scorers_uses_new_metric_keys(monkeypatch):
         "context_recall",
         "faithfulness",
         "answer_relevancy",
-        "answer_correctness",
+        "answer_accuracy",
+        "factual_correctness",
+        "answer_correctness_custom",
     }
-    assert scorers["context_precision"].kwargs["llm"] is fake_llm
-    assert scorers["answer_relevancy"].kwargs["llm"] is fake_llm
-    assert scorers["answer_relevancy"].kwargs["embeddings"] is fake_embeddings
-    assert scorers["answer_correctness"].kwargs["llm"] is fake_llm
-    assert scorers["answer_correctness"].kwargs["embeddings"] is fake_embeddings
-    assert isinstance(scorers["answer_correctness"].kwargs["answer_similarity"], FakeMetric)
-    assert (
-        scorers["answer_correctness"].kwargs["answer_similarity"].kwargs["embeddings"]
-        is fake_embeddings
+    context_precision_metric = cast(Any, scorers["context_precision"])
+    answer_relevancy_metric = cast(Any, scorers["answer_relevancy"])
+    answer_accuracy_metric = cast(Any, scorers["answer_accuracy"])
+    factual_correctness_metric = cast(Any, scorers["factual_correctness"])
+    custom_correctness_metric = scorers["answer_correctness_custom"]
+
+    assert context_precision_metric.kwargs["llm"] is fake_llm
+    assert answer_relevancy_metric.kwargs["llm"] is fake_llm
+    assert answer_relevancy_metric.kwargs["embeddings"] is fake_embeddings
+    assert answer_accuracy_metric.kwargs["llm"] is fake_llm
+    assert factual_correctness_metric.kwargs["llm"] is fake_llm
+    assert isinstance(custom_correctness_metric, LLMCorrectnessScorer)
+    assert cast(Any, custom_correctness_metric).chat_model.kwargs["model"] == "gpt-5.2"
+
+
+def test_llm_correctness_scorer_parses_judge_output():
+    fake_chat_model = MagicMock()
+    fake_chat_model.invoke.return_value = MagicMock(content="1.0")
+
+    scorer = LLMCorrectnessScorer(
+        name="answer_correctness_custom",
+        chat_model=fake_chat_model,
     )
+
+    score = scorer.score(
+        user_input="Where is he going?",
+        response="He is heading to Coronado.",
+        reference="To Coronado",
+    )
+
+    assert score == 1.0
+    fake_chat_model.invoke.assert_called_once()
 
 
 def test_main_writes_outputs_and_continues_after_row_failure(
@@ -183,31 +224,29 @@ def test_main_writes_outputs_and_continues_after_row_failure(
     input_path = tmp_path / "eval_results_simple.json"
     output_dir = tmp_path / "ragas_out"
     input_path.write_text(
-        json.dumps(
-            [
-                {
-                    "question": "good",
-                    "response": "A1",
-                    "ground_truth": "G1",
-                    "context_text": "C1",
-                    "method": "tog",
-                },
-                {
-                    "question": "bad",
-                    "response": "A2",
-                    "ground_truth": "G2",
-                    "context_text": "C2",
-                    "method": "tog",
-                },
-                {
-                    "question": "skip",
-                    "response": "",
-                    "ground_truth": "G3",
-                    "context_text": "C3",
-                    "method": "basic",
-                },
-            ]
-        ),
+        json.dumps([
+            {
+                "question": "good",
+                "response": "A1",
+                "ground_truth": "G1",
+                "context_text": "C1",
+                "method": "tog",
+            },
+            {
+                "question": "bad",
+                "response": "A2",
+                "ground_truth": "G2",
+                "context_text": "C2",
+                "method": "tog",
+            },
+            {
+                "question": "skip",
+                "response": "",
+                "ground_truth": "G3",
+                "context_text": "C3",
+                "method": "basic",
+            },
+        ]),
         encoding="utf-8",
     )
 
@@ -232,17 +271,17 @@ def test_main_writes_outputs_and_continues_after_row_failure(
             "context_precision": FakeMetric("context_precision"),
             "context_recall": FakeMetric("context_recall"),
             "answer_relevancy": FakeMetric("answer_relevancy"),
-            "answer_correctness": FakeMetric("answer_correctness"),
+            "answer_accuracy": FakeMetric("answer_accuracy"),
+            "factual_correctness": FakeMetric("factual_correctness"),
+            "answer_correctness_custom": FakeMetric("answer_correctness_custom"),
         },
     )
-    exit_code = main(
-        [
-            "--input",
-            str(input_path),
-            "--output-dir",
-            str(output_dir),
-        ]
-    )
+    exit_code = main([
+        "--input",
+        str(input_path),
+        "--output-dir",
+        str(output_dir),
+    ])
 
     assert exit_code == 0
 
@@ -257,7 +296,9 @@ def test_main_writes_outputs_and_continues_after_row_failure(
     assert detailed[1]["scores"]["faithfulness"] == 0.5
     assert detailed[1]["scores"]["context_precision"] == 1.0
     assert detailed[1]["scores"]["answer_relevancy"] == 1.0
-    assert detailed[1]["scores"]["answer_correctness"] == 1.0
+    assert detailed[1]["scores"]["answer_accuracy"] == 1.0
+    assert detailed[1]["scores"]["factual_correctness"] == 1.0
+    assert detailed[1]["scores"]["answer_correctness_custom"] == 1.0
     assert detailed[2]["error"] == "proxy failure"
     assert summary["overall"]["success_count"] == 1
     assert summary["overall"]["fail_count"] == 1

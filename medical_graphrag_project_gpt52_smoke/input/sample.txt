@@ -1,0 +1,8 @@
+GraphRAG is a retrieval system that turns text into a knowledge graph.
+
+This is a tiny smoke-test document.
+
+Alice is a doctor in Hanoi.
+Bob is a patient.
+Alice treated Bob at City Hospital on Monday.
+The visit was successful and Bob felt better afterward.
