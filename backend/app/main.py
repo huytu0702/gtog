@@ -51,18 +51,42 @@ logger = logging.getLogger(__name__)
 class InMemoryRateLimiter:
     """Simple process-local rate limiter for API defense-in-depth."""
 
+    _STALE_KEY_PRUNE_INTERVAL_SECONDS = 60.0
+
     def __init__(self, requests_per_minute: int):
         self._requests_per_minute = max(1, requests_per_minute)
         self._events: dict[str, Deque[float]] = defaultdict(deque)
         self._lock = Lock()
+        self._next_stale_key_prune_at = 0.0
+
+    @staticmethod
+    def _prune_expired_events(events: Deque[float], window_start: float) -> None:
+        while events and events[0] < window_start:
+            events.popleft()
+
+    def _prune_stale_keys(self, *, now: float, window_start: float) -> None:
+        if now < self._next_stale_key_prune_at:
+            return
+
+        expired_keys: list[str] = []
+        for existing_key, existing_events in self._events.items():
+            self._prune_expired_events(existing_events, window_start)
+            if not existing_events:
+                expired_keys.append(existing_key)
+
+        for expired_key in expired_keys:
+            self._events.pop(expired_key, None)
+
+        self._next_stale_key_prune_at = now + self._STALE_KEY_PRUNE_INTERVAL_SECONDS
 
     def allow(self, key: str) -> tuple[bool, int]:
         now = monotonic()
         window_start = now - 60.0
         with self._lock:
-            events = self._events[key]
-            while events and events[0] < window_start:
-                events.popleft()
+            self._prune_stale_keys(now=now, window_start=window_start)
+
+            events = self._events.setdefault(key, deque())
+            self._prune_expired_events(events, window_start)
             if len(events) >= self._requests_per_minute:
                 retry_after = max(1, int(60 - (now - events[0])))
                 return False, retry_after

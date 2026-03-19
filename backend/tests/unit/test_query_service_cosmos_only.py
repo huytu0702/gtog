@@ -19,7 +19,18 @@ def _make_service(*frames: pd.DataFrame) -> QueryService:
         "collectionId": "c1",
         "activeVersion": "v1",
     }
-    service.serving_repo.load_dataframe.side_effect = list(frames)
+
+    dataset_frames = {
+        "entities": frames[0],
+        "communities": frames[1] if len(frames) > 1 else pd.DataFrame(),
+        "community_reports": frames[2] if len(frames) > 2 else pd.DataFrame(),
+        "text_units": frames[3] if len(frames) > 3 else pd.DataFrame(),
+        "relationships": frames[4] if len(frames) > 4 else pd.DataFrame(),
+        "covariates": frames[5] if len(frames) > 5 else pd.DataFrame(),
+    }
+    service.serving_repo.load_dataframe.side_effect = (
+        lambda *, collection_id, version, dataset: dataset_frames[dataset]
+    )
     return service
 
 

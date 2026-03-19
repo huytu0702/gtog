@@ -315,13 +315,19 @@ class QueryService:
             ],
         }[method]
 
+        loaded_frames = await asyncio.gather(
+            *[
+                self._load_dataset_frame(
+                    collection_id=collection_id,
+                    version=str(active_version),
+                    dataset=dataset,
+                )
+                for dataset in required
+            ]
+        )
+
         frames: dict[str, pd.DataFrame] = {}
-        for dataset in required:
-            frame = await self._load_dataset_frame(
-                collection_id=collection_id,
-                version=str(active_version),
-                dataset=dataset,
-            )
+        for dataset, frame in zip(required, loaded_frames):
             if dataset == "community_reports":
                 frame = _normalize_community_reports_frame(frame)
             if frame.empty:
@@ -499,7 +505,7 @@ class QueryService:
             # Debug: Show entity names
             if len(entities) > 0:
                 name_column = _preferred_entity_name_column(entities)
-                entity_names = entities[name_column].astype(str).tolist()[:10]
+                entity_names = entities[name_column].head(10).astype(str).tolist()
                 logger.info(f"Available entities: {entity_names}")
             else:
                 logger.warning("No entities found in serving context")

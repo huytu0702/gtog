@@ -1,6 +1,7 @@
 """Tests for edge-secret guard, fallback rate limit, and readiness endpoint."""
 
 import json
+from collections import deque
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -317,6 +318,24 @@ async def test_fallback_rate_limiter_returns_429_for_local_origins_without_secre
 
     assert first.status_code == 200
     assert second.status_code == 429
+
+
+def test_rate_limiter_evicts_stale_keys_after_allow() -> None:
+    limiter = main.InMemoryRateLimiter(2)
+    limiter._events = {
+        "stale": deque([1.0]),
+        "fresh": deque([80.0]),
+    }
+    limiter._next_stale_key_prune_at = 0.0
+
+    with patch("backend.app.main.monotonic", return_value=100.0):
+        allowed, retry_after = limiter.allow("active")
+
+    assert allowed is True
+    assert retry_after == 0
+    assert "stale" not in limiter._events
+    assert "fresh" in limiter._events
+    assert "active" in limiter._events
 
 
 @pytest.mark.asyncio
