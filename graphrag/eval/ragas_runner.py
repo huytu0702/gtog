@@ -39,6 +39,13 @@ DEFAULT_GRAPH_RAG_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 DEFAULT_EMBEDDING_MODEL_ID = "default_embedding_model"
 RAGAS_EMBEDDING_MODEL_NAME = "ragas_semantic_similarity_embedding"
 REQUIRED_FIELDS = ("question", "response", "ground_truth", "context_text")
+DEFAULT_METRIC_NAMES = (
+    "context_precision",
+    "context_recall",
+    "faithfulness",
+    "answer_relevancy",
+    "answer_correctness_custom",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +368,31 @@ def _import_ragas_metric(name: str) -> Any:
     raise ImportError(msg)
 
 
+def resolve_metric_names(metric_names: Sequence[str] | None = None) -> tuple[str, ...]:
+    """Resolve and validate requested metric names."""
+    if metric_names is None:
+        return DEFAULT_METRIC_NAMES
+
+    normalized_metric_names = tuple(dict.fromkeys(name.strip() for name in metric_names))
+    invalid_metric_names = sorted(
+        name for name in normalized_metric_names if name not in DEFAULT_METRIC_NAMES
+    )
+    if invalid_metric_names:
+        msg = (
+            "Unknown metrics requested: "
+            + ", ".join(invalid_metric_names)
+            + ". Available metrics: "
+            + ", ".join(DEFAULT_METRIC_NAMES)
+        )
+        raise ValueError(msg)
+
+    if not normalized_metric_names:
+        msg = "At least one metric must be selected."
+        raise ValueError(msg)
+
+    return normalized_metric_names
+
+
 def build_ragas_scorers(
     *,
     model: str,
@@ -369,49 +401,66 @@ def build_ragas_scorers(
     timeout: float,
     max_retries: int,
     settings_path: str | Path | None = None,
+    metric_names: Sequence[str] | None = None,
 ) -> dict[str, MetricScorer]:
     """Create the default Ragas scorers."""
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
 
-    evaluator_llm = build_ragas_llm(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        timeout=timeout,
-        max_retries=max_retries,
-    )
-    ragas_embeddings = build_ragas_embeddings(settings_path)
+    requested_metric_names = resolve_metric_names(metric_names)
+    evaluator_llm: Any | None = None
+    ragas_embeddings: Any | None = None
 
-    context_precision_cls = _import_ragas_metric("ContextPrecision")
-    context_recall_cls = _import_ragas_metric("ContextRecall")
-    faithfulness_cls = _import_ragas_metric("Faithfulness")
-    answer_relevancy_cls = _import_ragas_metric("AnswerRelevancy")
-    answer_accuracy_cls = _import_ragas_metric("AnswerAccuracy")
-    factual_correctness_cls = _import_ragas_metric("FactualCorrectness")
-    correctness_judge = ChatOpenAI(
-        model=model,
-        api_key=SecretStr(api_key),
-        base_url=base_url,
-        timeout=timeout,
-        max_retries=max_retries,
-    )
+    def get_evaluator_llm() -> Any:
+        nonlocal evaluator_llm
+        if evaluator_llm is None:
+            evaluator_llm = build_ragas_llm(
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+        return evaluator_llm
 
-    return {
-        "context_precision": context_precision_cls(llm=evaluator_llm),
-        "context_recall": context_recall_cls(llm=evaluator_llm),
-        "faithfulness": faithfulness_cls(llm=evaluator_llm),
-        "answer_relevancy": answer_relevancy_cls(
-            llm=evaluator_llm,
-            embeddings=ragas_embeddings,
-        ),
-        "answer_accuracy": answer_accuracy_cls(llm=evaluator_llm),
-        "factual_correctness": factual_correctness_cls(llm=evaluator_llm),
-        "answer_correctness_custom": LLMCorrectnessScorer(
-            name="answer_correctness_custom",
-            chat_model=correctness_judge,
-        ),
-    }
+    def get_ragas_embeddings() -> Any:
+        nonlocal ragas_embeddings
+        if ragas_embeddings is None:
+            ragas_embeddings = build_ragas_embeddings(settings_path)
+        return ragas_embeddings
+
+    scorers: dict[str, MetricScorer] = {}
+    for metric_name in requested_metric_names:
+        if metric_name == "context_precision":
+            scorers[metric_name] = _import_ragas_metric("ContextPrecision")(
+                llm=get_evaluator_llm()
+            )
+        elif metric_name == "context_recall":
+            scorers[metric_name] = _import_ragas_metric("ContextRecall")(
+                llm=get_evaluator_llm()
+            )
+        elif metric_name == "faithfulness":
+            scorers[metric_name] = _import_ragas_metric("Faithfulness")(
+                llm=get_evaluator_llm()
+            )
+        elif metric_name == "answer_relevancy":
+            scorers[metric_name] = _import_ragas_metric("AnswerRelevancy")(
+                llm=get_evaluator_llm(),
+                embeddings=get_ragas_embeddings(),
+            )
+        elif metric_name == "answer_correctness_custom":
+            scorers[metric_name] = LLMCorrectnessScorer(
+                name="answer_correctness_custom",
+                chat_model=ChatOpenAI(
+                    model=model,
+                    api_key=SecretStr(api_key),
+                    base_url=base_url,
+                    timeout=timeout,
+                    max_retries=max_retries,
+                ),
+            )
+
+    return scorers
 
 
 def score_row(
@@ -548,6 +597,7 @@ def run_ragas_evaluation(
     timeout: float = DEFAULT_TIMEOUT,
     max_retries: int = DEFAULT_MAX_RETRIES,
     settings_path: str | Path | None = None,
+    metric_names: Sequence[str] | None = None,
 ) -> tuple[Path, Path]:
     """Run Ragas evaluation over a simple-results JSON file."""
     input_path = Path(input_path)
@@ -570,6 +620,7 @@ def run_ragas_evaluation(
         timeout=timeout,
         max_retries=max_retries,
         settings_path=resolved_settings_path,
+        metric_names=metric_names,
     )
     logger.info("Metrics: %s", ", ".join(scorers.keys()))
 
@@ -677,6 +728,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "embedding model for semantic similarity."
         ),
     )
+    parser.add_argument(
+        "--metric",
+        dest="metric_names",
+        action="append",
+        choices=DEFAULT_METRIC_NAMES,
+        help=(
+            "Run only the selected metric. Repeat --metric to run multiple metrics. "
+            "Defaults to all supported metrics except factual accuracy metrics."
+        ),
+    )
     return parser
 
 
@@ -695,6 +756,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         timeout=args.timeout,
         max_retries=args.max_retries,
         settings_path=args.settings,
+        metric_names=args.metric_names,
     )
     return 0
 

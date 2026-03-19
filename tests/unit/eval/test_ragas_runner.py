@@ -13,9 +13,11 @@ from unittest.mock import MagicMock
 from graphrag.eval.ragas_runner import (
     aggregate_ragas_results,
     build_ragas_scorers,
+    DEFAULT_METRIC_NAMES,
     LLMCorrectnessScorer,
     main,
     parse_simple_results,
+    resolve_metric_names,
     resolve_settings_path,
 )
 
@@ -69,8 +71,6 @@ def test_aggregate_ragas_results_groups_scores_by_method():
                 "context_precision": 1.0,
                 "context_recall": 1.0,
                 "answer_relevancy": 0.4,
-                "answer_accuracy": 0.25,
-                "factual_correctness": 0.5,
                 "answer_correctness_custom": 1.0,
             },
         },
@@ -82,8 +82,6 @@ def test_aggregate_ragas_results_groups_scores_by_method():
                 "context_precision": 0.5,
                 "context_recall": 0.0,
                 "answer_relevancy": 0.8,
-                "answer_accuracy": 0.75,
-                "factual_correctness": 0.25,
                 "answer_correctness_custom": 0.5,
             },
         },
@@ -110,8 +108,6 @@ def test_aggregate_ragas_results_groups_scores_by_method():
     assert summary["by_method"]["tog"]["context_precision"] == 0.75
     assert summary["by_method"]["tog"]["context_recall"] == 0.5
     assert summary["by_method"]["tog"]["answer_relevancy"] == 0.6
-    assert summary["by_method"]["tog"]["answer_accuracy"] == 0.5
-    assert summary["by_method"]["tog"]["factual_correctness"] == 0.375
     assert summary["by_method"]["tog"]["answer_correctness_custom"] == 0.75
     assert summary["by_method"]["local"]["fail_count"] == 1
     assert summary["by_method"]["basic"]["skip_count"] == 1
@@ -123,6 +119,19 @@ def test_resolve_settings_path_returns_resolved_path(tmp_path: Path):
     settings_path.write_text("models: {}\n", encoding="utf-8")
 
     assert resolve_settings_path(settings_path) == settings_path.resolve()
+
+
+def test_resolve_metric_names_defaults_to_supported_metrics():
+    assert resolve_metric_names() == DEFAULT_METRIC_NAMES
+
+
+def test_resolve_metric_names_rejects_unknown_metric():
+    try:
+        resolve_metric_names(["not_a_metric"])
+    except ValueError as exc:
+        assert "Unknown metrics requested" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for unknown metric")
 
 
 def test_build_ragas_scorers_uses_new_metric_keys(monkeypatch):
@@ -144,8 +153,6 @@ def test_build_ragas_scorers_uses_new_metric_keys(monkeypatch):
         "ContextRecall": FakeMetric,
         "Faithfulness": FakeMetric,
         "AnswerRelevancy": FakeMetric,
-        "AnswerAccuracy": FakeMetric,
-        "FactualCorrectness": FakeMetric,
     }
 
     monkeypatch.setattr(
@@ -179,23 +186,48 @@ def test_build_ragas_scorers_uses_new_metric_keys(monkeypatch):
         "context_recall",
         "faithfulness",
         "answer_relevancy",
-        "answer_accuracy",
-        "factual_correctness",
         "answer_correctness_custom",
     }
     context_precision_metric = cast(Any, scorers["context_precision"])
     answer_relevancy_metric = cast(Any, scorers["answer_relevancy"])
-    answer_accuracy_metric = cast(Any, scorers["answer_accuracy"])
-    factual_correctness_metric = cast(Any, scorers["factual_correctness"])
     custom_correctness_metric = scorers["answer_correctness_custom"]
 
     assert context_precision_metric.kwargs["llm"] is fake_llm
     assert answer_relevancy_metric.kwargs["llm"] is fake_llm
     assert answer_relevancy_metric.kwargs["embeddings"] is fake_embeddings
-    assert answer_accuracy_metric.kwargs["llm"] is fake_llm
-    assert factual_correctness_metric.kwargs["llm"] is fake_llm
     assert isinstance(custom_correctness_metric, LLMCorrectnessScorer)
     assert cast(Any, custom_correctness_metric).chat_model.kwargs["model"] == "gpt-5.2"
+
+
+def test_build_ragas_scorers_can_limit_to_single_metric(monkeypatch):
+    class FakeMetric:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(
+        "graphrag.eval.ragas_runner.build_ragas_llm",
+        lambda **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        "graphrag.eval.ragas_runner.build_ragas_embeddings",
+        lambda settings_path=None: object(),
+    )
+    monkeypatch.setattr(
+        "graphrag.eval.ragas_runner._import_ragas_metric",
+        lambda name: FakeMetric,
+    )
+
+    scorers = build_ragas_scorers(
+        model="gpt-5.2",
+        api_key="test-key",
+        base_url="http://127.0.0.1:8317/v1",
+        timeout=120.0,
+        max_retries=5,
+        metric_names=["faithfulness"],
+    )
+
+    assert set(scorers) == {"faithfulness"}
 
 
 def test_llm_correctness_scorer_parses_judge_output():
@@ -271,8 +303,6 @@ def test_main_writes_outputs_and_continues_after_row_failure(
             "context_precision": FakeMetric("context_precision"),
             "context_recall": FakeMetric("context_recall"),
             "answer_relevancy": FakeMetric("answer_relevancy"),
-            "answer_accuracy": FakeMetric("answer_accuracy"),
-            "factual_correctness": FakeMetric("factual_correctness"),
             "answer_correctness_custom": FakeMetric("answer_correctness_custom"),
         },
     )
@@ -296,11 +326,35 @@ def test_main_writes_outputs_and_continues_after_row_failure(
     assert detailed[1]["scores"]["faithfulness"] == 0.5
     assert detailed[1]["scores"]["context_precision"] == 1.0
     assert detailed[1]["scores"]["answer_relevancy"] == 1.0
-    assert detailed[1]["scores"]["answer_accuracy"] == 1.0
-    assert detailed[1]["scores"]["factual_correctness"] == 1.0
     assert detailed[1]["scores"]["answer_correctness_custom"] == 1.0
     assert detailed[2]["error"] == "proxy failure"
     assert summary["overall"]["success_count"] == 1
     assert summary["overall"]["fail_count"] == 1
     assert summary["overall"]["skip_count"] == 1
     assert summary["by_method"]["tog"]["context_recall"] == 1.0
+
+
+def test_main_passes_selected_metric_names_to_runner(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "eval_results_simple.json"
+    input_path.write_text("[]", encoding="utf-8")
+
+    captured_kwargs: dict[str, Any] = {}
+
+    def fake_run_ragas_evaluation(**kwargs):
+        captured_kwargs.update(kwargs)
+        return (tmp_path / "detail.json", tmp_path / "summary.json")
+
+    monkeypatch.setattr(
+        "graphrag.eval.ragas_runner.run_ragas_evaluation",
+        fake_run_ragas_evaluation,
+    )
+
+    exit_code = main([
+        "--input",
+        str(input_path),
+        "--metric",
+        "faithfulness",
+    ])
+
+    assert exit_code == 0
+    assert captured_kwargs["metric_names"] == ["faithfulness"]

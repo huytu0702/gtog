@@ -13,7 +13,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.3333333333333333,
       "answer_relevancy": 0.9797756988645263,
-      "answer_correctness": 0.5420440838448072
+      "answer_correctness": 0.5420440838448072,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -30,7 +31,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.8827353072083347,
-      "answer_correctness": 0.4041269975217569
+      "answer_correctness": 0.4041269975217569,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -47,7 +49,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.75,
       "answer_relevancy": 0.6981425392040116,
-      "answer_correctness": 0.48453626033911457
+      "answer_correctness": 0.48453626033911457,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -64,7 +67,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.7122455458889011,
-      "answer_correctness": 0.3588308861209476
+      "answer_correctness": 0.3588308861209476,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -81,7 +85,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.6666666666666666,
       "answer_relevancy": 0.7353356024833586,
-      "answer_correctness": 0.41161793175821854
+      "answer_correctness": 0.41161793175821854,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -98,7 +103,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.7429716309622973,
-      "answer_correctness": 0.35467777335413286
+      "answer_correctness": 0.35467777335413286,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -115,7 +121,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.9047619047619048,
       "answer_relevancy": 0.6127769987335129,
-      "answer_correctness": 0.16243374997801718
+      "answer_correctness": 0.16243374997801718,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -125,14 +132,15 @@
     "question": "Who writes a book on the Zodiac case?",
     "response": "Robert Graysmith writes a book on the Zodiac case, specifically titled \"Zodiac Unmasked\" [Data: ROBERT GRAYSMITH, ZODIAC UNMASKED]. He also authored another book about the case, simply titled \"Zodiac\" [Data: ROBERT GRAYSMITH].",
     "ground_truth": "Graysmith",
-    "context": "Based on the books \"Zodiac\" and \"Zodiac Unmasked\" by Robert Graysmith [11]. Paperbacks of Robert Graysmith\u2019s \u201cZodiac\u201d on display. [12]",
+    "context": "Based on the books \"Zodiac\" and \"Zodiac Unmasked\" by Robert Graysmith [11]. Paperbacks of Robert Graysmith’s “Zodiac” on display. [12]",
     "context_text": "=== ENTITIES ===\n\n[ROBERT GRAYSMITH]\nDescription: Robert Graysmith was a cartoonist at the San Francisco Chronicle who developed a profound interest in the Zodiac killer's codes and letters, dedicating himself to deciphering them. Living in San Francisco, he was in his mid-20s, a father to David, and Melanie's partner, residing in a cluttered apartment. He reacted negatively to news about a rapist and later stopped receiving anonymous phone calls after Arthur Leigh Allen's death.\n\nGraysmith's deep fascination with the Zodiac case led him to collect newspaper clippings and conduct extensive personal research into the killer's codes. He expressed his interest in the case to Dave Toschi and visited Paul Avery to discuss the possibility of writing a book about it. He also met with Vaughn to discuss a film and a film canister pertinent to his investigation.\n\nHis dedicated work as a civilian investigator culminated in him authoring the books \"Zodiac\" and \"Zodiac Unmasked,\" which the script \"Chronicles\" is based upon. His investigations and writings were instrumental in leading to the reopening of the Zodiac case, with a focus on Arthur Leigh Allen. Despite his significant contributions to the case, his conclusions on the Zodiac case are believed by many to be incorrect.\n\n[ZODIAC UNMASKED]\nDescription: A book written by Robert Graysmith, which the script \"Chronicles\" is based on.\n\n[BOOKS]\nDescription: BOOKS are described as materials and objects of research. They were utilized by David and Aaron for their Zodiac investigation. Additionally, BOOKS served as objects of research for Robert Graysmith, with some of these materials notably having been stolen from libraries.\n\n[GRAYSMITH]\nDescription: Robert Graysmith is a cartoonist at the San Francisco Chronicle who becomes deeply and intensely involved in the investigation of the Zodiac killer, often to the detriment of his personal life. Initially observing discussions about the murderer's letters and ciphers, he quickly develops an obsession with the case. Graysmith meticulously studies codebreaking, recreates ciphers from memory, and successfully decodes one of the Zodiac's ciphers, cross-referencing lunar cycles with the killer's timeline.\n\nHe is a diligent investigator, collecting and reading Zodiac letters and newspaper articles, focusing on patterns in the killer's communications and activities, such as the \"Zodiac Riverside Connection.\" Graysmith observes deviations in the killer's patterns, like in Paul Stine's murder, and uses library books and resources like \"Homicide Investigations\" by Lemoyne Snyder to develop theories, including a \"water theory.\"\n\nGraysmith collaborates with and consults numerous individuals, including his colleague Paul Avery at the Chronicle, Inspector David Toschi, Mel Nicolai, Narlow, and handwriting expert Morrill. He seeks information from police departments in Napa and Vallejo, visits key locations like Vaughn's basement and Linda Del Buono at San Joaquin County Honor Camp, and pursues leads such as seeking Rick Marshall's handwriting samples. He eventually compiles extensive \"Zodiac Files\" and authors a book about the case.\n\nIn his personal life, Graysmith is a father to Margot, David, and Aaron, and is married to Melanie. He is shown listening to radio programs with his son David and expresses concern for his son's safety due to the Zodiac's threats. His relentless pursuit of the truth leads him to present evidence linking Arthur Leigh Allen to the Zodiac, theorize about Allen's connection to the crimes, and eventually confront him, remaining persistent despite exhaustion.\n\n[ZODIAC ALPHABET]\nDescription: A cipher found in a medieval-themed book, which Graysmith discovered had many symbols identical to the First Code used by the Zodiac.\"\n\n\n=== RELATIONSHIPS ===\n\n- ZODIAC UNMASKED --[Robert Graysmith is the author of the book \"Zodiac Unmasked\".]--> ROBERT GRAYSMITH\n\n- BOOKS --[Robert Graysmith carries and researches books for his investigation.]--> ROBERT GRAYSMITH\n\n- ZODIAC ALPHABET --[Graysmith found a cipher called \"The Zodiac Alphabet\" in a book, noting its symbols were identical to the Zodiac's First Code.]--> GRAYSMITH",
     "scores": {
       "context_precision": 0.9999999999,
       "context_recall": 1.0,
       "faithfulness": 0.6666666666666666,
       "answer_relevancy": 0.7866157340641042,
-      "answer_correctness": 0.3661813535122996
+      "answer_correctness": 0.3661813535122996,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -149,7 +157,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.8571428571428571,
       "answer_relevancy": 0.7345372376035783,
-      "answer_correctness": 0.34109834739718325
+      "answer_correctness": 0.34109834739718325,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -166,7 +175,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.7898064396154311,
-      "answer_correctness": 0.4744246305684776
+      "answer_correctness": 0.4744246305684776,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -183,7 +193,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.0,
       "answer_relevancy": 0.7306992706490306,
-      "answer_correctness": 0.6639391438864684
+      "answer_correctness": 0.6639391438864684,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -200,7 +211,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.0,
       "answer_relevancy": 0.9848981485985645,
-      "answer_correctness": 0.6396016231311357
+      "answer_correctness": 0.6396016231311357,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -217,7 +229,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.14276861651477937
+      "answer_correctness": 0.14276861651477937,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -234,7 +247,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.9908020024250037,
-      "answer_correctness": 0.14140459547770756
+      "answer_correctness": 0.14140459547770756,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -251,7 +265,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.6415124623152554,
-      "answer_correctness": 0.11628997071875026
+      "answer_correctness": 0.11628997071875026,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -268,7 +283,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.9355261977512588,
-      "answer_correctness": 0.679721488980719
+      "answer_correctness": 0.679721488980719,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -285,7 +301,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.8446181113854337,
-      "answer_correctness": 0.16266269736323694
+      "answer_correctness": 0.16266269736323694,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -302,7 +319,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.42857142857142855,
       "answer_relevancy": 0.842255588216553,
-      "answer_correctness": 0.14848494402756332
+      "answer_correctness": 0.14848494402756332,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -319,7 +337,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.3333333333333333,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.1419887005422573
+      "answer_correctness": 0.1419887005422573,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -336,7 +355,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.8184159067588884,
-      "answer_correctness": 0.3439137075515645
+      "answer_correctness": 0.3439137075515645,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -353,7 +373,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.6114728174662856,
-      "answer_correctness": 0.6755979557222518
+      "answer_correctness": 0.6755979557222518,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -370,7 +391,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.5,
       "answer_relevancy": 0.9430727854953601,
-      "answer_correctness": 0.6637903031514382
+      "answer_correctness": 0.6637903031514382,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -387,7 +409,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.13837903778862765
+      "answer_correctness": 0.13837903778862765,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -404,7 +427,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.0,
       "answer_relevancy": 0.9725121547657437,
-      "answer_correctness": 0.7753419208112542
+      "answer_correctness": 0.7753419208112542,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -421,7 +445,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.660338755855407,
-      "answer_correctness": 0.5894277851453076
+      "answer_correctness": 0.5894277851453076,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -438,7 +463,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.9794619289129997,
-      "answer_correctness": 0.5400697368376561
+      "answer_correctness": 0.5400697368376561,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -455,7 +481,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.5779246513695333,
-      "answer_correctness": 0.1341602682319848
+      "answer_correctness": 0.1341602682319848,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -472,7 +499,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.1489745890141617
+      "answer_correctness": 0.1489745890141617,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -489,7 +517,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.75,
       "answer_relevancy": 0.718818175219959,
-      "answer_correctness": 0.12998772964260594
+      "answer_correctness": 0.12998772964260594,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -506,7 +535,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.75,
       "answer_relevancy": 0.9120557335496211,
-      "answer_correctness": 0.6287881476184127
+      "answer_correctness": 0.6287881476184127,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -523,7 +553,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.8966912825458843,
-      "answer_correctness": 0.12421190999368253
+      "answer_correctness": 0.12421190999368253,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -540,7 +571,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.1829519782360742
+      "answer_correctness": 0.1829519782360742,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -557,7 +589,8 @@
       "context_recall": 0.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.708950084454606,
-      "answer_correctness": 0.14403535985694343
+      "answer_correctness": 0.14403535985694343,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -574,7 +607,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.6,
       "answer_relevancy": 0.7143571236178212,
-      "answer_correctness": 0.36137247557097907
+      "answer_correctness": 0.36137247557097907,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -591,7 +625,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.5,
       "answer_relevancy": 0.9760149753607376,
-      "answer_correctness": 0.7698771654748328
+      "answer_correctness": 0.7698771654748328,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -608,7 +643,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.6666666666666666,
       "answer_relevancy": 0.779270551016383,
-      "answer_correctness": 0.14939384880401194
+      "answer_correctness": 0.14939384880401194,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -625,7 +661,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.6666666666666666,
       "answer_relevancy": 0.7305018071912809,
-      "answer_correctness": 0.3957614086788531
+      "answer_correctness": 0.3957614086788531,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -642,7 +679,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.0,
       "answer_relevancy": 0.9936413630834836,
-      "answer_correctness": 0.9192978944484067
+      "answer_correctness": 0.9192978944484067,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -659,7 +697,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.8448209829763087,
-      "answer_correctness": 0.4192710870181624
+      "answer_correctness": 0.4192710870181624,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -669,14 +708,15 @@
     "question": "What is seen in the scene where the authorities are walking by an airport book store?",
     "response": "In the scene where authorities are walking by an airport book store, Robert Graysmith's book \"Zodiac\" is displayed at a [Data: Entities (BARNES AND NOBLE, ZODIAC)] Barnes and Noble.",
     "ground_truth": "Copies of Graysmith's book Zodiac",
-    "context": "Passing an in-terminal BARNES AND NOBLE. Paperbacks of Robert Graysmith\u2019s \u201cZodiac\u201d on display.",
+    "context": "Passing an in-terminal BARNES AND NOBLE. Paperbacks of Robert Graysmith’s “Zodiac” on display.",
     "context_text": "=== ENTITIES ===\n\n[ZODIAC]\nDescription: \"ZODIAC\" refers to the notorious and unidentified serial killer whose identity, crimes, letters, and patterns are the central focus of extensive investigations. This \"very bad man\" and criminal is responsible for a series of unsolved murders, including a believed 1966 Southern California murder. The killer adopted the moniker \"Zodiac\" and is associated with a distinctive crosshair symbol.\n\nThe Zodiac Killer communicated through calls and letters, with handwriting from these letters being a key piece of evidence. The activities, claims, and potential true identity of Zodiac have been the subject of ongoing police and journalistic investigations, notably by Sergeant Bawart and Detective Toschi in the past.\n\nRobert Graysmith became obsessed with the case, investigating it extensively and eventually writing a book titled \"Zodiac,\" which the script \"Chronicles\" is based upon. Graysmith even sketched a costume for Zodiac, inspired by Count Zaroff.\n\nArthur Leigh Allen is a prominent suspect in the case, having allegedly planned to use the name \"Zodiac\" to communicate with the police. He was also noted to have worn the Zodiac crosshair symbol on his watch and mentioned the name a year and a half before it appeared in any of the killer's letters. Another individual, Sam, is implied to be the Zodiac caller. Despite these leads and suspects, the true identity of the Zodiac Killer remains unknown.\n\n[BARNES AND NOBLE]\nDescription: A bookstore chain, a branch of which is seen at Ontario Airport displaying Robert Graysmith's \"Zodiac\" book.\n\n[ARMSTRONG]\nDescription: Armstrong is a dedicated detective and investigator, primarily working in the Homicide Unit as a colleague and partner to Toschi. He is deeply involved in the Zodiac Killer investigation, collaborating extensively with Toschi and other key figures such as Belli, Nicolai, Captain Lee, Mulanax, Roy, and Ken Narlow.\n\nHis involvement in the Zodiac case is comprehensive and spans various critical aspects. Armstrong is present at crucial moments, such as when Zodiac letters are received, and he actively participates in investigating murder scenes, including sitting vigil at the Stine scene. He plays a role in coordinating with other police departments and is instrumental in gathering evidence, seeking handwriting analysis, bootprints, and scene photos, though he sometimes expresses frustration over jurisdictional issues and lack of coordination.\n\nArmstrong conducts interviews with key individuals like Catherine Allen, Don Cheney, Sandy Panzarella, and various informants. He is involved in searching Arthur Leigh Allen's residence and discusses suspects and evidence with Toschi. He also contributes to analyzing Zodiac communications, taking a Zodiac letter, reading bomb instructions, and pointing out new ciphers.\n\nBeyond direct investigation, Armstrong performs various supportive and coordinative tasks. He informs Toschi about the Zodiac's call to Oakland P.D., accompanies Toschi and Belli to KGO Television, and is present in the editorial room during discussions of Zodiac's communications. He learns about leads from TV and is instructed to go to Riverside. He drives Toschi's car, helps Bryan Hartnell, reports on caller traces, and coordinates checks with city planners in Vallejo and Napa regarding clues like a \"basement.\" He is also seen entering the San Francisco Chronicle multiple times with Toschi, waits for investigation results at the Hall of Justice, and is present at the St. Vincent De Paul meeting. His duties also include looking for a housekeeper.\n\n[THE UNIFORM]\nDescription: A uniformed police officer present at the crime scene, who produces the bagged fare book.\n\n[THE DRIVER]\nDescription: No description available\n\n\n=== RELATIONSHIPS ===\n\n- BARNES AND NOBLE --[Barnes and Noble sells Robert Graysmith's book \"Zodiac,\" which details the serial killer's case.]--> ZODIAC\n\n- THE UNIFORM --[Armstrong is present when the Uniform produces the fare book.]--> ARMSTRONG\n\n- THE UNIFORM --[The Uniform is present at the scene of the driver's murder and holds his fare book.]--> THE DRIVER",
     "scores": {
       "context_precision": 0.9999999999,
       "context_recall": 1.0,
       "faithfulness": 0.6666666666666666,
       "answer_relevancy": 0.8311913732647123,
-      "answer_correctness": 0.4868697890499147
+      "answer_correctness": 0.4868697890499147,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -693,7 +733,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.5,
       "answer_relevancy": 0.8776216833396517,
-      "answer_correctness": 0.12631723480346127
+      "answer_correctness": 0.12631723480346127,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -710,7 +751,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.8181818181818182,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.12702545873196952
+      "answer_correctness": 0.12702545873196952,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -727,7 +769,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.75,
       "answer_relevancy": 0.9997770044015866,
-      "answer_correctness": 0.5426388611697321
+      "answer_correctness": 0.5426388611697321,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -744,7 +787,8 @@
       "context_recall": 1.0,
       "faithfulness": 1.0,
       "answer_relevancy": 0.9888099249193478,
-      "answer_correctness": 0.7792148654712541
+      "answer_correctness": 0.7792148654712541,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -761,7 +805,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.75,
       "answer_relevancy": 0.0,
-      "answer_correctness": 0.12483184405069542
+      "answer_correctness": 0.12483184405069542,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -778,7 +823,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.8571428571428571,
       "answer_relevancy": 0.8788150444907984,
-      "answer_correctness": 0.33060677844153497
+      "answer_correctness": 0.33060677844153497,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -795,7 +841,8 @@
       "context_recall": 1.0,
       "faithfulness": 0.75,
       "answer_relevancy": 0.7733119760708943,
-      "answer_correctness": 0.4855170564504195
+      "answer_correctness": 0.4855170564504195,
+      "answer_correctness_custom": 1.0
     }
   },
   {
@@ -812,7 +859,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.8333333333333334,
       "answer_relevancy": 0.7632959137896594,
-      "answer_correctness": 0.1302931664138449
+      "answer_correctness": 0.1302931664138449,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -829,7 +877,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.5,
       "answer_relevancy": 0.776361351529742,
-      "answer_correctness": 0.16675498675106762
+      "answer_correctness": 0.16675498675106762,
+      "answer_correctness_custom": 0.0
     }
   },
   {
@@ -846,7 +895,8 @@
       "context_recall": 0.0,
       "faithfulness": 0.7272727272727273,
       "answer_relevancy": 0.9937914461912593,
-      "answer_correctness": 0.15334091741106887
+      "answer_correctness": 0.15334091741106887,
+      "answer_correctness_custom": 0.0
     }
   }
 ]
