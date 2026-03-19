@@ -185,7 +185,7 @@ class QueryService:
                 "text_units",
                 "relationships",
             ],
-            "tog": ["entities", "relationships"],
+            "tog": ["entities", "relationships", "text_units"],
             "drift": [
                 "entities",
                 "communities",
@@ -354,6 +354,7 @@ class QueryService:
         config = load_graphrag_config(collection_id, version=active_version)
         entities = frames["entities"]
         relationships = frames["relationships"]
+        text_units = frames["text_units"]
 
         fh = _attach_query_log(collection_id)
         try:
@@ -375,6 +376,7 @@ class QueryService:
                 config=config,
                 entities=entities,
                 relationships=relationships,
+                text_units=text_units,
                 query=query,
             )
 
