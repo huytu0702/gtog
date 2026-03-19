@@ -1,0 +1,1602 @@
+[
+  {
+    "id": "Medical-73586ddc",
+    "source": "Medical",
+    "question": "What is the most common type of skin cancer?",
+    "ground_truth": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "context": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a8bad1cf",
+    "source": "Medical",
+    "question": "From which cell type does basal cell carcinoma arise?",
+    "ground_truth": "Basal cell carcinoma arises from basal cells in the lower part of the epidermis.",
+    "context": "Basal cell carcinoma arises from basal cells.; Basal cells are located in the lower part of the epidermis.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-422500d5",
+    "source": "Medical",
+    "question": "Which anatomical locations are most commonly affected by basal cell carcinoma?",
+    "ground_truth": "BCC most commonly develops in sun-exposed areas such as the face, head, and neck.",
+    "context": "BCC most commonly develops in sun-exposed areas.; Common sun-exposed areas for BCC include the face.; Common sun-exposed areas for BCC include the head.; Common sun-exposed areas for BCC include the neck.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-6d2a190d",
+    "source": "Medical",
+    "question": "What is the primary risk factor for basal cell carcinoma?",
+    "ground_truth": "UV radiation exposure is a primary risk factor for BCC.",
+    "context": "UV radiation exposure is a primary risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5ad931db",
+    "source": "Medical",
+    "question": "How does fair skin affect the risk of developing BCC?",
+    "ground_truth": "Fair skin increases the risk of BCC.",
+    "context": "Fair skin increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-6b0f8bc4",
+    "source": "Medical",
+    "question": "Does older age influence the risk of basal cell carcinoma?",
+    "ground_truth": "Older age is associated with higher risk of BCC.",
+    "context": "Older age is associated with a higher risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-75c9949b",
+    "source": "Medical",
+    "question": "How does family history impact the risk of basal cell carcinoma?",
+    "ground_truth": "Family history of skin cancer increases risk of BCC.",
+    "context": "Family history of skin cancer increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ec091b24",
+    "source": "Medical",
+    "question": "Is immune suppression a risk factor for BCC?",
+    "ground_truth": "Immune suppression is a risk factor for BCC.",
+    "context": "Immune suppression is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-8d39da2e",
+    "source": "Medical",
+    "question": "What are common symptoms of basal cell carcinoma?",
+    "ground_truth": "BCC presents as flat, pale or yellow areas, red patches, shiny bumps, open sores, or brown/black bumps with rolled borders.",
+    "context": "BCC presents as flat, pale areas.; BCC presents as yellow areas.; BCC presents as red patches.; BCC presents as shiny bumps.; BCC presents as open sores.; BCC presents as brown bumps.; BCC presents as black bumps.; BCC presents as bumps with rolled borders.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-88c0b2ba",
+    "source": "Medical",
+    "question": "Which diagnostic methods are used for BCC?",
+    "ground_truth": "Diagnosis of BCC involves medical and family history, physical exam, skin exam, biopsy, and sometimes imaging.",
+    "context": "Diagnosis of BCC involves medical history.; Diagnosis of BCC involves family history.; Diagnosis of BCC involves a physical exam.; Diagnosis of BCC involves a skin exam.; Diagnosis of BCC involves a biopsy.; Diagnosis of BCC may involve imaging.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a8ee8ba1",
+    "source": "Medical",
+    "question": "What is the most common treatment for basal cell carcinoma?",
+    "ground_truth": "Surgery is the most common treatment for BCC.",
+    "context": "Surgery is the most common treatment for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ec7d8801",
+    "source": "Medical",
+    "question": "When might radiation therapy be used in BCC?",
+    "ground_truth": "Radiation therapy may be used in some cases of BCC.",
+    "context": "Radiation therapy may be used in some cases of basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9797af69",
+    "source": "Medical",
+    "question": "What is recurrence in the context of BCC?",
+    "ground_truth": "Recurrence refers to BCC returning to the original site or spreading to lymph nodes or distant sites.",
+    "context": "Recurrence refers to basal cell carcinoma returning to the original site.; Recurrence refers to basal cell carcinoma spreading to lymph nodes.; Recurrence refers to basal cell carcinoma spreading to distant sites.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-6884d3fa",
+    "source": "Medical",
+    "question": "What does follow-up for BCC typically include?",
+    "ground_truth": "Follow-up includes full skin exams with a doctor at least once a year.",
+    "context": "Follow-up for basal cell carcinoma includes full skin exams with a doctor.; Follow-up for basal cell carcinoma occurs at least once a year.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-fc6d1c33",
+    "source": "Medical",
+    "question": "Which skin cancer subtype arises from basal cells?",
+    "ground_truth": "Basal cell carcinoma is the skin cancer subtype that arises from basal cells.",
+    "context": "Basal cell carcinoma is the skin cancer subtype that arises from basal cells.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-97abee55",
+    "source": "Medical",
+    "question": "What anatomical layer do basal cells belong to?",
+    "ground_truth": "Basal cells are located in the lower part of the epidermis.",
+    "context": "Basal cells are located in the lower part of the epidermis.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-28d1e2d7",
+    "source": "Medical",
+    "question": "Is sun exposure a risk factor for BCC?",
+    "ground_truth": "Sun exposure is a risk factor for BCC.",
+    "context": "Sun exposure is a risk factor for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4cf524cb",
+    "source": "Medical",
+    "question": "Do tanning beds increase the risk of BCC?",
+    "ground_truth": "Tanning beds are a risk factor for BCC.",
+    "context": "Tanning beds are a risk factor for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-df1408f4",
+    "source": "Medical",
+    "question": "What hair and eye colors are associated with increased BCC risk?",
+    "ground_truth": "Red hair, blond hair, and light eye color increase the risk of BCC.",
+    "context": "Red hair increases the risk of basal cell carcinoma.; Blond hair increases the risk of basal cell carcinoma.; Light eye color increases the risk of basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-17ae12cd",
+    "source": "Medical",
+    "question": "Can a history of radiation therapy increase BCC risk?",
+    "ground_truth": "Radiation therapy is a risk factor for BCC.",
+    "context": "A history of radiation therapy is a risk factor for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-965ad8a8",
+    "source": "Medical",
+    "question": "What is a common presentation of BCC on the skin?",
+    "ground_truth": "BCC may present as a shiny bump.",
+    "context": "BCC may present as a shiny bump.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5175a85e",
+    "source": "Medical",
+    "question": "What is the role of biopsy in BCC diagnosis?",
+    "ground_truth": "Biopsy is used as a diagnostic method for BCC.",
+    "context": "Biopsy is used as a diagnostic method for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5f2cb8a5",
+    "source": "Medical",
+    "question": "Which systemic therapy may be considered for BCC?",
+    "ground_truth": "Systemic therapy may be used in some cases of BCC.",
+    "context": "Systemic therapy may be used in some cases of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0429f83c",
+    "source": "Medical",
+    "question": "What is included in the management of BCC recurrence?",
+    "ground_truth": "Management of recurrence involves treatment options based on risk and recurrence.",
+    "context": "Management of BCC recurrence involves treatment options.; Treatment options for BCC recurrence are based on risk and recurrence.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-152bec6a",
+    "source": "Medical",
+    "question": "What is the recommended frequency for full skin exams in BCC follow-up?",
+    "ground_truth": "Full skin exams with a doctor are recommended at least once a year.",
+    "context": "Full skin exams with a doctor are recommended at least once a year.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e3923e5f",
+    "source": "Medical",
+    "question": "Can BCC spread to lymph nodes?",
+    "ground_truth": "BCC recurrence can involve spread to lymph nodes.",
+    "context": "BCC recurrence can involve spread to lymph nodes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0c2f999d",
+    "source": "Medical",
+    "question": "What is a brown or glossy black bump with rolled border a symptom of?",
+    "ground_truth": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "context": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b6dc1118",
+    "source": "Medical",
+    "question": "What is the relationship between organ transplant and BCC risk?",
+    "ground_truth": "Organ transplant is a risk factor for BCC.",
+    "context": "Organ transplant is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ba2c8007",
+    "source": "Medical",
+    "question": "Is autoimmune disease associated with increased BCC risk?",
+    "ground_truth": "Autoimmune disease is a risk factor for BCC.",
+    "context": "Autoimmune disease is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5c30dd24",
+    "source": "Medical",
+    "question": "What is the role of imaging in BCC diagnosis?",
+    "ground_truth": "Imaging may be used in the diagnosis of BCC.",
+    "context": "Imaging may be used in the diagnosis of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-8622e4cc",
+    "source": "Medical",
+    "question": "Can BCC occur anywhere on the body?",
+    "ground_truth": "BCC can occur anywhere on the body, but most commonly in sun-exposed areas.",
+    "context": "BCC can occur anywhere on the body.; BCC most commonly occurs in sun-exposed areas.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b0b58bf2",
+    "source": "Medical",
+    "question": "What is the most common type of skin cancer?",
+    "ground_truth": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "context": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-90704d0a",
+    "source": "Medical",
+    "question": "From which cells does basal cell carcinoma arise?",
+    "ground_truth": "BCC arises from basal cells in the lower part of the epidermis.",
+    "context": "BCC arises from basal cells.; BCC arises from cells in the lower part of the epidermis.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-941c0004",
+    "source": "Medical",
+    "question": "Which anatomical locations are most commonly affected by BCC?",
+    "ground_truth": "BCC most commonly develops in sun-exposed areas such as the face, head, and neck.",
+    "context": "BCC most commonly develops in sun-exposed areas.; Common anatomical locations affected by BCC include the face.; Common anatomical locations affected by BCC include the head.; Common anatomical locations affected by BCC include the neck.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4bb300c3",
+    "source": "Medical",
+    "question": "What is the primary risk factor for developing basal cell carcinoma?",
+    "ground_truth": "UV radiation exposure is a primary risk factor for BCC.",
+    "context": "UV radiation exposure is a primary risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-acec9fa2",
+    "source": "Medical",
+    "question": "How does fair skin affect the risk of basal cell carcinoma?",
+    "ground_truth": "Fair skin increases the risk of BCC.",
+    "context": "Fair skin increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-7c81f966",
+    "source": "Medical",
+    "question": "Does older age influence the risk of BCC?",
+    "ground_truth": "Older age is associated with higher risk of BCC.",
+    "context": "Older age is associated with a higher risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f6b5155a",
+    "source": "Medical",
+    "question": "Does a family history of skin cancer affect the risk of BCC?",
+    "ground_truth": "Family history of skin cancer increases risk of BCC.",
+    "context": "Family history of skin cancer increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4061f8c4",
+    "source": "Medical",
+    "question": "Is immune suppression a risk factor for basal cell carcinoma?",
+    "ground_truth": "Immune suppression is a risk factor for BCC.",
+    "context": "Immune suppression is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-89de49a4",
+    "source": "Medical",
+    "question": "What are common symptoms of basal cell carcinoma?",
+    "ground_truth": "BCC presents as flat, pale or yellow areas, red patches, shiny bumps, open sores, or brown/black bumps with rolled borders.",
+    "context": "BCC presents as flat, pale areas.; BCC presents as yellow areas.; BCC presents as red patches.; BCC presents as shiny bumps.; BCC presents as open sores.; BCC presents as brown bumps.; BCC presents as black bumps.; BCC presents as bumps with rolled borders.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-624c452d",
+    "source": "Medical",
+    "question": "What diagnostic methods are used for BCC?",
+    "ground_truth": "Diagnosis of BCC involves medical and family history, physical exam, skin exam, biopsy, and sometimes imaging.",
+    "context": "Diagnosis of BCC involves medical history.; Diagnosis of BCC involves family history.; Diagnosis of BCC involves a physical exam.; Diagnosis of BCC involves a skin exam.; Diagnosis of BCC involves a biopsy.; Diagnosis of BCC sometimes involves imaging.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4aab8ef7",
+    "source": "Medical",
+    "question": "What is the most common treatment for basal cell carcinoma?",
+    "ground_truth": "Surgery is the most common treatment for BCC.",
+    "context": "Surgery is the most common treatment for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-bc412bb6",
+    "source": "Medical",
+    "question": "When might radiation therapy or systemic therapy be used for BCC?",
+    "ground_truth": "Radiation therapy or systemic therapy may be used in some cases of BCC.",
+    "context": "Radiation therapy may be used in some cases of BCC.; Systemic therapy may be used in some cases of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-cb249d9b",
+    "source": "Medical",
+    "question": "What does recurrence mean in the context of BCC?",
+    "ground_truth": "Recurrence refers to BCC returning to the original site or spreading to lymph nodes or distant sites.",
+    "context": "Recurrence refers to BCC returning to the original site.; Recurrence refers to BCC spreading to lymph nodes.; Recurrence refers to BCC spreading to distant sites.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e506aa4e",
+    "source": "Medical",
+    "question": "What is recommended for follow-up after BCC treatment?",
+    "ground_truth": "Follow-up includes full skin exams with a doctor at least once a year.",
+    "context": "Follow-up after BCC treatment includes full skin exams.; Follow-up after BCC treatment should be done with a doctor.; Follow-up after BCC treatment is recommended at least once a year.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-14cee623",
+    "source": "Medical",
+    "question": "Which cell type is affected in basal cell carcinoma?",
+    "ground_truth": "Basal cells are the cell type affected in BCC.",
+    "context": "Basal cells are the cell type affected in BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ae28e711",
+    "source": "Medical",
+    "question": "Is sun exposure a risk factor for BCC?",
+    "ground_truth": "Sun exposure is a risk factor for BCC.",
+    "context": "Sun exposure is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-2bef6940",
+    "source": "Medical",
+    "question": "Are tanning beds considered a risk factor for BCC?",
+    "ground_truth": "Tanning beds are a risk factor for BCC.",
+    "context": "Tanning beds are a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0047c320",
+    "source": "Medical",
+    "question": "Does having red or blond hair increase the risk of BCC?",
+    "ground_truth": "Red hair and blond hair increase the risk of BCC.",
+    "context": "Red hair increases the risk of BCC.; Blond hair increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ca377f8d",
+    "source": "Medical",
+    "question": "Is light eye color associated with increased risk of BCC?",
+    "ground_truth": "Light eye color increases the risk of BCC.",
+    "context": "Light eye color increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0b2a33fc",
+    "source": "Medical",
+    "question": "Can a history of radiation therapy increase BCC risk?",
+    "ground_truth": "Radiation therapy is a risk factor for BCC.",
+    "context": "Radiation therapy is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-de0b30b1",
+    "source": "Medical",
+    "question": "Are organ transplant recipients at higher risk for BCC?",
+    "ground_truth": "Organ transplant is a risk factor for BCC.",
+    "context": "Organ transplant is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4f1779a5",
+    "source": "Medical",
+    "question": "Is autoimmune disease a risk factor for BCC?",
+    "ground_truth": "Autoimmune disease is a risk factor for BCC.",
+    "context": "Autoimmune disease is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-d675eecd",
+    "source": "Medical",
+    "question": "What is a flat, pale or yellow area on the skin indicative of in BCC?",
+    "ground_truth": "A flat, pale or yellow area is a symptom of BCC.",
+    "context": "A flat, pale or yellow area is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-7e4192af",
+    "source": "Medical",
+    "question": "What does a shiny bump on the skin suggest in the context of BCC?",
+    "ground_truth": "A shiny bump is a symptom of BCC.",
+    "context": "A shiny bump is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f8b6c41e",
+    "source": "Medical",
+    "question": "What is the significance of a brown or glossy black bump with rolled border?",
+    "ground_truth": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "context": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-cef34fff",
+    "source": "Medical",
+    "question": "Which exams are essential for diagnosing BCC?",
+    "ground_truth": "Physical exam and skin exam are essential for diagnosing BCC.",
+    "context": "Physical exam is essential for diagnosing BCC.; Skin exam is essential for diagnosing BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-27280ca7",
+    "source": "Medical",
+    "question": "What role does biopsy play in BCC diagnosis?",
+    "ground_truth": "Biopsy is a diagnostic method for BCC.",
+    "context": "Biopsy is a diagnostic method for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-04249246",
+    "source": "Medical",
+    "question": "Is imaging sometimes used in the diagnosis of BCC?",
+    "ground_truth": "Imaging may be used in the diagnosis of BCC.",
+    "context": "Imaging may be used in the diagnosis of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3e18a314",
+    "source": "Medical",
+    "question": "What treatments are available for BCC besides surgery?",
+    "ground_truth": "Radiation therapy and systemic therapy are treatments for BCC besides surgery.",
+    "context": "Radiation therapy is a treatment for BCC besides surgery.; Systemic therapy is a treatment for BCC besides surgery.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-34ad11ec",
+    "source": "Medical",
+    "question": "How is recurrence of BCC managed?",
+    "ground_truth": "Recurrence is managed with treatment options based on risk and recurrence.",
+    "context": "Recurrence of BCC is managed with treatment options.; Treatment options for recurrence are based on risk.; Treatment options for recurrence are based on recurrence.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-74440a6a",
+    "source": "Medical",
+    "question": "What is included in annual follow-up for BCC patients?",
+    "ground_truth": "Annual follow-up includes a full skin exam.",
+    "context": "Annual follow-up for BCC patients includes a full skin exam.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a296a86b",
+    "source": "Medical",
+    "question": "What is the primary cancer type discussed in this context?",
+    "ground_truth": "Primary CNS lymphoma is the primary cancer type.",
+    "context": "Primary CNS lymphoma is the primary cancer type.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f907720b",
+    "source": "Medical",
+    "question": "Which cells does primary CNS lymphoma originate from?",
+    "ground_truth": "Primary CNS lymphoma originates from lymphocytes.",
+    "context": "Primary CNS lymphoma originates from lymphocytes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f80cbf85",
+    "source": "Medical",
+    "question": "What is the most common location affected by primary CNS lymphoma?",
+    "ground_truth": "The brain is most commonly affected by primary CNS lymphoma.",
+    "context": "The brain is most commonly affected by primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b3c430ef",
+    "source": "Medical",
+    "question": "Name a cancer subtype of primary CNS lymphoma that affects the eyes.",
+    "ground_truth": "Vitreoretinal lymphoma is a subtype that affects the eyes.",
+    "context": "Vitreoretinal lymphoma is a subtype of primary CNS lymphoma.; Vitreoretinal lymphoma affects the eyes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-304b0354",
+    "source": "Medical",
+    "question": "List three anatomical sites, other than the brain, that primary CNS lymphoma can involve.",
+    "ground_truth": "Primary CNS lymphoma can involve the spinal cord, cerebrospinal fluid, and eyes.",
+    "context": "Primary CNS lymphoma can involve the spinal cord.; Primary CNS lymphoma can involve cerebrospinal fluid.; Primary CNS lymphoma can involve the eyes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-bc34a6a1",
+    "source": "Medical",
+    "question": "What is a major risk factor for developing primary CNS lymphoma?",
+    "ground_truth": "An impaired immune system is a major risk factor.",
+    "context": "An impaired immune system is a major risk factor for developing primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b1a95144",
+    "source": "Medical",
+    "question": "Which viral infection is considered a risk factor for primary CNS lymphoma?",
+    "ground_truth": "HIV infection is a risk factor for primary CNS lymphoma.",
+    "context": "HIV infection is a risk factor for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-473eae59",
+    "source": "Medical",
+    "question": "Name two autoimmune conditions listed as risk factors for primary CNS lymphoma.",
+    "ground_truth": "Autoimmune disease and lupus are risk factors.",
+    "context": "Autoimmune disease is a risk factor for primary CNS lymphoma.; Lupus is a risk factor for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-1b824083",
+    "source": "Medical",
+    "question": "Which diagnostic imaging technique is considered most useful for identifying primary CNS lymphoma?",
+    "ground_truth": "MRI with gadolinium contrast is the most useful imaging technique.",
+    "context": "MRI with gadolinium contrast is the most useful imaging technique for identifying primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ba9d39eb",
+    "source": "Medical",
+    "question": "What is the standard biopsy procedure for diagnosing primary CNS lymphoma?",
+    "ground_truth": "Stereotactic biopsy is the standard diagnostic procedure.",
+    "context": "Stereotactic biopsy is the standard diagnostic procedure for diagnosing primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e306413c",
+    "source": "Medical",
+    "question": "Which laboratory test is commonly used during the diagnosis of primary CNS lymphoma?",
+    "ground_truth": "Complete blood count (CBC) is commonly used.",
+    "context": "Complete blood count (CBC) is commonly used during the diagnosis of primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-64ef6350",
+    "source": "Medical",
+    "question": "What is a typical initial clinical assessment for suspected primary CNS lymphoma?",
+    "ground_truth": "A neurological exam is a typical initial clinical assessment.",
+    "context": "A neurological exam is a typical initial clinical assessment for suspected primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e05d0922",
+    "source": "Medical",
+    "question": "Which procedure is performed if cancer cells are found in the cerebrospinal fluid?",
+    "ground_truth": "Intrathecal chemotherapy may be used if cancer cells are found in the cerebrospinal fluid.",
+    "context": "Intrathecal chemotherapy may be used if cancer cells are found in the cerebrospinal fluid.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-1c1492e7",
+    "source": "Medical",
+    "question": "What specialized treatment is given if the eyes are involved in primary CNS lymphoma?",
+    "ground_truth": "Intraocular chemotherapy or radiation may be used if the eyes are involved.",
+    "context": "Intraocular chemotherapy or radiation may be used if the eyes are involved in primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-dba48e64",
+    "source": "Medical",
+    "question": "What is the main chemotherapy drug for primary CNS lymphoma?",
+    "ground_truth": "High-dose methotrexate is the main chemotherapy drug.",
+    "context": "High-dose methotrexate is the main chemotherapy drug for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f5fc9016",
+    "source": "Medical",
+    "question": "Which immunotherapy drug is primarily used in the treatment of primary CNS lymphoma?",
+    "ground_truth": "Rituximab is the main immunotherapy drug used.",
+    "context": "Rituximab is the main immunotherapy drug used in the treatment of primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b80bf4c5",
+    "source": "Medical",
+    "question": "What is the most commonly used radiation technique for primary CNS lymphoma?",
+    "ground_truth": "Whole-brain radiation therapy (WBRT) is the most commonly used technique.",
+    "context": "Whole-brain radiation therapy (WBRT) is the most commonly used radiation technique for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3978515f",
+    "source": "Medical",
+    "question": "What are the two main treatment phases for primary CNS lymphoma?",
+    "ground_truth": "Treatment is typically given in phases: induction and consolidation.",
+    "context": "Treatment for primary CNS lymphoma is typically given in phases.; The two main treatment phases for primary CNS lymphoma are induction and consolidation.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-afabde7f",
+    "source": "Medical",
+    "question": "What is the purpose of supportive care in primary CNS lymphoma management?",
+    "ground_truth": "Supportive care is provided to relieve symptoms and side effects at any stage of disease.",
+    "context": "Supportive care is provided to relieve symptoms.; Supportive care is provided to relieve side effects.; Supportive care is provided at any stage of disease.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a4081e18",
+    "source": "Medical",
+    "question": "Which performance measure is evaluated to guide treatment decisions in primary CNS lymphoma?",
+    "ground_truth": "Performance status is evaluated to guide treatment decisions and eligibility for clinical trials.",
+    "context": "Performance status is evaluated to guide treatment decisions.; Performance status is evaluated to determine eligibility for clinical trials.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-79a788b8",
+    "source": "Medical",
+    "question": "What is recommended for all patients with primary CNS lymphoma regarding research participation?",
+    "ground_truth": "Clinical trial participation is recommended for all patients.",
+    "context": "Clinical trial participation is recommended for all patients with primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-c99256ce",
+    "source": "Medical",
+    "question": "Name three neurological symptoms commonly caused by primary CNS lymphoma.",
+    "ground_truth": "Leg weakness, confusion, and seizures are common neurological symptoms.",
+    "context": "Leg weakness is a common neurological symptom caused by primary CNS lymphoma.; Confusion is a common neurological symptom caused by primary CNS lymphoma.; Seizures are a common neurological symptom caused by primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-7b5a8ac6",
+    "source": "Medical",
+    "question": "Which diagnostic method is used to assess eye involvement in primary CNS lymphoma?",
+    "ground_truth": "Eye exam is used to assess eye involvement.",
+    "context": "Eye exam is used to assess eye involvement in primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-26033837",
+    "source": "Medical",
+    "question": "What follow-up method is recommended for surveillance after treatment of primary CNS lymphoma?",
+    "ground_truth": "Repeat MRI is recommended for follow-up surveillance.",
+    "context": "Repeat MRI is recommended for follow-up surveillance after treatment of primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9f3a0a90",
+    "source": "Medical",
+    "question": "Which age group is at higher risk for primary CNS lymphoma?",
+    "ground_truth": "Older adults are at higher risk.",
+    "context": "Older adults are at higher risk for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f619b6ea",
+    "source": "Medical",
+    "question": "What is the role of corticosteroids in the treatment of primary CNS lymphoma?",
+    "ground_truth": "Corticosteroids are one of the treatment options for primary CNS lymphoma.",
+    "context": "Corticosteroids are one of the treatment options for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9474c5bb",
+    "source": "Medical",
+    "question": "Which chemotherapy drugs, besides methotrexate, can be used in induction therapy for primary CNS lymphoma?",
+    "ground_truth": "Temozolomide, vincristine, procarbazine, cytarabine, pemetrexed, pomalidomide, lenalidomide, and ibrutinib can be used.",
+    "context": "Temozolomide can be used in induction therapy for primary CNS lymphoma.; Vincristine can be used in induction therapy for primary CNS lymphoma.; Procarbazine can be used in induction therapy for primary CNS lymphoma.; Cytarabine can be used in induction therapy for primary CNS lymphoma.; Pemetrexed can be used in induction therapy for primary CNS lymphoma.; Pomalidomide can be used in induction therapy for primary CNS lymphoma.; Lenalidomide can be used in induction therapy for primary CNS lymphoma.; Ibrutinib can be used in induction therapy for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5825991f",
+    "source": "Medical",
+    "question": "Which procedure is included in laboratory tests for diagnosing primary CNS lymphoma?",
+    "ground_truth": "Lactate dehydrogenase (LDH) testing is included in laboratory tests.",
+    "context": "Lactate dehydrogenase (LDH) testing is included in laboratory tests for diagnosing primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a4dcffa3",
+    "source": "Medical",
+    "question": "What is a potential site of relapse for primary CNS lymphoma?",
+    "ground_truth": "Primary CNS lymphoma can relapse in the brain, spinal cord, or eyes.",
+    "context": "Primary CNS lymphoma can relapse in the brain.; Primary CNS lymphoma can relapse in the spinal cord.; Primary CNS lymphoma can relapse in the eyes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3919018c",
+    "source": "Medical",
+    "question": "How often does primary CNS lymphoma spread outside the central nervous system?",
+    "ground_truth": "Primary CNS lymphoma rarely spreads outside the central nervous system.",
+    "context": "Primary CNS lymphoma rarely spreads outside the central nervous system.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-d7180179",
+    "source": "Medical",
+    "question": "Which imaging technique uses gadolinium contrast for better visualization in primary CNS lymphoma?",
+    "ground_truth": "MRI uses gadolinium contrast for better visualization.",
+    "context": "MRI uses gadolinium contrast for better visualization in primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f05a2e9b",
+    "source": "Medical",
+    "question": "What supportive care interventions are recommended for patients with primary CNS lymphoma?",
+    "ground_truth": "Symptom management, palliative care, and quality of life interventions are recommended.",
+    "context": "Symptom management is recommended for patients with primary CNS lymphoma.; Palliative care is recommended for patients with primary CNS lymphoma.; Quality of life interventions are recommended for patients with primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5b1265c0",
+    "source": "Medical",
+    "question": "What is the second most common type of skin cancer?",
+    "ground_truth": "Squamous cell skin cancer (CSCC) is the second most common type of skin cancer.",
+    "context": "Squamous cell skin cancer (CSCC) is the second most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-d1e50927",
+    "source": "Medical",
+    "question": "Which cancer subtype is classified as a type of nonmelanoma skin cancer?",
+    "ground_truth": "CSCC is a type of nonmelanoma skin cancer.",
+    "context": "CSCC is a type of nonmelanoma skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9536f8e7",
+    "source": "Medical",
+    "question": "What are the main stages of cutaneous squamous cell carcinoma (CSCC)?",
+    "ground_truth": "CSCC is staged as local (confined to skin), regional (spread to lymph nodes), or metastatic (distant spread).",
+    "context": "CSCC is staged as local.; CSCC is staged as regional.; CSCC is staged as metastatic.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-1f290988",
+    "source": "Medical",
+    "question": "What is a precancerous lesion that can progress to CSCC?",
+    "ground_truth": "Actinic keratosis is a precancerous lesion that can progress to CSCC.",
+    "context": "Actinic keratosis is a precancerous lesion that can progress to CSCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3d21bfb3",
+    "source": "Medical",
+    "question": "Which risk factors are major contributors to CSCC development?",
+    "ground_truth": "Major risk factors for CSCC include chronic sun exposure, indoor tanning, environmental toxins, actinic keratoses, genetic syndromes, weakened immune system, and chronic wounds or scars.",
+    "context": "Chronic sun exposure is a major risk factor for CSCC.; Indoor tanning is a major risk factor for CSCC.; Environmental toxins are a major risk factor for CSCC.; Actinic keratoses are a major risk factor for CSCC.; Genetic syndromes are a major risk factor for CSCC.; A weakened immune system is a major risk factor for CSCC.; Chronic wounds or scars are a major risk factor for CSCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a2555661",
+    "source": "Medical",
+    "question": "Which genetic syndromes increase the risk for CSCC?",
+    "ground_truth": "Xeroderma pigmentosum and RDEB increase risk for CSCC.",
+    "context": "Xeroderma pigmentosum increases the risk for CSCC.; RDEB increases the risk for CSCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-604c9d44",
+    "source": "Medical",
+    "question": "Why is a patient with fair skin and a history of organ transplant at particularly high risk for developing basal cell carcinoma?",
+    "ground_truth": "Because both fair skin and immune suppression from organ transplant are independent risk factors for BCC.",
+    "context": "Fair skin is an independent risk factor for basal cell carcinoma (BCC).; Immune suppression from organ transplant is an independent risk factor for basal cell carcinoma (BCC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-df366063",
+    "source": "Medical",
+    "question": "If a patient presents with a shiny bump on the face and has a history of tanning bed use, what diagnostic steps should be taken to evaluate for basal cell carcinoma?",
+    "ground_truth": "A medical and family history, physical and skin exam, and biopsy should be performed.",
+    "context": "A medical and family history should be performed to evaluate for basal cell carcinoma.; A physical and skin exam should be performed to evaluate for basal cell carcinoma.; A biopsy should be performed to evaluate for basal cell carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-0a90f1f2",
+    "source": "Medical",
+    "question": "How does the management of recurrent basal cell carcinoma differ from initial treatment, and what factors influence this?",
+    "ground_truth": "Management of recurrence depends on risk and recurrence site, with treatment options tailored accordingly.",
+    "context": "Management of recurrent basal cell carcinoma depends on risk.; Management of recurrent basal cell carcinoma depends on the recurrence site.; Treatment options for recurrent basal cell carcinoma are tailored accordingly.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-831bb1e6",
+    "source": "Medical",
+    "question": "Which combination of risk factors should prompt earlier and more frequent skin exams for BCC?",
+    "ground_truth": "A combination of older age, fair skin, and family history of skin cancer should prompt more frequent skin exams.",
+    "context": "Older age is a risk factor for basal cell carcinoma.; Fair skin is a risk factor for basal cell carcinoma.; Family history of skin cancer is a risk factor for basal cell carcinoma.; A combination of these risk factors should prompt more frequent skin exams.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-01e3a9ea",
+    "source": "Medical",
+    "question": "Why might a patient with a shiny bump and a history of radiation therapy require both imaging and biopsy for diagnosis?",
+    "ground_truth": "Because radiation therapy is a risk factor for BCC and shiny bumps are a symptom, so both imaging and biopsy help confirm diagnosis.",
+    "context": "A shiny bump can be a symptom of basal cell carcinoma.; A history of radiation therapy is a risk factor for basal cell carcinoma.; Imaging is needed to help confirm the diagnosis of basal cell carcinoma.; A biopsy is needed to help confirm the diagnosis of basal cell carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c69c2732",
+    "source": "Medical",
+    "question": "What follow-up strategy is recommended for a patient treated for BCC on the neck, and why?",
+    "ground_truth": "Annual full skin exams are recommended to monitor for recurrence or new lesions.",
+    "context": "Annual full skin exams are recommended for patients treated for basal cell carcinoma.; The purpose of annual full skin exams is to monitor for recurrence.; The purpose of annual full skin exams is to monitor for new lesions.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f034d77d",
+    "source": "Medical",
+    "question": "How does UV radiation contribute to both the development and recurrence of basal cell carcinoma?",
+    "ground_truth": "UV radiation is a primary risk factor for BCC and continued exposure increases recurrence risk.",
+    "context": "UV radiation is a primary risk factor for basal cell carcinoma.; Continued exposure to UV radiation increases the risk of recurrence of basal cell carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-1eab8fa2",
+    "source": "Medical",
+    "question": "Why should a patient with a family history of skin cancer and light eye color be particularly vigilant about skin changes?",
+    "ground_truth": "Because both family history and light eye color are risk factors for BCC, increasing overall risk.",
+    "context": "A family history of skin cancer is a risk factor for basal cell carcinoma.; Light eye color is a risk factor for basal cell carcinoma.; These risk factors increase the overall risk of basal cell carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-14016ce3",
+    "source": "Medical",
+    "question": "What is the rationale for recommending surgery as the most common treatment for BCC lesions on sun-exposed areas?",
+    "ground_truth": "Because BCC most commonly develops on sun-exposed areas and surgery is the most effective treatment.",
+    "context": "Basal cell carcinoma most commonly develops on sun-exposed areas.; Surgery is the most effective treatment for basal cell carcinoma lesions.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-5e530443",
+    "source": "Medical",
+    "question": "Which symptoms and risk factors together would most strongly indicate the need for biopsy to rule out BCC?",
+    "ground_truth": "A flat pale area on sun-exposed skin in a fair-skinned patient with a history of sun exposure strongly indicates the need for biopsy.",
+    "context": "A flat pale area on sun-exposed skin is a symptom that may indicate basal cell carcinoma.; Fair-skinned patients with a history of sun exposure are at higher risk for basal cell carcinoma.; This combination of symptoms and risk factors strongly indicates the need for biopsy.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c8dd3e29",
+    "source": "Medical",
+    "question": "How do immune suppression and prior radiation therapy interact to affect BCC risk and management?",
+    "ground_truth": "Both are risk factors that increase BCC risk and may necessitate more aggressive management.",
+    "context": "Immune suppression is a risk factor that increases basal cell carcinoma risk.; Prior radiation therapy is a risk factor that increases basal cell carcinoma risk.; Both factors may necessitate more aggressive management of basal cell carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-a9a52704",
+    "source": "Medical",
+    "question": "What combination of anatomical location and cell type defines basal cell carcinoma?",
+    "ground_truth": "BCC arises from basal cells in the lower part of the epidermis, often in sun-exposed locations.",
+    "context": "Basal cell carcinoma arises from basal cells.; Basal cells are located in the lower part of the epidermis.; Basal cell carcinoma often occurs in sun-exposed locations.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-346b12e8",
+    "source": "Medical",
+    "question": "Why is annual follow-up with full skin exams critical for patients with a history of BCC?",
+    "ground_truth": "Because recurrence can occur at the original site or spread, so annual full skin exams help detect new or returning lesions.",
+    "context": "Annual follow-up with full skin exams is critical for patients with a history of BCC.; Recurrence of BCC can occur at the original site.; BCC can spread to other areas.; Annual full skin exams help detect new lesions.; Annual full skin exams help detect returning lesions.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-8ff5dd5a",
+    "source": "Medical",
+    "question": "Why might systemic therapy be considered for a patient with BCC that has spread to distant sites?",
+    "ground_truth": "Because systemic therapy is a treatment option for BCC that has recurred or spread to distant sites.",
+    "context": "Systemic therapy may be considered for patients with BCC that has spread to distant sites.; Systemic therapy is a treatment option for BCC.; Systemic therapy is used for BCC that has recurred.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-322bb52d",
+    "source": "Medical",
+    "question": "How do medical and family history contribute to the diagnostic process for BCC in a patient with a suspicious skin lesion?",
+    "ground_truth": "Both are part of the diagnostic workup to assess risk and guide further testing like biopsy.",
+    "context": "Medical history contributes to the diagnostic process for BCC.; Family history contributes to the diagnostic process for BCC.; Medical and family history are part of the diagnostic workup.; The diagnostic workup assesses risk for BCC.; The diagnostic workup guides further testing like biopsy.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-35fee661",
+    "source": "Medical",
+    "question": "Which diagnostic procedures would be prioritized for a patient with primary CNS lymphoma presenting with blurry vision and suspected eye involvement?",
+    "ground_truth": "Eye exam, slit lamp, and vitrectomy would be prioritized for suspected eye involvement.",
+    "context": "Eye exam is prioritized for a patient with primary CNS lymphoma and suspected eye involvement.; Slit lamp examination is prioritized for suspected eye involvement.; Vitrectomy is prioritized for suspected eye involvement.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f473bcb0",
+    "source": "Medical",
+    "question": "What is the main chemotherapy agent used during the induction phase of primary CNS lymphoma treatment and which diagnostic procedure confirms the diagnosis?",
+    "ground_truth": "High-dose methotrexate is the main chemotherapy agent, and stereotactic biopsy is the standard diagnostic procedure.",
+    "context": "High-dose methotrexate is the main chemotherapy agent used during the induction phase of primary CNS lymphoma treatment.; Stereotactic biopsy is the standard diagnostic procedure for primary CNS lymphoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f3af6f24",
+    "source": "Medical",
+    "question": "For a patient with primary CNS lymphoma and cerebrospinal fluid involvement, which specialized treatment is indicated and how is the involvement detected?",
+    "ground_truth": "Intrathecal chemotherapy is indicated, with CSF involvement detected by lumbar puncture.",
+    "context": "Intrathecal chemotherapy is indicated for a patient with primary CNS lymphoma and cerebrospinal fluid involvement.; CSF involvement is detected by lumbar puncture.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ade4b34a",
+    "source": "Medical",
+    "question": "If a patient with primary CNS lymphoma presents with memory problems and confusion, what imaging modality is most useful and why?",
+    "ground_truth": "MRI with gadolinium contrast is most useful because it best identifies CNS lesions causing these symptoms.",
+    "context": "MRI with gadolinium contrast is the most useful imaging modality for a patient with primary CNS lymphoma presenting with memory problems and confusion.; MRI with gadolinium contrast best identifies CNS lesions causing memory problems and confusion.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ade95016",
+    "source": "Medical",
+    "question": "Which risk factors should be considered for an older adult with a history of organ transplant who develops primary CNS lymphoma?",
+    "ground_truth": "Older age and organ transplant are both risk factors for primary CNS lymphoma.",
+    "context": "Older age is a risk factor for primary CNS lymphoma.; Organ transplant is a risk factor for primary CNS lymphoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-8435c9f6",
+    "source": "Medical",
+    "question": "How would the treatment approach change for a primary CNS lymphoma patient with both brain and eye involvement?",
+    "ground_truth": "The patient would receive standard CNS-directed therapy plus intraocular chemotherapy or radiation for eye involvement.",
+    "context": "The treatment approach for a primary CNS lymphoma patient with both brain and eye involvement would change.; The patient would receive standard CNS-directed therapy.; The patient would receive intraocular chemotherapy or radiation for eye involvement.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-23e6b6df",
+    "source": "Medical",
+    "question": "What are the two main phases of primary CNS lymphoma treatment, and which therapies are typically administered in each?",
+    "ground_truth": "Induction phase uses high-dose methotrexate and rituximab, while consolidation phase uses whole-brain radiation therapy or stem cell rescue.",
+    "context": "The two main phases of primary CNS lymphoma treatment are induction phase and consolidation phase.; The induction phase uses high-dose methotrexate and rituximab.; The consolidation phase uses whole-brain radiation therapy or stem cell rescue.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4744dfa7",
+    "source": "Medical",
+    "question": "Which performance evaluation is necessary before determining eligibility for clinical trials in primary CNS lymphoma patients and why?",
+    "ground_truth": "Performance status evaluation is necessary to guide treatment decisions and clinical trial eligibility.",
+    "context": "Performance status evaluation is necessary before determining eligibility for clinical trials in primary CNS lymphoma patients.; Performance status evaluation guides treatment decisions.; Performance status evaluation guides clinical trial eligibility.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-59ea36ca",
+    "source": "Medical",
+    "question": "What follow-up procedures are recommended after achieving remission in primary CNS lymphoma?",
+    "ground_truth": "Repeat MRI, eye exam, blood tests, and performance status assessment are recommended for surveillance.",
+    "context": "Repeat MRI is recommended after achieving remission in primary CNS lymphoma.; Eye exam is recommended after achieving remission in primary CNS lymphoma.; Blood tests are recommended after achieving remission in primary CNS lymphoma.; Performance status assessment is recommended after achieving remission in primary CNS lymphoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4124f00f",
+    "source": "Medical",
+    "question": "If a patient with primary CNS lymphoma relapses in the spinal cord, which diagnostic and treatment strategies should be considered?",
+    "ground_truth": "Imaging (MRI), lumbar puncture, and possible intrathecal chemotherapy should be considered for spinal cord relapse.",
+    "context": "Imaging (MRI) should be considered for spinal cord relapse in primary CNS lymphoma.; Lumbar puncture should be considered for spinal cord relapse in primary CNS lymphoma.; Possible intrathecal chemotherapy should be considered for spinal cord relapse in primary CNS lymphoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ed26b623",
+    "source": "Medical",
+    "question": "Which laboratory tests are essential for initial workup of primary CNS lymphoma, particularly in patients with suspected immunodeficiency?",
+    "ground_truth": "Blood tests including CBC, CMP, LDH, and HIV blood test are essential for initial workup.",
+    "context": "Blood tests including CBC are essential for initial workup of primary CNS lymphoma.; Blood tests including CMP are essential for initial workup of primary CNS lymphoma.; Blood tests including LDH are essential for initial workup of primary CNS lymphoma.; HIV blood test is essential for initial workup of primary CNS lymphoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-fbc9e7ec",
+    "source": "Medical",
+    "question": "What supportive care measures are recommended at any stage for primary CNS lymphoma patients experiencing severe side effects from treatment?",
+    "ground_truth": "Symptom management, palliative care, and quality of life interventions are recommended at any disease stage.",
+    "context": "Symptom management is recommended for primary CNS lymphoma patients experiencing severe side effects from treatment.; Palliative care is recommended for primary CNS lymphoma patients experiencing severe side effects from treatment.; Quality of life interventions are recommended for primary CNS lymphoma patients experiencing severe side effects from treatment.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-9a34e14c",
+    "source": "Medical",
+    "question": "In a patient with primary CNS lymphoma and concurrent HIV infection, why is additional laboratory testing necessary?",
+    "ground_truth": "HIV blood test is needed because immunodeficiency is a risk factor for primary CNS lymphoma and may influence management.",
+    "context": "HIV blood test is needed for patients with primary CNS lymphoma and concurrent HIV infection.; Immunodeficiency is a risk factor for primary CNS lymphoma.; Immunodeficiency may influence management of primary CNS lymphoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-bfe2b31f",
+    "source": "Medical",
+    "question": "Which imaging and biopsy methods are used together to confirm a diagnosis of primary CNS lymphoma localized to the brain?",
+    "ground_truth": "MRI with gadolinium contrast and stereotactic biopsy are used together for diagnosis.",
+    "context": "MRI with gadolinium contrast is used to confirm a diagnosis of primary CNS lymphoma localized to the brain.; Stereotactic biopsy is used to confirm a diagnosis of primary CNS lymphoma localized to the brain.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b6fbf092",
+    "source": "Medical",
+    "question": "Why is clinical trial participation recommended for all primary CNS lymphoma patients regardless of treatment phase?",
+    "ground_truth": "Because clinical trial participation is recommended for all patients and can be part of both induction and consolidation phases.",
+    "context": "Clinical trial participation is recommended for all primary CNS lymphoma patients.; Clinical trial participation can be part of the induction phase for primary CNS lymphoma patients.; Clinical trial participation can be part of the consolidation phase for primary CNS lymphoma patients.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-55898188",
+    "source": "Medical",
+    "question": "Which diagnostic procedures are necessary for a patient with suspected regional CSCC presenting with lymph node involvement?",
+    "ground_truth": "Lymph node exam, imaging (CT, PET/CT), and lymph node biopsy are required for regional CSCC with lymph node involvement.",
+    "context": "Lymph node exam is necessary for a patient with suspected regional CSCC presenting with lymph node involvement.; Imaging (CT, PET/CT) is necessary for a patient with suspected regional CSCC presenting with lymph node involvement.; Lymph node biopsy is necessary for a patient with suspected regional CSCC presenting with lymph node involvement.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-8b99b755",
+    "source": "Medical",
+    "question": "How does the management of high-risk local CSCC differ from low-risk local CSCC in terms of treatment and follow-up?",
+    "ground_truth": "High-risk local CSCC is treated with Mohs surgery or standard excision and may require radiation or systemic therapy, with more frequent follow-up exams than low-risk cases.",
+    "context": "High-risk local CSCC is treated with Mohs surgery.; High-risk local CSCC is treated with standard excision.; High-risk local CSCC may require radiation therapy.; High-risk local CSCC may require systemic therapy.; High-risk local CSCC requires more frequent follow-up exams than low-risk cases.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e0f29bbd",
+    "source": "Medical",
+    "question": "What are the preferred systemic therapy options for metastatic CSCC, and when might surgery or radiation be considered?",
+    "ground_truth": "Preferred systemic therapies for metastatic CSCC are PD-1 inhibitors, with surgery or radiation considered if feasible.",
+    "context": "Preferred systemic therapies for metastatic CSCC are PD-1 inhibitors.; Surgery or radiation may be considered if feasible.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-55f0c0e2",
+    "source": "Medical",
+    "question": "Why is actinic keratosis considered a risk factor for CSCC, and how is it managed to prevent progression?",
+    "ground_truth": "Actinic keratosis is a precancerous lesion that can progress to CSCC and is managed with photodynamic therapy, cryotherapy, or topical treatments.",
+    "context": "Actinic keratosis is a precancerous lesion.; Actinic keratosis can progress to CSCC.; Actinic keratosis is managed with photodynamic therapy.; Actinic keratosis is managed with cryotherapy.; Actinic keratosis is managed with topical treatments.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-8407a0ab",
+    "source": "Medical",
+    "question": "Which patient characteristics would prompt the use of imaging during the diagnostic workup of CSCC?",
+    "ground_truth": "Imaging is used if deeper invasion or spread is suspected, especially in high-risk, regional, or metastatic CSCC cases.",
+    "context": "Imaging is used if deeper invasion is suspected.; Imaging is used if spread is suspected.; Imaging is especially used in high-risk CSCC cases.; Imaging is especially used in regional CSCC cases.; Imaging is especially used in metastatic CSCC cases.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-7b4429ac",
+    "source": "Medical",
+    "question": "What findings on risk assessment would classify a local CSCC as high-risk, and how does this affect treatment choices?",
+    "ground_truth": "Features such as perineural invasion, lymphovascular invasion, or high tumor grade classify local CSCC as high-risk, requiring Mohs surgery or systemic therapy if surgery/radiation is not possible.",
+    "context": "Perineural invasion classifies local CSCC as high-risk.; Lymphovascular invasion classifies local CSCC as high-risk.; High tumor grade classifies local CSCC as high-risk.; High-risk local CSCC requires Mohs surgery.; High-risk local CSCC may require systemic therapy if surgery or radiation is not possible.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-6d12f4ff",
+    "source": "Medical",
+    "question": "How does immunosuppression influence both the risk and clinical management of CSCC?",
+    "ground_truth": "Immunosuppression increases CSCC risk and is a factor in risk assessment, requiring intensified surveillance and potentially altered treatment.",
+    "context": "Immunosuppression increases CSCC risk.; Immunosuppression is a factor in risk assessment for CSCC.; Immunosuppression requires intensified surveillance for CSCC.; Immunosuppression may require altered treatment for CSCC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-baed6d13",
+    "source": "Medical",
+    "question": "For a patient with CSCC arising in a chronic wound, what two risk factors are present and how does this affect staging and management?",
+    "ground_truth": "Both chronic wounds and scars are risk factors, increasing the likelihood of high-risk CSCC, which may require advanced staging and aggressive treatment.",
+    "context": "Chronic wounds are a risk factor for high-risk CSCC.; Scars are a risk factor for high-risk CSCC.; Chronic wounds and scars increase the likelihood of high-risk CSCC.; High-risk CSCC may require advanced staging.; High-risk CSCC may require aggressive treatment.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-eb7624ca",
+    "source": "Medical",
+    "question": "What is the recommended follow-up strategy after treatment for regional CSCC compared to local low-risk CSCC?",
+    "ground_truth": "Regional CSCC requires more frequent skin and lymph node exams than local low-risk CSCC, especially in the first two years.",
+    "context": "Regional CSCC requires more frequent skin exams than local low-risk CSCC.; Regional CSCC requires more frequent lymph node exams than local low-risk CSCC.; More frequent exams are especially needed in the first two years after treatment.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-0a6379ff",
+    "source": "Medical",
+    "question": "Which genetic syndromes are associated with increased CSCC risk and what is their implication for surveillance?",
+    "ground_truth": "Xeroderma pigmentosum and RDEB increase CSCC risk, necessitating regular skin and lymph node exams for surveillance.",
+    "context": "Xeroderma pigmentosum is associated with increased CSCC risk.; RDEB is associated with increased CSCC risk.; Xeroderma pigmentosum necessitates regular skin exams for surveillance.; RDEB necessitates regular skin exams for surveillance.; Xeroderma pigmentosum necessitates regular lymph node exams for surveillance.; RDEB necessitates regular lymph node exams for surveillance.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-462ecc23",
+    "source": "Medical",
+    "question": "How are PD-1 inhibitors used in the treatment of CSCC and at which stage are they preferred?",
+    "ground_truth": "PD-1 inhibitors are systemic therapy options preferred for metastatic CSCC, but may also be used for high-risk or regional disease if other treatments are not possible.",
+    "context": "PD-1 inhibitors are systemic therapy options for CSCC.; PD-1 inhibitors are preferred for metastatic CSCC.; PD-1 inhibitors may also be used for high-risk disease.; PD-1 inhibitors may also be used for regional disease if other treatments are not possible.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-2782702e",
+    "source": "Medical",
+    "question": "What symptoms would prompt a clinician to perform a skin biopsy for suspected CSCC?",
+    "ground_truth": "Scaly patches, solid or misshapen lesions, or lesions in areas of chronic damage would prompt a skin biopsy.",
+    "context": "Scaly patches would prompt a skin biopsy for suspected CSCC.; Solid or misshapen lesions would prompt a skin biopsy for suspected CSCC.; Lesions in areas of chronic damage would prompt a skin biopsy for suspected CSCC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f978cb28",
+    "source": "Medical",
+    "question": "What is the role of clinical trials in the management of advanced or refractory CSCC?",
+    "ground_truth": "Clinical trials are an option for systemic therapy, especially in advanced or refractory CSCC cases.",
+    "context": "Clinical trials are an option for systemic therapy.; Clinical trials are especially relevant in advanced CSCC cases.; Clinical trials are especially relevant in refractory CSCC cases.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4f5a8531",
+    "source": "Medical",
+    "question": "Why might a patient with actinic keratosis require ongoing dermatologic surveillance even after lesion treatment?",
+    "ground_truth": "Because actinic keratosis can progress to CSCC and regular skin exams are recommended for surveillance.",
+    "context": "Actinic keratosis can progress to CSCC.; Regular skin exams are recommended for surveillance after lesion treatment.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-db5aa2e3",
+    "source": "Medical",
+    "question": "What distinguishes Mohs surgery from other surgical options in the treatment of high-risk local CSCC?",
+    "ground_truth": "Mohs surgery is preferred for high-risk local CSCC due to its tissue-sparing and margin-assessing technique.",
+    "context": "Mohs surgery is preferred for high-risk local CSCC.; Mohs surgery uses a tissue-sparing technique.; Mohs surgery uses a margin-assessing technique.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-193a4b7f",
+    "source": "Medical",
+    "question": "What chromosomal abnormality must be present for a diagnosis of chronic myeloid leukemia (CML)?",
+    "ground_truth": "The Philadelphia chromosome (Ph), resulting from a translocation between chromosome 9 and chromosome 22, must be present.",
+    "context": "The Philadelphia chromosome must be present for a diagnosis of CML.; The Philadelphia chromosome results from a translocation between chromosome 9 and chromosome 22.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e9ac42f1",
+    "source": "Medical",
+    "question": "How does the BCR::ABL1 fusion gene relate to both the diagnosis and treatment of CML?",
+    "ground_truth": "The BCR::ABL1 fusion gene is required for diagnosis and is also the target of CML treatment.",
+    "context": "The BCR::ABL1 fusion gene is required for the diagnosis of CML.; The BCR::ABL1 fusion gene is the target of CML treatment.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-78897235",
+    "source": "Medical",
+    "question": "Which two diagnostic methods are used to confirm CML by detecting its key biomarkers?",
+    "ground_truth": "Blood tests and bone marrow tests are used to detect the BCR::ABL1 fusion gene or Philadelphia chromosome.",
+    "context": "Blood tests are used to confirm CML by detecting key biomarkers.; Bone marrow tests are used to confirm CML by detecting key biomarkers.; Blood tests can detect the BCR::ABL1 fusion gene.; Blood tests can detect the Philadelphia chromosome.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-33494794",
+    "source": "Medical",
+    "question": "What cellular changes would you expect to find in a patient with CML, and which test would confirm these findings?",
+    "ground_truth": "Increased white blood cells (granulocytes) and abnormal platelet counts, confirmed by blood tests.",
+    "context": "Increased white blood cells (granulocytes) are expected in a patient with CML.; Abnormal platelet counts are expected in a patient with CML.; Blood tests can confirm the findings of increased white blood cells and abnormal platelet counts.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-a7826934",
+    "source": "Medical",
+    "question": "Explain the relationship between the Philadelphia chromosome, BCR::ABL1 fusion gene, and the origin of CML.",
+    "ground_truth": "The Philadelphia chromosome results from a translocation that creates the BCR::ABL1 fusion gene, which causes CML.",
+    "context": "The Philadelphia chromosome results from a translocation.; The translocation creates the BCR::ABL1 fusion gene.; The BCR::ABL1 fusion gene causes CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-50bafb57",
+    "source": "Medical",
+    "question": "Which blood cell types are abnormally increased in CML and what underlying cellular process causes this?",
+    "ground_truth": "Granulocytes (a type of white blood cell) are increased due to overproduction by myeloid progenitor cells.",
+    "context": "Granulocytes are abnormally increased in CML.; Granulocytes are a type of white blood cell.; Granulocytes are increased due to overproduction by myeloid progenitor cells.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-24373ebe",
+    "source": "Medical",
+    "question": "How does the disease phase of CML affect the types of blood cells present?",
+    "ground_truth": "Blast phase CML is characterized by increased blasts and progenitor cells, while chronic phase has increased mature granulocytes.",
+    "context": "Blast phase CML is characterized by increased blasts.; Blast phase CML is characterized by increased progenitor cells.; Chronic phase CML has increased mature granulocytes.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-9528082d",
+    "source": "Medical",
+    "question": "Why is detecting either the Philadelphia chromosome or BCR::ABL1 gene sufficient for diagnosing CML?",
+    "ground_truth": "Because both result from the same chromosomal translocation specific to CML and serve as key biomarkers.",
+    "context": "Detecting the Philadelphia chromosome is sufficient for diagnosing CML.; Detecting the BCR::ABL1 gene is sufficient for diagnosing CML.; Both the Philadelphia chromosome and BCR::ABL1 gene result from the same chromosomal translocation specific to CML.; The Philadelphia chromosome and BCR::ABL1 gene serve as key biomarkers for CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-8b16a7bd",
+    "source": "Medical",
+    "question": "What is the rationale for targeting BCR::ABL1 protein activity in CML treatment?",
+    "ground_truth": "Since CML is caused by the BCR::ABL1 fusion gene, inhibiting its protein product addresses the underlying cause.",
+    "context": "CML is caused by the BCR::ABL1 fusion gene.; Targeting BCR::ABL1 protein activity addresses the underlying cause of CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4fe06961",
+    "source": "Medical",
+    "question": "What is the sequence of genetic and chromosomal events leading to CML?",
+    "ground_truth": "A translocation between chromosome 9 and 22 creates the Philadelphia chromosome, which produces the BCR::ABL1 fusion gene that causes CML.",
+    "context": "A translocation between chromosome 9 and 22 creates the Philadelphia chromosome.; The Philadelphia chromosome produces the BCR::ABL1 fusion gene.; The BCR::ABL1 fusion gene causes CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-41b1601a",
+    "source": "Medical",
+    "question": "Which two main biomarkers are tested to confirm a diagnosis of CML, and how are they related?",
+    "ground_truth": "BCR::ABL1 fusion gene and Philadelphia chromosome are tested, both resulting from the same chromosomal translocation.",
+    "context": "The BCR::ABL1 fusion gene is tested to confirm a diagnosis of CML.; The Philadelphia chromosome is tested to confirm a diagnosis of CML.; Both the BCR::ABL1 fusion gene and Philadelphia chromosome result from the same chromosomal translocation.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-38fe5331",
+    "source": "Medical",
+    "question": "How does the detection of increased blasts in blood or bone marrow influence the classification of CML phase?",
+    "ground_truth": "Increased blasts indicate progression to blast phase CML (BP-CML), an advanced disease stage.",
+    "context": "Increased blasts in blood or bone marrow indicate progression to blast phase CML.; Blast phase CML (BP-CML) is an advanced disease stage.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4987de7f",
+    "source": "Medical",
+    "question": "What are the cellular and molecular hallmarks required to definitively diagnose CML?",
+    "ground_truth": "Increased granulocytes and presence of either the Philadelphia chromosome or BCR::ABL1 fusion gene are required.",
+    "context": "Increased granulocytes are required to definitively diagnose CML.; The presence of the Philadelphia chromosome is required to definitively diagnose CML.; The presence of the BCR::ABL1 fusion gene is required to definitively diagnose CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c2ead218",
+    "source": "Medical",
+    "question": "Which abnormal blood counts and genetic findings together support a diagnosis of CML?",
+    "ground_truth": "Increased white blood cells and abnormal platelet counts, along with the Philadelphia chromosome or BCR::ABL1 gene, support CML diagnosis.",
+    "context": "Increased white blood cells support a diagnosis of CML.; Abnormal platelet counts support a diagnosis of CML.; The Philadelphia chromosome supports a diagnosis of CML.; The BCR::ABL1 gene supports a diagnosis of CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4d01de98",
+    "source": "Medical",
+    "question": "How do blood stem cells contribute to the abnormal blood cell profile observed in CML?",
+    "ground_truth": "Blood stem cells in CML produce increased myeloid progenitor cells, leading to elevated granulocytes.",
+    "context": "Blood stem cells in CML produce increased myeloid progenitor cells.; Increased myeloid progenitor cells lead to elevated granulocytes.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-34a9155d",
+    "source": "Medical",
+    "question": "Why is a lung nodule detected by imaging not sufficient for a lung cancer diagnosis?",
+    "ground_truth": "Because biopsy is required to confirm the malignancy of a lung nodule detected by imaging.",
+    "context": "A lung nodule detected by imaging is not sufficient for a lung cancer diagnosis.; A biopsy is required to confirm the malignancy of a lung nodule detected by imaging.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b7e4be0e",
+    "source": "Medical",
+    "question": "What combination of risk factors and diagnostic methods would justify recommending lung cancer screening?",
+    "ground_truth": "Individuals with high-risk factors such as tobacco smoking should undergo lung cancer screening using imaging.",
+    "context": "Individuals with high-risk factors such as tobacco smoking should undergo lung cancer screening.; Lung cancer screening should use imaging.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-96bb3762",
+    "source": "Medical",
+    "question": "How does the treatment approach differ between Stage 1 and Stage 2 NSCLC?",
+    "ground_truth": "Stage 1 NSCLC is treated with surgery and possibly radiation therapy, while Stage 2 NSCLC may require surgery and chemoradiation.",
+    "context": "Stage 1 NSCLC is treated with surgery.; Stage 1 NSCLC may be treated with radiation therapy.; Stage 2 NSCLC may require surgery.; Stage 2 NSCLC may require chemoradiation.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-7ea7ec68",
+    "source": "Medical",
+    "question": "Why would a patient with a history of exposure to asbestos and a persistent cough be prioritized for lung cancer screening?",
+    "ground_truth": "Because asbestos exposure is a risk factor and persistent cough is a symptom, both increasing the need for early detection via screening.",
+    "context": "Asbestos exposure is a risk factor for lung cancer.; A persistent cough is a symptom of lung cancer.; Both asbestos exposure and persistent cough increase the need for early detection via screening.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e7d1cd1c",
+    "source": "Medical",
+    "question": "How does the subtype of NSCLC influence the origin of the cancer cells?",
+    "ground_truth": "Adenocarcinoma forms from alveolar mucus-producing cells, while squamous cell carcinoma originates from bronchial lining cells.",
+    "context": "Adenocarcinoma forms from alveolar mucus-producing cells.; Squamous cell carcinoma originates from bronchial lining cells.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c7c59020",
+    "source": "Medical",
+    "question": "What is the rationale for using both imaging and biopsy in the assessment of a lung nodule?",
+    "ground_truth": "Imaging detects the lung nodule, but biopsy is necessary to determine if it is cancerous.",
+    "context": "Imaging detects the lung nodule.; A biopsy is necessary to determine if the lung nodule is cancerous.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ee49f3e8",
+    "source": "Medical",
+    "question": "Why is surgery not typically a treatment option for Stage 4 NSCLC?",
+    "ground_truth": "Because Stage 4 NSCLC is metastatic at diagnosis, making local treatments like surgery ineffective.",
+    "context": "Stage 4 NSCLC is metastatic at diagnosis.; Local treatments like surgery are ineffective for Stage 4 NSCLC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b77d8e3d",
+    "source": "Medical",
+    "question": "How do follow-up strategies change after initial treatment for NSCLC?",
+    "ground_truth": "After initial treatment, follow-up care and surveillance are implemented to monitor for recurrence.",
+    "context": "After initial treatment for NSCLC, follow-up care is implemented.; Surveillance is implemented to monitor for recurrence after initial treatment for NSCLC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-6fb8996b",
+    "source": "Medical",
+    "question": "What factors would lead to recommending a clinical trial for a lung cancer patient?",
+    "ground_truth": "Patients with lung cancer may be eligible for clinical trials as part of their treatment or prevention options.",
+    "context": "Patients with lung cancer may be eligible for clinical trials.; Clinical trials can be part of treatment options for lung cancer patients.; Clinical trials can be part of prevention options for lung cancer patients.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-edc3c6eb",
+    "source": "Medical",
+    "question": "Why is lung cancer screening particularly important for individuals exposed to air pollution and diesel fumes?",
+    "ground_truth": "Because both air pollution and diesel fumes are established risk factors for lung cancer, necessitating early detection strategies.",
+    "context": "Air pollution is an established risk factor for lung cancer.; Diesel fumes are an established risk factor for lung cancer.; Both air pollution and diesel fumes necessitate early detection strategies for lung cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f3048835",
+    "source": "Medical",
+    "question": "What are the main differences in treatment between early and locally advanced NSCLC?",
+    "ground_truth": "Early NSCLC is mainly treated with surgery and sometimes radiation, while locally advanced NSCLC may also require chemoradiation.",
+    "context": "Early NSCLC is mainly treated with surgery.; Early NSCLC may sometimes be treated with radiation.; Locally advanced NSCLC may require chemoradiation.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f79d978d",
+    "source": "Medical",
+    "question": "How does the presence of a lung nodule on imaging affect the diagnostic workflow for lung cancer?",
+    "ground_truth": "A lung nodule detected by imaging prompts further assessment, including biopsy, to confirm or exclude cancer.",
+    "context": "A lung nodule detected by imaging prompts further assessment.; Further assessment of a lung nodule includes a biopsy.; A biopsy is performed to confirm or exclude cancer in the presence of a lung nodule.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-47504b64",
+    "source": "Medical",
+    "question": "Why is supportive care considered a treatment option for all stages of lung cancer?",
+    "ground_truth": "Supportive care improves quality of life for people with lung cancer regardless of stage.",
+    "context": "Supportive care improves quality of life for people with lung cancer.; Supportive care is considered a treatment option for all stages of lung cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-328006b7",
+    "source": "Medical",
+    "question": "What combination of exposure and symptom would most strongly suggest the need for diagnostic evaluation for lung cancer?",
+    "ground_truth": "A history of tobacco smoking combined with chest pain should prompt diagnostic evaluation for lung cancer.",
+    "context": "A history of tobacco smoking should prompt diagnostic evaluation for lung cancer.; Chest pain should prompt diagnostic evaluation for lung cancer.; The combination of tobacco smoking and chest pain suggests the need for diagnostic evaluation for lung cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-659d7c0a",
+    "source": "Medical",
+    "question": "How do the purposes of lung cancer screening and follow-up care differ?",
+    "ground_truth": "Screening aims for early detection in high-risk individuals, while follow-up care monitors for recurrence after treatment.",
+    "context": "Screening aims for early detection in high-risk individuals.; Follow-up care monitors for recurrence after treatment.; The purposes of lung cancer screening and follow-up care differ.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-689b17ad",
+    "source": "Medical",
+    "question": "Which biomarker should be tested both before and after treatment in nasopharyngeal carcinoma patients, and why is this monitoring important?",
+    "ground_truth": "EBV DNA should be tested before and after treatment because its level serves as a prognostic factor and is used for surveillance.",
+    "context": "EBV DNA should be tested before treatment in nasopharyngeal carcinoma patients.; EBV DNA should be tested after treatment in nasopharyngeal carcinoma patients.; The level of EBV DNA serves as a prognostic factor.; The level of EBV DNA is used for surveillance.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-a7e62dce",
+    "source": "Medical",
+    "question": "What combination of diagnostic methods is necessary to both confirm nasopharyngeal carcinoma and determine its subtype?",
+    "ground_truth": "Biopsy is required to confirm NPC and to determine its cancer subtype.",
+    "context": "A biopsy is required to confirm nasopharyngeal carcinoma.; A biopsy is required to determine the subtype of nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-80912696",
+    "source": "Medical",
+    "question": "Why should fertility counseling be considered for patients undergoing treatment for nasopharyngeal carcinoma?",
+    "ground_truth": "Fertility counseling should be considered because NPC treatment can affect fertility.",
+    "context": "Fertility counseling should be considered for patients undergoing treatment for nasopharyngeal carcinoma.; Nasopharyngeal carcinoma treatment can affect fertility.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-aa1b8dbb",
+    "source": "Medical",
+    "question": "How does a patient's performance status influence nasopharyngeal carcinoma treatment planning?",
+    "ground_truth": "Performance status is assessed and considered in NPC treatment planning as a prognostic factor.",
+    "context": "Performance status is assessed in nasopharyngeal carcinoma treatment planning.; Performance status is considered in nasopharyngeal carcinoma treatment planning.; Performance status is a prognostic factor in nasopharyngeal carcinoma treatment planning.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-d256aef2",
+    "source": "Medical",
+    "question": "If a patient with nasopharyngeal carcinoma presents with enlarged lymph nodes, what does this indicate about possible disease spread and staging?",
+    "ground_truth": "Enlarged lymph nodes suggest lymph node metastasis, which is included in the TNM staging system for NPC.",
+    "context": "Enlarged lymph nodes suggest lymph node metastasis.; Lymph node metastasis is included in the TNM staging system for nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c09d2bcb",
+    "source": "Medical",
+    "question": "Which populations are at increased risk for nasopharyngeal carcinoma and what risk factors contribute to this increased incidence?",
+    "ground_truth": "People from Asia, Native America, and North Africa are at increased risk due to geographic origin and EBV infection.",
+    "context": "People from Asia are at increased risk for nasopharyngeal carcinoma.; Native Americans are at increased risk for nasopharyngeal carcinoma.; People from North Africa are at increased risk for nasopharyngeal carcinoma.; Geographic origin contributes to the increased incidence of nasopharyngeal carcinoma.; EBV infection contributes to the increased incidence of nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-5fdb115b",
+    "source": "Medical",
+    "question": "What imaging modalities are used for both staging and surveillance of nasopharyngeal carcinoma?",
+    "ground_truth": "CT scan, MRI, PET/CT, and ultrasound are used for both staging and surveillance of NPC.",
+    "context": "CT scan is used for both staging and surveillance of nasopharyngeal carcinoma.; MRI is used for both staging and surveillance of nasopharyngeal carcinoma.; PET/CT is used for both staging and surveillance of nasopharyngeal carcinoma.; Ultrasound is used for both staging and surveillance of nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-9231a873",
+    "source": "Medical",
+    "question": "Which cancer subtype is most commonly found in the nasopharynx and how is it classified within the cancer ontology?",
+    "ground_truth": "Squamous cell carcinoma (SCC) is the most common subtype of nasopharyngeal cancer, classified under nasopharyngeal carcinoma (NPC) in the ontology.",
+    "context": "Squamous cell carcinoma (SCC) is the most common subtype of nasopharyngeal cancer.; SCC is classified under nasopharyngeal carcinoma (NPC) in the cancer ontology.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ad0cc053",
+    "source": "Medical",
+    "question": "If a nasopharyngeal carcinoma patient has both high EBV DNA levels and poor performance status, what does this indicate about their prognosis?",
+    "ground_truth": "High EBV DNA levels and poor performance status are both poor prognostic factors in NPC.",
+    "context": "High EBV DNA levels are a poor prognostic factor in nasopharyngeal carcinoma (NPC).; Poor performance status is a poor prognostic factor in nasopharyngeal carcinoma (NPC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-5a6b98a7",
+    "source": "Medical",
+    "question": "Why might symptoms of nasopharyngeal carcinoma be absent until advanced stages, and how does this affect the diagnostic process?",
+    "ground_truth": "Symptoms may be absent until advanced stage, making imaging and biopsy essential for early diagnosis.",
+    "context": "Symptoms of nasopharyngeal carcinoma may be absent until advanced stages.; The absence of symptoms until advanced stages makes imaging essential for early diagnosis.; The absence of symptoms until advanced stages makes biopsy essential for early diagnosis.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-1c53b384",
+    "source": "Medical",
+    "question": "What combination of risk factors should prompt clinicians to consider nasopharyngeal carcinoma in a differential diagnosis?",
+    "ground_truth": "Epstein-Barr virus infection, tobacco use, alcohol use, and geographic origin (Asia, Native America, North Africa) should prompt consideration of NPC.",
+    "context": "Epstein-Barr virus infection should prompt consideration of nasopharyngeal carcinoma (NPC).; Tobacco use should prompt consideration of nasopharyngeal carcinoma (NPC).; Alcohol use should prompt consideration of nasopharyngeal carcinoma (NPC).; Geographic origin (Asia, Native America, North Africa) should prompt consideration of nasopharyngeal carcinoma (NPC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-0e2be889",
+    "source": "Medical",
+    "question": "How does the AJCC TNM system contribute to the staging of nasopharyngeal carcinoma, and what aspects does it assess?",
+    "ground_truth": "The AJCC TNM system stages NPC by assessing tumor size (T), lymph node involvement (N), and distant metastasis (M).",
+    "context": "The AJCC TNM system stages nasopharyngeal carcinoma (NPC).; The AJCC TNM system assesses tumor size (T) in NPC.; The AJCC TNM system assesses lymph node involvement (N) in NPC.; The AJCC TNM system assesses distant metastasis (M) in NPC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ff2105ab",
+    "source": "Medical",
+    "question": "Why is dental health assessment important in the management of nasopharyngeal carcinoma?",
+    "ground_truth": "Dental health can be affected by head and neck cancer and its treatment, so dental exams are part of NPC management.",
+    "context": "Dental health can be affected by head and neck cancer.; Dental health can be affected by the treatment of head and neck cancer.; Dental exams are part of the management of nasopharyngeal carcinoma (NPC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-6a90b47e",
+    "source": "Medical",
+    "question": "What methods are used to assess both nutritional status and speech/swallowing function in nasopharyngeal carcinoma patients?",
+    "ground_truth": "Nutrition assessment and speech and swallowing assessment are used in NPC patients.",
+    "context": "Nutrition assessment is used in nasopharyngeal carcinoma (NPC) patients.; Speech and swallowing assessment is used in nasopharyngeal carcinoma (NPC) patients.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-0d237b40",
+    "source": "Medical",
+    "question": "Which metastatic sites are most common in nasopharyngeal carcinoma and how is this reflected in the ontology?",
+    "ground_truth": "Lymph node and lung are the most common metastatic sites for NPC, as indicated in the ontology.",
+    "context": "Lymph node is a common metastatic site for nasopharyngeal carcinoma (NPC).; Lung is a common metastatic site for nasopharyngeal carcinoma (NPC).; The ontology indicates lymph node and lung as common metastatic sites for NPC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-cfab4b2d",
+    "source": "Medical",
+    "question": "Why is immunotherapy with checkpoint inhibitors recommended for some colon cancer patients but not others?",
+    "ground_truth": "Immunotherapy with checkpoint inhibitors is recommended for dMMR/MSI-H colon cancers but not for pMMR/MSS cancers, which are treated with chemotherapy.",
+    "context": "Immunotherapy with checkpoint inhibitors is recommended for dMMR/MSI-H colon cancers.; Immunotherapy with checkpoint inhibitors is not recommended for pMMR/MSS colon cancers.; pMMR/MSS colon cancers are treated with chemotherapy.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b2da7aee",
+    "source": "Medical",
+    "question": "What are the recommended surveillance strategies after treatment for colon cancer and which biomarkers are involved?",
+    "ground_truth": "Surveillance includes colonoscopy, CEA testing, and CT scans, with CEA serving as a biomarker for monitoring.",
+    "context": "Surveillance after treatment for colon cancer includes colonoscopy.; Surveillance after treatment for colon cancer includes CEA testing.; Surveillance after treatment for colon cancer includes CT scans.; CEA serves as a biomarker for monitoring after treatment for colon cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-7b422282",
+    "source": "Medical",
+    "question": "How does the presence of Lynch syndrome affect colon cancer risk and management?",
+    "ground_truth": "Lynch syndrome increases colon cancer risk and requires testing for mismatch repair deficiency (dMMR) or MSI-H, which guides immunotherapy decisions.",
+    "context": "Lynch syndrome increases colon cancer risk.; Lynch syndrome requires testing for mismatch repair deficiency (dMMR) or MSI-H.; Testing for dMMR or MSI-H guides immunotherapy decisions.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-fc13ecfe",
+    "source": "Medical",
+    "question": "What is the rationale for recommending chemotherapy after colectomy in stage 3 colon cancer but not always in stage 2?",
+    "ground_truth": "Chemotherapy is recommended after colectomy for all stage 3 colon cancers due to lymph node involvement, while only some stage 2 cases receive it as they lack lymph node spread.",
+    "context": "Chemotherapy is recommended after colectomy for all stage 3 colon cancers.; Stage 3 colon cancers have lymph node involvement.; Only some stage 2 colon cancer cases receive chemotherapy.; Some stage 2 colon cancer cases lack lymph node spread.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-3447851a",
+    "source": "Medical",
+    "question": "Why should young adults with colon cancer be counseled about fertility preservation before treatment?",
+    "ground_truth": "Young adults should be counseled because treatments like chemotherapy and surgery can impair fertility, and options such as sperm banking, egg freezing, or ovarian tissue banking are available.",
+    "context": "Young adults with colon cancer should be counseled about fertility preservation.; Treatments like chemotherapy and surgery can impair fertility.; Options for fertility preservation include sperm banking, egg freezing, and ovarian tissue banking.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-97022167",
+    "source": "Medical",
+    "question": "How does the origin of colon cancer from adenomas influence early detection and prevention strategies?",
+    "ground_truth": "Since most colon cancers start in adenomas, early detection and removal of polyps via colonoscopy and polypectomy are crucial for prevention.",
+    "context": "Most colon cancers start in adenomas.; Early detection and removal of polyps are crucial for prevention.; Colonoscopy and polypectomy are methods for early detection and removal of polyps.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-781a9787",
+    "source": "Medical",
+    "question": "What diagnostic tests are used for both initial evaluation and staging of colon cancer, and what unique information does each provide?",
+    "ground_truth": "Blood tests (CBC, chemistry profile, CEA) are used for initial evaluation, while CT with contrast is the main imaging test for staging and surveillance; CEA is also a biomarker for monitoring.",
+    "context": "Blood tests like CBC, chemistry profile, and CEA are used for initial evaluation of colon cancer.; CT with contrast is the main imaging test for staging and surveillance of colon cancer.; CEA is a biomarker for monitoring colon cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-104b2f70",
+    "source": "Medical",
+    "question": "For a patient with a first-degree relative with colorectal cancer, what risk factors and inherited syndromes should be considered?",
+    "ground_truth": "A first-degree relative is a risk factor, and inherited syndromes like Lynch syndrome and FAP should be evaluated for increased colon cancer risk.",
+    "context": "A first-degree relative with colorectal cancer is a risk factor.; Inherited syndromes like Lynch syndrome and FAP should be evaluated for increased colon cancer risk.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e1ede6d6",
+    "source": "Medical",
+    "question": "What distinguishes stage 4 colon cancer from earlier stages in terms of spread and treatment approach?",
+    "ground_truth": "Stage 4 colon cancer has spread to distant organs like the liver or lungs, requiring different treatment strategies compared to localized or regional disease.",
+    "context": "Stage 4 colon cancer has spread to distant organs like the liver or lungs.; Stage 4 colon cancer requires different treatment strategies compared to localized or regional disease.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e8957bed",
+    "source": "Medical",
+    "question": "Why is ctDNA testing not routinely used in colon cancer management outside clinical trials?",
+    "ground_truth": "ctDNA testing is considered investigational and recommended only in clinical trials, not in standard management.",
+    "context": "ctDNA testing is considered investigational.; ctDNA testing is recommended only in clinical trials.; ctDNA testing is not used in standard management of colon cancer.",
+    "question_type": "Complex Reasoning"
+  }
+]
