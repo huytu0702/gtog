@@ -122,7 +122,7 @@ async def test_local_search_uses_runtime_safe_vector_store_without_parquet():
 
     assert response.response == "ok"
     mock_read_parquet.assert_not_called()
-    mock_config.assert_called_once_with("c1", version="v1", query_runtime=True)
+    mock_config.assert_called_once_with("c1", version="v1", use_cloud_vectors=True)
     assert mock_search.await_args.kwargs["config"] is config
     assert (
         mock_search.await_args.kwargs["config"]
@@ -153,7 +153,7 @@ async def test_tog_search_uses_runtime_safe_vector_store_without_parquet():
 
     assert response.response == "ok"
     mock_read_parquet.assert_not_called()
-    mock_config.assert_called_once_with("c1", version="v1", query_runtime=True)
+    mock_config.assert_called_once_with("c1", version="v1", use_cloud_vectors=True)
     assert mock_search.await_args.kwargs["config"] is config
     assert (
         mock_search.await_args.kwargs["config"]
@@ -187,7 +187,7 @@ async def test_drift_search_uses_runtime_safe_vector_store_without_parquet():
 
     assert response.response == "ok"
     mock_read_parquet.assert_not_called()
-    mock_config.assert_called_once_with("c1", version="v1", query_runtime=True)
+    mock_config.assert_called_once_with("c1", version="v1", use_cloud_vectors=True)
     assert mock_search.await_args.kwargs["config"] is config
     assert (
         mock_search.await_args.kwargs["config"]

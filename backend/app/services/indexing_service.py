@@ -207,7 +207,7 @@ class IndexingService:
             config = load_graphrag_config(
                 collection_id,
                 version=target_version or None,
-                cloud_vector_store=True,
+                use_cloud_vectors=True,
             )
 
             control_plane.renew_indexing_job_lease(

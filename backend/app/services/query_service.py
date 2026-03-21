@@ -139,12 +139,20 @@ def _normalize_community_reports_frame(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return frame
 
-    normalized = frame.copy()
-    if "full_content" not in normalized.columns:
-        normalized["full_content"] = ""
+    has_full_content = "full_content" in frame.columns
+    if has_full_content:
+        missing_mask = frame["full_content"].apply(_is_missing_value)
+        if not missing_mask.any():
+            return frame
+    else:
+        missing_mask = None
 
-    missing_mask = normalized["full_content"].apply(_is_missing_value)
-    if missing_mask.any():
+    normalized = frame.copy()
+    if not has_full_content:
+        normalized["full_content"] = ""
+        missing_mask = normalized["full_content"].apply(_is_missing_value)
+
+    if missing_mask is not None and missing_mask.any():
         normalized.loc[missing_mask, "full_content"] = normalized.loc[
             missing_mask
         ].apply(
@@ -377,7 +385,7 @@ class QueryService:
             collection_id, "global"
         )
         config = load_graphrag_config(
-            collection_id, version=active_version, query_runtime=True
+            collection_id, version=active_version, use_cloud_vectors=True
         )
         entities = frames["entities"]
         communities = frames["communities"]
@@ -433,7 +441,7 @@ class QueryService:
             collection_id, "local"
         )
         config = load_graphrag_config(
-            collection_id, version=active_version, query_runtime=True
+            collection_id, version=active_version, use_cloud_vectors=True
         )
         entities = frames["entities"]
         communities = frames["communities"]
@@ -490,7 +498,7 @@ class QueryService:
             collection_id, "tog"
         )
         config = load_graphrag_config(
-            collection_id, version=active_version, query_runtime=True
+            collection_id, version=active_version, use_cloud_vectors=True
         )
         entities = frames["entities"]
         relationships = frames["relationships"]
@@ -503,11 +511,11 @@ class QueryService:
             )
 
             # Debug: Show entity names
-            if len(entities) > 0:
+            if logger.isEnabledFor(logging.DEBUG) and len(entities) > 0:
                 name_column = _preferred_entity_name_column(entities)
                 entity_names = entities[name_column].head(10).astype(str).tolist()
-                logger.info(f"Available entities: {entity_names}")
-            else:
+                logger.debug("Available entities: %s", entity_names)
+            elif len(entities) == 0:
                 logger.warning("No entities found in serving context")
 
             # Perform search - API returns (response, context_data) tuple
@@ -594,7 +602,7 @@ class QueryService:
             collection_id, "drift"
         )
         config = load_graphrag_config(
-            collection_id, version=active_version, query_runtime=True
+            collection_id, version=active_version, use_cloud_vectors=True
         )
         entities = frames["entities"]
         communities = frames["communities"]

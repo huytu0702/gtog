@@ -135,6 +135,16 @@ def _is_local_origin(origin: str) -> bool:
     return hostname in {"localhost", "127.0.0.1"}
 
 
+# RFC 6598 CGNAT (Cloudflare Tunnel connectors in shared-network pods)
+# RFC 1918 private ranges (ACA internal networking)
+_TRUSTED_PROXY_NETWORKS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
 def _is_trusted_tunnel_proxy(request: Request) -> bool:
     """Allow remotely managed Cloudflare Tunnel traffic when origin is private-only."""
     if not request.headers.get("cf-ray") or not request.headers.get("cf-connecting-ip"):
@@ -145,13 +155,7 @@ def _is_trusted_tunnel_proxy(request: Request) -> bool:
     except ValueError:
         return False
 
-    trusted_networks = (
-        ipaddress.ip_network("100.64.0.0/10"),
-        ipaddress.ip_network("10.0.0.0/8"),
-        ipaddress.ip_network("172.16.0.0/12"),
-        ipaddress.ip_network("192.168.0.0/16"),
-    )
-    return any(proxy_ip in network for network in trusted_networks)
+    return any(proxy_ip in network for network in _TRUSTED_PROXY_NETWORKS)
 
 
 def _auth_configuration_error() -> str | None:
@@ -283,6 +287,7 @@ async def lifespan(app: FastAPI):
     auth_configuration_error = _auth_configuration_error()
     if auth_configuration_error:
         raise RuntimeError(auth_configuration_error)
+    app.state.auth_config_error = auth_configuration_error
 
     yield
 
@@ -328,7 +333,7 @@ async def security_and_logging_middleware(request: Request, call_next):
 
     try:
         if path.startswith("/api/") and not is_cors_preflight:
-            auth_configuration_error = _auth_configuration_error()
+            auth_configuration_error = getattr(request.app.state, "auth_config_error", None) or _auth_configuration_error()
             if auth_configuration_error:
                 response = JSONResponse(
                     status_code=503,

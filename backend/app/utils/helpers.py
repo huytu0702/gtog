@@ -246,8 +246,7 @@ def _vector_store_cli_overrides(
     vector_index_name: str,
     *,
     use_blob: bool,
-    query_runtime: bool,
-    cloud_vector_store: bool,
+    use_cloud_vectors: bool,
 ) -> dict[str, object]:
     """Build runtime vector-store overrides for local vs cloud serving/indexing."""
     overrides: dict[str, object] = {
@@ -256,7 +255,7 @@ def _vector_store_cli_overrides(
     cloud_vector_runtime = (
         use_blob
         and settings.query_context_mode.lower() == "cosmos_only"
-        and (query_runtime or cloud_vector_store)
+        and use_cloud_vectors
     )
     if not cloud_vector_runtime:
         return overrides
@@ -326,8 +325,7 @@ def load_graphrag_config(
     collection_id: str,
     version: str | None = None,
     *,
-    query_runtime: bool = False,
-    cloud_vector_store: bool = False,
+    use_cloud_vectors: bool = False,
 ) -> GraphRagConfig:
     """
     Load shared GraphRAG configuration with collection-specific storage overrides.
@@ -372,8 +370,7 @@ def load_graphrag_config(
         _vector_store_cli_overrides(
             vector_index_name,
             use_blob=use_blob,
-            query_runtime=query_runtime,
-            cloud_vector_store=cloud_vector_store,
+            use_cloud_vectors=use_cloud_vectors,
         )
     )
 

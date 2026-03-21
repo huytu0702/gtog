@@ -40,7 +40,7 @@ async def test_global_search_reads_context_from_cosmos_serving():
             response = await service.global_search("c1", "what happened?")
 
     assert response.response == "ok"
-    mock_config.assert_called_once_with("c1", version="v1", query_runtime=True)
+    mock_config.assert_called_once_with("c1", version="v1", use_cloud_vectors=True)
     mock_search.assert_awaited_once()
 
 

@@ -28,7 +28,7 @@ def test_load_graphrag_config_uses_local_lancedb_for_dev(
     monkeypatch.setattr(settings, "cloud_vector_store_type", "azure_ai_search")
     mock_load_config.return_value = MagicMock()
 
-    load_graphrag_config("collection-a", version="v1", query_runtime=False)
+    load_graphrag_config("collection-a", version="v1")
     cli_overrides = mock_load_config.call_args.kwargs["cli_overrides"]
 
     assert (
@@ -66,7 +66,7 @@ def test_load_graphrag_config_uses_azure_ai_search_for_cloud_indexing(
     monkeypatch.setattr(settings, "cloud_vector_store_type", "azure_ai_search")
     mock_load_config.return_value = MagicMock()
 
-    load_graphrag_config("collection-a", version="v1", cloud_vector_store=True)
+    load_graphrag_config("collection-a", version="v1", use_cloud_vectors=True)
     cli_overrides = mock_load_config.call_args.kwargs["cli_overrides"]
 
     assert cli_overrides["vector_store.default_vector_store.type"] == "azure_ai_search"
@@ -109,7 +109,7 @@ def test_load_graphrag_config_uses_azure_ai_search_for_cloud_runtime(
     monkeypatch.setattr(settings, "cloud_vector_store_type", "azure_ai_search")
     mock_load_config.return_value = MagicMock()
 
-    load_graphrag_config("collection-a", version="v1", query_runtime=True)
+    load_graphrag_config("collection-a", version="v1", use_cloud_vectors=True)
     cli_overrides = mock_load_config.call_args.kwargs["cli_overrides"]
 
     assert (
@@ -158,7 +158,7 @@ def test_load_graphrag_config_omits_api_key_override_for_managed_identity(
     monkeypatch.setattr(settings, "cloud_vector_store_type", "azure_ai_search")
     mock_load_config.return_value = MagicMock()
 
-    load_graphrag_config("collection-a", version="v1", query_runtime=True)
+    load_graphrag_config("collection-a", version="v1", use_cloud_vectors=True)
     cli_overrides = mock_load_config.call_args.kwargs["cli_overrides"]
 
     assert (
@@ -196,7 +196,7 @@ def test_load_graphrag_config_rejects_cloud_runtime_without_search_endpoint(
     monkeypatch.setattr(settings, "cloud_vector_store_type", "azure_ai_search")
 
     try:
-        load_graphrag_config("collection-a", version="v1", query_runtime=True)
+        load_graphrag_config("collection-a", version="v1", use_cloud_vectors=True)
     except ValueError as exc:
         assert "AZURE_SEARCH_ENDPOINT" in str(exc)
     else:
@@ -232,7 +232,7 @@ def test_load_graphrag_config_uses_cosmos_vector_store_for_cloud_runtime(
     monkeypatch.setattr(settings, "cloud_vector_store_type", "cosmosdb")
     mock_load_config.return_value = MagicMock()
 
-    load_graphrag_config("collection-a", version="v1", query_runtime=True)
+    load_graphrag_config("collection-a", version="v1", use_cloud_vectors=True)
     cli_overrides = mock_load_config.call_args.kwargs["cli_overrides"]
 
     assert cli_overrides["vector_store.default_vector_store.type"] == "cosmosdb"
@@ -282,7 +282,7 @@ def test_load_graphrag_config_rejects_cosmos_vector_store_without_auth(
 
     with patch("backend.app.utils.helpers.load_config", return_value=MagicMock()):
         try:
-            load_graphrag_config("collection-a", version="v1", query_runtime=True)
+            load_graphrag_config("collection-a", version="v1", use_cloud_vectors=True)
         except ValueError as exc:
             assert "AZURE_COSMOS_CONNECTION_STRING" in str(exc)
         else:
