@@ -34,7 +34,9 @@ async def _run_worker_loop() -> None:
             try:
                 payload = queue_service.decode_message(message)
             except Exception:
-                logger.exception("Failed to decode queue message; deleting invalid payload")
+                logger.exception(
+                    "Failed to decode queue message; deleting invalid payload"
+                )
                 queue_service.delete_message(message)
                 continue
 
@@ -62,7 +64,10 @@ async def _run_worker_loop() -> None:
                 lease_duration_seconds=settings.indexing_worker_lease_duration_seconds,
             )
             if leased_job is None:
-                logger.info("Skipping dispatch for job %s because another worker owns the lease", job_id)
+                logger.info(
+                    "Skipping dispatch for job %s because another worker owns the lease",
+                    job_id,
+                )
                 continue
 
             await indexing_service.execute_indexing_job(

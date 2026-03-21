@@ -3,6 +3,7 @@
 import logging
 
 import pandas as pd
+
 from graphrag.index.workflows import create_final_text_units
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,9 @@ def remove_arrow_fix():
         delattr(create_final_text_units, "_original_relationships")
 
     if hasattr(create_final_text_units, "_original_covariates"):
-        create_final_text_units._covariates = create_final_text_units._original_covariates
+        create_final_text_units._covariates = (
+            create_final_text_units._original_covariates
+        )
         delattr(create_final_text_units, "_original_covariates")
 
     logger.info("ArrowStringArray conversion fix removed")

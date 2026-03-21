@@ -9,11 +9,15 @@ from ..services import indexing_service, storage_service
 
 logger = logging.getLogger(__name__)
 
-collection_router = APIRouter(prefix="/api/collections/{collection_id}/index", tags=["indexing"])
+collection_router = APIRouter(
+    prefix="/api/collections/{collection_id}/index", tags=["indexing"]
+)
 job_router = APIRouter(prefix="/api/index-jobs", tags=["indexing"])
 
 
-@collection_router.post("", response_model=IndexStatusResponse, status_code=status.HTTP_202_ACCEPTED)
+@collection_router.post(
+    "", response_model=IndexStatusResponse, status_code=status.HTTP_202_ACCEPTED
+)
 async def start_indexing(collection_id: str):
     """Start indexing a collection."""
     try:
@@ -37,7 +41,9 @@ async def start_indexing(collection_id: str):
         raise
     except Exception as exc:
         logger.exception("Error starting indexing")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
 
 
 @collection_router.get("", response_model=IndexStatusResponse)
@@ -55,7 +61,9 @@ async def get_index_status(collection_id: str):
         raise
     except Exception as exc:
         logger.exception("Error getting index status")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
 
 
 @job_router.get("/{job_id}", response_model=IndexJobResponse)
@@ -73,4 +81,6 @@ async def get_job_status(job_id: str):
         raise
     except Exception as exc:
         logger.exception("Error getting indexing job status")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )

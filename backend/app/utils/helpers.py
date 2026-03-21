@@ -5,17 +5,16 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Optional, Tuple, cast
+from typing import cast
 
 import pandas as pd
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.indexes import SearchIndexClient
+
 from graphrag.config.enums import VectorStoreType
 from graphrag.config.load_config import load_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
-from ..config import settings
-from ..repositories import get_control_plane_repository, get_serving_repository
 from ..azure_runtime import (
     blob_account_url,
     cosmos_account_url,
@@ -25,6 +24,8 @@ from ..azure_runtime import (
     resolve_cosmos_connection_string,
     resolve_storage_connection_string,
 )
+from ..config import settings
+from ..repositories import get_control_plane_repository, get_serving_repository
 
 logger = logging.getLogger(__name__)
 
@@ -344,7 +345,7 @@ def load_graphrag_config(
         _ensure_blob_container(collection_id)
         container_name = _collection_container(collection_id)
         cli_overrides = {
-            key: cast(object, value)
+            key: cast("object", value)
             for key, value in _blob_storage_cli_overrides(
                 conn_str, container_name
             ).items()
@@ -385,8 +386,8 @@ def load_graphrag_config(
 
 
 def validate_collection_indexed(
-    collection_id: str, method: Optional[str] = None
-) -> Tuple[bool, Optional[str]]:
+    collection_id: str, method: str | None = None
+) -> tuple[bool, str | None]:
     """Check if a collection has been successfully indexed."""
     control_plane = get_control_plane_repository()
     serving_repo = get_serving_repository()
@@ -454,7 +455,7 @@ def validate_collection_indexed(
     return True, None
 
 
-def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
+def get_search_data_paths(collection_id: str, method: str) -> dict[str, Path]:
     """Get logical parquet paths for a search method."""
     use_blob = _blob_client() is not None
 
@@ -509,7 +510,7 @@ def get_search_data_paths(collection_id: str, method: str) -> Dict[str, Path]:
     return paths
 
 
-def get_collection_info(collection_id: str) -> Optional[Dict]:
+def get_collection_info(collection_id: str) -> dict | None:
     """Deprecated helper retained for compatibility."""
     is_indexed, _ = validate_collection_indexed(collection_id)
     return {

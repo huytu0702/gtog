@@ -1,9 +1,12 @@
 """Application configuration using Pydantic Settings."""
 
+import logging
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_config_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -56,7 +59,7 @@ class Settings(BaseSettings):
     azure_cosmos_retry_connect: int = 3
     azure_cosmos_retry_read: int = 3
     azure_cosmos_retry_status: int = 9
-    azure_cosmos_retry_on_status_codes: str = "429,503"
+    azure_cosmos_retry_on_status_codes: str = "429,503,408"
     azure_cosmos_database_name: str = "gtog-control"
     azure_cosmos_collections_container: str = "collections"
     azure_cosmos_documents_container: str = "documents"
@@ -109,6 +112,46 @@ class Settings(BaseSettings):
     require_edge_auth: bool = False
     rate_limit_enabled: bool = True
     rate_limit_requests_per_minute: int = 120
+    rate_limiter_backend: str = Field(
+        default="memory",
+        description="Rate limiter backend: 'memory' (process-local) or 'redis' (distributed).",
+    )
+
+    # LRU cache tunables
+    cache_ttl_seconds: int = Field(
+        default=1800,
+        description="TTL for LRU cache entries in seconds.",
+    )
+    cache_max_size: int = Field(
+        default=50,
+        description="Maximum number of LRU cache entries.",
+    )
+
+    @model_validator(mode="after")
+    def _warn_missing_recommended_settings(self) -> "Settings":
+        """Log warnings for any missing recommended production settings."""
+        if not self.azure_cosmos_endpoint and not self.azure_cosmos_connection_string:
+            _config_logger.warning(
+                "AZURE_COSMOS_ENDPOINT (or AZURE_COSMOS_CONNECTION_STRING) is not set. "
+                "Cosmos DB features will be unavailable."
+            )
+        if not self.azure_storage_connection_string and not self.azure_storage_account_name:
+            _config_logger.warning(
+                "AZURE_STORAGE_CONNECTION_STRING (or AZURE_STORAGE_ACCOUNT_NAME) is not set. "
+                "Azure Blob Storage will be unavailable; falling back to local filesystem."
+            )
+        if not self.edge_origin_secret and self.require_edge_auth:
+            _config_logger.warning(
+                "EDGE_ORIGIN_SECRET is not set but REQUIRE_EDGE_AUTH=true. "
+                "The application will fail to start."
+            )
+        if self.rate_limiter_backend == "memory":
+            _config_logger.warning(
+                "RATE_LIMITER_BACKEND=memory (default). "
+                "Rate limiting is process-local and will NOT be enforced across multiple "
+                "container instances. Set RATE_LIMITER_BACKEND=redis for distributed limiting."
+            )
+        return self
 
     @property
     def collections_dir(self) -> Path:

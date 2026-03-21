@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,7 +21,7 @@ class CollectionCreate(BaseModel):
         pattern="^[a-zA-Z0-9_-]+$",
         description="Collection name (letters, numbers, underscores, hyphens only)",
     )
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
 
 
 class CollectionResponse(BaseModel):
@@ -29,7 +29,7 @@ class CollectionResponse(BaseModel):
 
     id: str
     name: str
-    description: Optional[str]
+    description: str | None
     created_at: datetime
     document_count: int = 0
     indexed: bool = False
@@ -38,7 +38,7 @@ class CollectionResponse(BaseModel):
 class CollectionList(BaseModel):
     """Response model for list of collections."""
 
-    collections: List[CollectionResponse]
+    collections: list[CollectionResponse]
     total: int
 
 
@@ -54,7 +54,7 @@ class DocumentResponse(BaseModel):
 class DocumentList(BaseModel):
     """Response model for list of documents."""
 
-    documents: List[DocumentResponse]
+    documents: list[DocumentResponse]
     total: int
 
 
@@ -72,15 +72,15 @@ class IndexStatusResponse(BaseModel):
     job_id: str
     status: IndexStatus
     progress: float = Field(0.0, ge=0.0, le=100.0)
-    message: Optional[str] = None
+    message: str | None = None
     attempt: int = Field(0, ge=0)
     max_attempts: int = Field(0, ge=0)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    retry_at: Optional[datetime] = None
-    lease_owner_id: Optional[str] = None
-    heartbeat_at: Optional[datetime] = None
-    error: Optional[str] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    retry_at: datetime | None = None
+    lease_owner_id: str | None = None
+    heartbeat_at: datetime | None = None
+    error: str | None = None
 
 
 class IndexJobResponse(BaseModel):
@@ -92,17 +92,17 @@ class IndexJobResponse(BaseModel):
     attempt: int = Field(0, ge=0)
     max_attempts: int = Field(0, ge=0)
     target_version: str
-    requested_at: Optional[datetime] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    retry_at: Optional[datetime] = None
-    lease_owner_id: Optional[str] = None
-    lease_acquired_at: Optional[datetime] = None
-    lease_expires_at: Optional[datetime] = None
-    heartbeat_at: Optional[datetime] = None
+    requested_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    retry_at: datetime | None = None
+    lease_owner_id: str | None = None
+    lease_acquired_at: datetime | None = None
+    lease_expires_at: datetime | None = None
+    heartbeat_at: datetime | None = None
     progress: float = Field(0.0, ge=0.0, le=100.0)
-    message: Optional[str] = None
-    error: Optional[str] = None
+    message: str | None = None
+    error: str | None = None
 
 
 # Search Models
@@ -126,7 +126,7 @@ class LocalSearchRequest(SearchRequest):
 class GlobalSearchRequest(SearchRequest):
     """Request model for global search."""
 
-    community_level: Optional[int] = Field(None, ge=0, le=10)
+    community_level: int | None = Field(None, ge=0, le=10)
     dynamic_community_selection: bool = False
     response_type: str = Field(
         "Multiple Paragraphs",
@@ -148,17 +148,22 @@ class ToGSearchRequest(SearchRequest):
     """Request model for ToG search."""
 
     # ToG-specific parameters can be added here
-    max_depth: Optional[int] = None
-    beam_width: Optional[int] = None
-    show_exploration_paths: Optional[bool] = False
+    max_depth: int | None = None
+    beam_width: int | None = None
+    show_exploration_paths: bool | None = False
 
 
 class SearchResponse(BaseModel):
-    """Response model for search results."""
+    """Response model for search results.
+
+    ``response`` is typed broadly because the graphrag API may return a plain
+    string, a structured dict, or a list depending on the search method and
+    configuration.  Serialization to JSON is handled by Pydantic automatically.
+    """
 
     query: str
-    response: str
-    context_data: Optional[Dict[str, Any]] = None
+    response: str | dict[str, Any] | list[dict[str, Any]] | list[Any]
+    context_data: dict[str, Any] | None = None
     method: SearchMethod
 
 
@@ -167,7 +172,9 @@ class ConversationTurn(BaseModel):
 
     role: Literal["user", "assistant"]
     content: str = Field(..., min_length=1, max_length=4000)
-    rewritten_query: str | None = Field(default=None, max_length=4000)  # user turns only
+    rewritten_query: str | None = Field(
+        default=None, max_length=4000
+    )  # user turns only
     method_used: str | None = None  # user turns only
 
 
@@ -208,7 +215,7 @@ class AgentSearchResponse(BaseModel):
     method_used: str
     router_reasoning: str
     rewritten_query: str | None = None
-    response: str
+    response: str | dict[str, Any] | list[dict[str, Any]] | list[Any]
     sources: list = Field(default_factory=list)
     context_data: dict | None = None
     session_id: str | None = None

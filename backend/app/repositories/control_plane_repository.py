@@ -43,7 +43,12 @@ TERMINAL_INDEX_JOB_STATUSES = (
 
 _ALLOWED_JOB_TRANSITIONS: dict[str, set[str]] = {
     INDEX_JOB_QUEUED: {INDEX_JOB_RUNNING, INDEX_JOB_FAILED, INDEX_JOB_CANCELLED},
-    INDEX_JOB_RUNNING: {INDEX_JOB_RETRYING, INDEX_JOB_COMPLETED, INDEX_JOB_FAILED, INDEX_JOB_CANCELLED},
+    INDEX_JOB_RUNNING: {
+        INDEX_JOB_RETRYING,
+        INDEX_JOB_COMPLETED,
+        INDEX_JOB_FAILED,
+        INDEX_JOB_CANCELLED,
+    },
     INDEX_JOB_RETRYING: {INDEX_JOB_RUNNING, INDEX_JOB_FAILED, INDEX_JOB_CANCELLED},
     INDEX_JOB_FAILED: set(),
     INDEX_JOB_COMPLETED: set(),
@@ -60,7 +65,11 @@ def _utcnow_iso() -> str:
 
 
 def _future_iso(*, seconds: int) -> str:
-    return (_utcnow() + timedelta(seconds=max(1, seconds))).replace(tzinfo=None).isoformat()
+    return (
+        (_utcnow() + timedelta(seconds=max(1, seconds)))
+        .replace(tzinfo=None)
+        .isoformat()
+    )
 
 
 def _document_item_id(collection_id: str, document_name: str) -> str:
@@ -74,7 +83,13 @@ def _new_serving_version() -> str:
 
 
 class CosmosControlPlaneRepository:
-    """Repository for control-plane entities in Cosmos DB."""
+    """Repository for control-plane entities in Cosmos DB.
+
+    The CosmosClient is created ONCE at ``__init__`` time (via the
+    ``get_control_plane_repository()`` singleton factory).  All SDK calls are
+    synchronous — callers that operate in async context must wrap them with
+    ``asyncio.to_thread()`` to avoid blocking the event loop.
+    """
 
     def __init__(
         self,
@@ -93,7 +108,9 @@ class CosmosControlPlaneRepository:
     ) -> None:
         kwargs = client_kwargs or {}
         if connection_string:
-            self._client = CosmosClient.from_connection_string(connection_string, **kwargs)
+            self._client = CosmosClient.from_connection_string(
+                connection_string, **kwargs
+            )
         elif endpoint and key:
             self._client = CosmosClient(url=endpoint, credential=key, **kwargs)
         elif endpoint and credential is not None:
@@ -130,7 +147,9 @@ class CosmosControlPlaneRepository:
         if etag:
             kwargs["etag"] = etag
             kwargs["match_condition"] = MatchConditions.IfNotModified
-        return self._container("indexing_jobs").replace_item(item=job["id"], body=job, **kwargs)
+        return self._container("indexing_jobs").replace_item(
+            item=job["id"], body=job, **kwargs
+        )
 
     @staticmethod
     def _clear_lease_fields(job: dict[str, Any]) -> None:
@@ -139,7 +158,9 @@ class CosmosControlPlaneRepository:
         job["leaseExpiresAt"] = None
         job["heartbeatAt"] = None
 
-    def create_collection(self, collection_id: str, description: str | None = None) -> dict[str, Any]:
+    def create_collection(
+        self, collection_id: str, description: str | None = None
+    ) -> dict[str, Any]:
         if self.get_collection(collection_id) is not None:
             raise ValueError(f"Collection '{collection_id}' already exists")
 
@@ -180,7 +201,12 @@ class CosmosControlPlaneRepository:
         if collection is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        for logical_name in ("documents", "indexing_jobs", "job_events", "artifact_manifest"):
+        for logical_name in (
+            "documents",
+            "indexing_jobs",
+            "job_events",
+            "artifact_manifest",
+        ):
             container = self._container(logical_name)
             rows = list(
                 container.query_items(
@@ -192,7 +218,9 @@ class CosmosControlPlaneRepository:
             for row in rows:
                 container.delete_item(item=row["id"], partition_key=collection_id)
 
-        self._container("collections").delete_item(item=collection_id, partition_key=collection_id)
+        self._container("collections").delete_item(
+            item=collection_id, partition_key=collection_id
+        )
         return True
 
     def get_active_version(self, collection_id: str) -> str | None:
@@ -227,7 +255,9 @@ class CosmosControlPlaneRepository:
     ) -> dict[str, Any]:
         now = _utcnow_iso()
         item_id = _document_item_id(collection_id, document_name)
-        existing = self.get_document(collection_id=collection_id, document_name=document_name)
+        existing = self.get_document(
+            collection_id=collection_id, document_name=document_name
+        )
         uploaded_at = existing.get("uploadedAt", now) if existing else now
         item = {
             "id": item_id,
@@ -244,7 +274,9 @@ class CosmosControlPlaneRepository:
         self._container("documents").upsert_item(body=item)
         return item
 
-    def get_document(self, *, collection_id: str, document_name: str) -> dict[str, Any] | None:
+    def get_document(
+        self, *, collection_id: str, document_name: str
+    ) -> dict[str, Any] | None:
         item_id = _document_item_id(collection_id, document_name)
         try:
             return self._container("documents").read_item(
@@ -265,17 +297,23 @@ class CosmosControlPlaneRepository:
         )
 
     def delete_document(self, *, collection_id: str, document_name: str) -> bool:
-        existing = self.get_document(collection_id=collection_id, document_name=document_name)
+        existing = self.get_document(
+            collection_id=collection_id, document_name=document_name
+        )
         if existing is None:
             raise ValueError(f"Document '{document_name}' not found")
-        self._container("documents").delete_item(item=existing["id"], partition_key=collection_id)
+        self._container("documents").delete_item(
+            item=existing["id"], partition_key=collection_id
+        )
         return True
 
     def count_documents(self, collection_id: str) -> int:
         docs = self.list_documents(collection_id)
         return len(docs)
 
-    def enqueue_indexing_job(self, collection_id: str, *, max_attempts: int = 3) -> tuple[dict[str, Any], bool]:
+    def enqueue_indexing_job(
+        self, collection_id: str, *, max_attempts: int = 3
+    ) -> tuple[dict[str, Any], bool]:
         jobs_container = self._container("indexing_jobs")
         active_jobs = list(
             jobs_container.query_items(
@@ -287,7 +325,10 @@ class CosmosControlPlaneRepository:
                 ),
                 parameters=[
                     {"name": "@collectionId", "value": collection_id},
-                    {"name": "@activeStatuses", "value": list(ACTIVE_INDEX_JOB_STATUSES)},
+                    {
+                        "name": "@activeStatuses",
+                        "value": list(ACTIVE_INDEX_JOB_STATUSES),
+                    },
                 ],
                 partition_key=collection_id,
             )
@@ -328,9 +369,13 @@ class CosmosControlPlaneRepository:
         )
         return item, True
 
-    def get_indexing_job(self, collection_id: str, job_id: str) -> dict[str, Any] | None:
+    def get_indexing_job(
+        self, collection_id: str, job_id: str
+    ) -> dict[str, Any] | None:
         try:
-            return self._container("indexing_jobs").read_item(item=job_id, partition_key=collection_id)
+            return self._container("indexing_jobs").read_item(
+                item=job_id, partition_key=collection_id
+            )
         except CosmosResourceNotFoundError:
             return None
 
@@ -367,12 +412,19 @@ class CosmosControlPlaneRepository:
                     "WHERE ARRAY_CONTAINS(@activeStatuses, c.status) "
                     "ORDER BY c.requestedAt DESC"
                 ),
-                parameters=[{"name": "@activeStatuses", "value": list(ACTIVE_INDEX_JOB_STATUSES)}],
+                parameters=[
+                    {
+                        "name": "@activeStatuses",
+                        "value": list(ACTIVE_INDEX_JOB_STATUSES),
+                    }
+                ],
                 enable_cross_partition_query=True,
             )
         )
 
-    def list_recoverable_indexing_jobs(self, *, now_iso: str | None = None) -> list[dict[str, Any]]:
+    def list_recoverable_indexing_jobs(
+        self, *, now_iso: str | None = None
+    ) -> list[dict[str, Any]]:
         """List jobs that should be re-dispatched by the worker."""
         current_time = now_iso or _utcnow_iso()
         return list(
@@ -396,7 +448,10 @@ class CosmosControlPlaneRepository:
                     {"name": "@queued", "value": INDEX_JOB_QUEUED},
                     {"name": "@retrying", "value": INDEX_JOB_RETRYING},
                     {"name": "@now", "value": current_time},
-                    {"name": "@leaseStatuses", "value": [INDEX_JOB_RUNNING, INDEX_JOB_RETRYING]},
+                    {
+                        "name": "@leaseStatuses",
+                        "value": [INDEX_JOB_RUNNING, INDEX_JOB_RETRYING],
+                    },
                 ],
                 enable_cross_partition_query=True,
             )
@@ -502,7 +557,10 @@ class CosmosControlPlaneRepository:
         job = jobs_container.read_item(item=job_id, partition_key=collection_id)
         from_status = str(job["status"])
 
-        if expected_lease_owner is not None and str(job.get("leaseOwnerId") or "") != expected_lease_owner:
+        if (
+            expected_lease_owner is not None
+            and str(job.get("leaseOwnerId") or "") != expected_lease_owner
+        ):
             raise ValueError(
                 f"Job {job_id} is not owned by lease holder '{expected_lease_owner}'"
             )

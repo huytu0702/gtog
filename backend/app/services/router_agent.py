@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 
 SearchMethodType = Literal["local", "global", "tog", "drift", "web"]
 
-RECENT_TURNS_IN_PROMPT = 3   # user turns to include in prompt (after summary)
+RECENT_TURNS_IN_PROMPT = 3  # user turns to include in prompt (after summary)
+_LLM_MAX_TOKENS = 500
+_LLM_TEMPERATURE = 0.1
+_LLM_MAX_RETRIES = 3
+_LLM_RETRY_BASE_DELAY = 1.0
 
 
 @dataclass
@@ -66,9 +70,7 @@ Collection: {collection_context}
         sections = []
 
         if conversation_summary:
-            sections.append(
-                f"Past conversation summary:\n{conversation_summary}"
-            )
+            sections.append(f"Past conversation summary:\n{conversation_summary}")
 
         if conversation_history:
             # Keep last RECENT_TURNS_IN_PROMPT user turns + their assistant pairs
@@ -82,7 +84,11 @@ Collection: {collection_context}
                         break
 
             recent = conversation_history[cutoff:]
-            label = "Recent conversation (most recent last):" if conversation_summary else "Conversation history (most recent last):"
+            label = (
+                "Recent conversation (most recent last):"
+                if conversation_summary
+                else "Conversation history (most recent last):"
+            )
             lines = [label]
 
             for turn in recent:
@@ -95,52 +101,64 @@ Collection: {collection_context}
                             meta += f"  →  method: {turn.method_used}"
                         lines.append(f"[User] {turn.content}{meta}")
                     else:
-                        content = turn.content[:300] + "..." if len(turn.content) > 300 else turn.content
+                        content = (
+                            turn.content[:300] + "..."
+                            if len(turn.content) > 300
+                            else turn.content
+                        )
                         lines.append(f"[Assistant] {content}")
                 except Exception:
-                    logger.warning("Skipping malformed conversation turn")
+                    logger.warning(
+                        "Skipping malformed conversation turn", exc_info=True
+                    )
                     continue
 
             sections.append("\n".join(lines))
 
         return "\n\n".join(sections)
 
-    async def _call_llm(self, prompt: str):
+    async def _call_llm(self, prompt: str) -> object:
         """Call LLM API using litellm with exponential backoff on rate limits."""
-        max_retries = 3
-        base_delay = 1.0
+        max_retries = _LLM_MAX_RETRIES
+        base_delay = _LLM_RETRY_BASE_DELAY
 
         for attempt in range(max_retries + 1):
             try:
                 response = await acompletion(
                     model=settings.default_chat_model,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.1,
-                    max_tokens=500,  # Increased for more complete responses
+                    temperature=_LLM_TEMPERATURE,
+                    max_tokens=_LLM_MAX_TOKENS,  # Increased for more complete responses
                     api_key=settings.google_api_key,
                     response_format={"type": "json_object"},  # Force JSON output
                 )
                 return response
             except RateLimitError as e:
                 if attempt == max_retries:
-                    logger.error(f"Rate limit exceeded after {max_retries} retries: {e}")
+                    logger.error(
+                        "Rate limit exceeded after %s retries: %s", max_retries, e
+                    )
                     raise
 
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 logger.warning(
-                    f"Rate limit hit on router agent (attempt {attempt + 1}/{max_retries + 1}). "
-                    f"Retrying in {delay}s..."
+                    "Rate limit hit on router agent (attempt %d/%d). Retrying in %.1fs...",
+                    attempt + 1,
+                    max_retries + 1,
+                    delay,
                 )
                 await asyncio.sleep(delay)
             except Exception as e:
                 # If response_format not supported, try without it
                 if "response_format" in str(e):
-                    logger.warning("response_format not supported, falling back to standard completion")
+                    logger.warning(
+                        "response_format not supported, falling back to standard completion"
+                    )
                     return await acompletion(
                         model=settings.default_chat_model,
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=0.1,
-                        max_tokens=500,
+                        temperature=_LLM_TEMPERATURE,
+                        max_tokens=_LLM_MAX_TOKENS,
                         api_key=settings.google_api_key,
                     )
                 raise
@@ -161,7 +179,8 @@ Collection: {collection_context}
             conversation_history: Recent conversation turns
             conversation_summary: Compressed summary of earlier turns
 
-        Returns:
+        Returns
+        -------
             RouteDecision with method, confidence, reasoning, and rewritten_query
         """
         history_block = self._format_history_block(
@@ -180,7 +199,7 @@ Collection: {collection_context}
             content = response.choices[0].message.content
 
             # Log the raw response for debugging
-            logger.debug(f"Router LLM raw response: {content}")
+            logger.debug("Router LLM raw response: %s", content)
 
             if not content or not content.strip():
                 logger.warning("Router received empty response from LLM")
@@ -204,7 +223,9 @@ Collection: {collection_context}
 
             method = decision.get("method", "local").lower()
             if method not in ("local", "global", "tog", "drift", "web"):
-                logger.warning(f"Invalid method '{method}' returned, defaulting to 'local'")
+                logger.warning(
+                    "Invalid method '%s' returned, defaulting to 'local'", method
+                )
                 method = "local"
 
             rewritten_query = decision.get("rewritten_query") or query
@@ -217,7 +238,10 @@ Collection: {collection_context}
             )
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning(f"Failed to parse router response. Error: {e}. Content: {content[:200] if 'content' in locals() else 'N/A'}")
+            raw = content[:200] if "content" in dir() else "N/A"
+            logger.warning(
+                "Failed to parse router response. Error: %s. Content: %s", e, raw
+            )
             return RouteDecision(
                 method="local",
                 confidence=0.5,
@@ -225,7 +249,7 @@ Collection: {collection_context}
                 rewritten_query=query,
             )
         except Exception as e:
-            logger.error(f"Router agent error: {e}", exc_info=True)
+            logger.error("Router agent error: %s", e, exc_info=True)
             return RouteDecision(
                 method="local",
                 confidence=0.3,

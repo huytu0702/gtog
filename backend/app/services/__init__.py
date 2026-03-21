@@ -1,37 +1,37 @@
 """Services package."""
 
-from .conversation_service import conversation_service, ConversationService
-from .indexing_service import indexing_service, IndexingService
-from .query_service import query_service, QueryService
-from .queue_service import queue_service, QueueService
-from .router_agent import router_agent, RouterAgent, RouteDecision
+from .conversation_service import ConversationService, conversation_service
+from .indexing_service import IndexingService, indexing_service
+from .query_service import QueryService, query_service
+from .queue_service import QueueService, queue_service
+from .router_agent import RouteDecision, RouterAgent, router_agent
 from .serving_materialization_service import (
-    serving_materialization_service,
     ServingMaterializationService,
+    serving_materialization_service,
 )
-from .storage_service import storage_service, StorageService
-from .summarization_service import summarization_service, SummarizationService
-from .web_search import web_search_service, WebSearchResult, WebSearchService
+from .storage_service import StorageService, storage_service
+from .summarization_service import SummarizationService, summarization_service
+from .web_search import WebSearchResult, WebSearchService, web_search_service
 
 __all__ = [
-    "conversation_service",
     "ConversationService",
-    "indexing_service",
     "IndexingService",
-    "query_service",
     "QueryService",
-    "queue_service",
     "QueueService",
-    "router_agent",
-    "RouterAgent",
     "RouteDecision",
-    "serving_materialization_service",
+    "RouterAgent",
     "ServingMaterializationService",
-    "storage_service",
     "StorageService",
-    "summarization_service",
     "SummarizationService",
-    "web_search_service",
     "WebSearchResult",
     "WebSearchService",
+    "conversation_service",
+    "indexing_service",
+    "query_service",
+    "queue_service",
+    "router_agent",
+    "serving_materialization_service",
+    "storage_service",
+    "summarization_service",
+    "web_search_service",
 ]

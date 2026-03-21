@@ -32,7 +32,9 @@ class QueueService:
                 "or enable managed identity with an accessible queue endpoint."
             )
 
-        queue_client = queue_service_client.get_queue_client(settings.azure_storage_queue_name)
+        queue_client = queue_service_client.get_queue_client(
+            settings.azure_storage_queue_name
+        )
         self._queue_service_client = queue_service_client
         self._queue_client = queue_client
         return queue_client

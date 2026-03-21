@@ -2,6 +2,7 @@
 
 import json
 import logging
+
 from fastapi import APIRouter, HTTPException, Query, status
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
@@ -14,48 +15,59 @@ from ..errors import (
     ServingContextUnavailableError,
 )
 from ..models import (
-    SearchResponse,
-    GlobalSearchRequest,
-    LocalSearchRequest,
-    ToGSearchRequest,
-    DriftSearchRequest,
     AgentSearchRequest,
     AgentSearchResponse,
-    WebSearchRequest,
+    DriftSearchRequest,
+    GlobalSearchRequest,
+    LocalSearchRequest,
+    SearchResponse,
     SummarizeRequest,
     SummarizeResponse,
+    ToGSearchRequest,
+    WebSearchRequest,
 )
 from ..services import (
     conversation_service,
     query_service,
     router_agent,
-    web_search_service,
     summarization_service,
+    web_search_service,
 )
 
 logger = logging.getLogger(__name__)
 
 SSE_HEARTBEAT_INTERVAL_SECONDS = 25
+_SSE_CHUNK_SIZE = 50  # characters per streamed content chunk
 
 router = APIRouter(prefix="/api/collections/{collection_id}/search", tags=["search"])
 
 
-def _map_search_error(err: Exception) -> HTTPException:
-    if isinstance(err, ServingContextUnavailableError):
-        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err))
-    if isinstance(err, ServingContextNotReadyError):
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
-    if isinstance(err, ConversationStoreUnavailableError):
-        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err))
-    if isinstance(err, ConversationSessionNotFoundError):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
-    if isinstance(err, ConversationSessionMismatchError):
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
-    if isinstance(err, FileNotFoundError):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+def _raise_for_unknown(err: Exception) -> None:
+    """Propagate domain errors or convert unknown exceptions to HTTPException.
+
+    Domain-specific errors (ServingContext*, Conversation*, FileNotFoundError)
+    are handled by the global exception handlers registered in main.py; they
+    are re-raised as-is so FastAPI's handler chain picks them up.
+
+    ``ValueError`` → HTTP 400.  All other unknown exceptions → HTTP 500.
+    """
+    _DOMAIN_ERRORS = (
+        ServingContextUnavailableError,
+        ServingContextNotReadyError,
+        ConversationStoreUnavailableError,
+        ConversationSessionNotFoundError,
+        ConversationSessionMismatchError,
+        FileNotFoundError,
+    )
+    if isinstance(err, _DOMAIN_ERRORS):
+        raise err
     if isinstance(err, ValueError):
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)
+        ) from err
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err)
+    ) from err
 
 
 @router.post("/global", response_model=SearchResponse)
@@ -69,11 +81,11 @@ async def global_search(collection_id: str, request: GlobalSearchRequest):
             dynamic_community_selection=request.dynamic_community_selection,
             response_type=request.response_type,
         )
-        logger.info(f"Global search completed for collection {collection_id}")
+        logger.info("Global search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing global search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/local", response_model=SearchResponse)
@@ -86,11 +98,11 @@ async def local_search(collection_id: str, request: LocalSearchRequest):
             community_level=request.community_level,
             response_type=request.response_type,
         )
-        logger.info(f"Local search completed for collection {collection_id}")
+        logger.info("Local search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing local search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/tog", response_model=SearchResponse)
@@ -101,11 +113,11 @@ async def tog_search(collection_id: str, request: ToGSearchRequest):
             collection_id=collection_id,
             query=request.query,
         )
-        logger.info(f"ToG search completed for collection {collection_id}")
+        logger.info("ToG search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing ToG search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.get("/tog/debug")
@@ -133,11 +145,11 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
             community_level=request.community_level,
             response_type=request.response_type,
         )
-        logger.info(f"DRIFT search completed for collection {collection_id}")
+        logger.info("DRIFT search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing DRIFT search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/agent/summarize", response_model=SummarizeResponse)
@@ -153,11 +165,13 @@ async def summarize_conversation(collection_id: str, request: SummarizeRequest):
             conversation_history=request.conversation_history,
             existing_summary=request.existing_summary,
         )
-        trimmed = summarization_service.get_trimmed_history(request.conversation_history)
+        trimmed = summarization_service.get_trimmed_history(
+            request.conversation_history
+        )
         return SummarizeResponse(summary=summary, trimmed_history=trimmed)
     except Exception as e:
         logger.exception("Error summarizing conversation")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/agent", response_model=AgentSearchResponse)
@@ -175,9 +189,11 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
         session_id = request.session_id
 
         if session_id:
-            conversation_summary, session_history = conversation_service.get_prompt_context(
-                collection_id,
-                session_id,
+            conversation_summary, session_history = (
+                conversation_service.get_prompt_context(
+                    collection_id,
+                    session_id,
+                )
             )
             conversation_history = session_history
         elif not settings.conversation_legacy_payload_enabled:
@@ -192,9 +208,10 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             conversation_summary=conversation_summary,
         )
         logger.info(
-            f"Router decision: {route_decision.method} "
-            f"(confidence: {route_decision.confidence}) "
-            f"rewritten: '{route_decision.rewritten_query}'"
+            "Router decision: %s (confidence: %.2f) rewritten: '%s'",
+            route_decision.method,
+            route_decision.confidence,
+            route_decision.rewritten_query,
         )
 
         search_query = route_decision.rewritten_query or request.query
@@ -260,7 +277,7 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
 
     except Exception as e:
         logger.exception("Error performing agent search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/web")
@@ -282,7 +299,7 @@ async def web_search(collection_id: str, request: WebSearchRequest):
 
     except Exception as e:
         logger.exception("Error performing web search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 def _build_heartbeat_event() -> ServerSentEvent:
@@ -293,8 +310,11 @@ def _build_heartbeat_event() -> ServerSentEvent:
     )
 
 
-def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest) -> EventSourceResponse:
+def _build_agent_stream_response(
+    collection_id: str, request: AgentSearchRequest
+) -> EventSourceResponse:
     """Build an SSE response for an agent-routed search stream."""
+
     async def event_generator():
         try:
             # Send routing status
@@ -313,9 +333,11 @@ def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest
             session_id = request.session_id
 
             if session_id:
-                conversation_summary, session_history = conversation_service.get_prompt_context(
-                    collection_id,
-                    session_id,
+                conversation_summary, session_history = (
+                    conversation_service.get_prompt_context(
+                        collection_id,
+                        session_id,
+                    )
                 )
                 conversation_history = session_history
             elif not settings.conversation_legacy_payload_enabled:
@@ -363,9 +385,7 @@ def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest
                         collection_id, search_query
                     )
                 elif route_decision.method == "tog":
-                    result = await query_service.tog_search(
-                        collection_id, search_query
-                    )
+                    result = await query_service.tog_search(collection_id, search_query)
                 elif route_decision.method == "drift":
                     result = await query_service.drift_search(
                         collection_id, search_query
@@ -376,13 +396,20 @@ def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest
                     )
                 assistant_response = result.response
 
+                # Coerce response to str for streaming chunks (response may be
+                # str | dict | list depending on the search method).
+                response_str = (
+                    result.response
+                    if isinstance(result.response, str)
+                    else json.dumps(result.response)
+                )
+
                 # Stream the response in chunks
-                chunk_size = 50
-                for i in range(0, len(result.response), chunk_size):
+                for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
                     yield {
                         "event": "content",
                         "data": json.dumps({
-                            "delta": result.response[i : i + chunk_size]
+                            "delta": response_str[i : i + _SSE_CHUNK_SIZE]
                         }),
                     }
                 sources = []
@@ -413,7 +440,9 @@ def _build_agent_stream_response(collection_id: str, request: AgentSearchRequest
             logger.exception("Error in streaming agent search")
             yield {
                 "event": "error",
-                "data": json.dumps({"message": "Internal error while processing stream."}),
+                "data": json.dumps({
+                    "message": "Internal error while processing stream."
+                }),
             }
 
     return EventSourceResponse(

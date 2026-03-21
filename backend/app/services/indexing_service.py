@@ -103,9 +103,10 @@ class IndexingService:
         progress = float(job.get("progress") or 0.0)
         message = str(job.get("message") or "Indexing job queued")
 
-        if response_status == IndexStatus.COMPLETED:
-            progress = 100.0
-        elif response_status == IndexStatus.FAILED:
+        if (
+            response_status == IndexStatus.COMPLETED
+            or response_status == IndexStatus.FAILED
+        ):
             progress = 100.0
         elif response_status == IndexStatus.CANCELLED:
             progress = progress or 100.0

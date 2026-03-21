@@ -10,19 +10,17 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
-from typing import Deque
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from .azure_runtime import (
+    _key_vault_client,
     bootstrap_runtime_secrets,
     is_cosmos_configured,
-    _key_vault_client,
 )
 from .config import settings
 from .models import HealthResponse
@@ -36,7 +34,7 @@ from .routers import (
     search_router,
 )
 from .services import queue_service
-from .utils import validate_graphrag_settings_compatibility
+from .utils import validate_graphrag_settings_compatibility, register_exception_handlers
 from .utils.helpers import _blob_client, _search_index_client
 
 # Configure logging
@@ -55,12 +53,12 @@ class InMemoryRateLimiter:
 
     def __init__(self, requests_per_minute: int):
         self._requests_per_minute = max(1, requests_per_minute)
-        self._events: dict[str, Deque[float]] = defaultdict(deque)
+        self._events: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
         self._next_stale_key_prune_at = 0.0
 
     @staticmethod
-    def _prune_expired_events(events: Deque[float], window_start: float) -> None:
+    def _prune_expired_events(events: deque[float], window_start: float) -> None:
         while events and events[0] < window_start:
             events.popleft()
 
@@ -289,6 +287,21 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(auth_configuration_error)
     app.state.auth_config_error = auth_configuration_error
 
+    # Startup summary: which features are active
+    logger.info(
+        "Active features: "
+        "cosmos=%s | blob=%s | rate_limit=%s (backend=%s, rpm=%d) | "
+        "edge_auth=%s | query_mode=%s | tog_debug=%s",
+        is_cosmos_configured(),
+        bool(settings.azure_storage_connection_string or settings.azure_storage_account_name),
+        settings.rate_limit_enabled,
+        settings.rate_limiter_backend,
+        settings.rate_limit_requests_per_minute,
+        settings.require_edge_auth,
+        settings.query_context_mode,
+        settings.enable_tog_debug_endpoint,
+    )
+
     yield
 
     logger.info("Shutting down GraphRAG FastAPI backend...")
@@ -300,6 +313,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+register_exception_handlers(app)
 
 allowed_origins = _parse_cors_origins(settings.cors_origins)
 logger.info("Configured CORS allowlist: %s", ", ".join(allowed_origins))
@@ -313,6 +328,10 @@ app.add_middleware(
 )
 
 _rate_limiter = InMemoryRateLimiter(settings.rate_limit_requests_per_minute)
+logger.warning(
+    "InMemoryRateLimiter is process-local and will NOT enforce limits across "
+    "multiple container instances. Set RATE_LIMITER_BACKEND=redis for distributed limiting."
+)
 
 
 @app.middleware("http")
@@ -333,7 +352,10 @@ async def security_and_logging_middleware(request: Request, call_next):
 
     try:
         if path.startswith("/api/") and not is_cors_preflight:
-            auth_configuration_error = getattr(request.app.state, "auth_config_error", None) or _auth_configuration_error()
+            auth_configuration_error = (
+                getattr(request.app.state, "auth_config_error", None)
+                or _auth_configuration_error()
+            )
             if auth_configuration_error:
                 response = JSONResponse(
                     status_code=503,
@@ -342,9 +364,9 @@ async def security_and_logging_middleware(request: Request, call_next):
             elif settings.require_edge_auth:
                 expected_secret = settings.edge_origin_secret.strip()
                 provided_secret = request.headers.get("x-edge-secret", "").strip()
-                if hmac.compare_digest(provided_secret, expected_secret):
-                    client_ip = _trusted_client_ip(request)
-                elif _is_trusted_tunnel_proxy(request):
+                if hmac.compare_digest(
+                    provided_secret, expected_secret
+                ) or _is_trusted_tunnel_proxy(request):
                     client_ip = _trusted_client_ip(request)
                 else:
                     response = JSONResponse(

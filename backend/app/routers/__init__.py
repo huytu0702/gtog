@@ -11,7 +11,7 @@ __all__ = [
     "collections_router",
     "conversation_router",
     "documents_router",
-    "indexing_router",
     "indexing_jobs_router",
+    "indexing_router",
     "search_router",
 ]

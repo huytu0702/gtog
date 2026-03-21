@@ -12,13 +12,13 @@ import pandas as pd
 from azure.cosmos import CosmosClient
 from azure.cosmos.partition_key import PartitionKey
 
-from ..config import settings
 from ..azure_runtime import (
     bootstrap_runtime_secrets,
     cosmos_client_kwargs,
     cosmos_endpoint_credential,
     is_cosmos_configured,
 )
+from ..config import settings
 
 
 def _utcnow_iso() -> str:
@@ -87,7 +87,13 @@ def _source_id_from_record(record: dict[str, Any], index: int) -> str:
 
 
 class CosmosServingRepository:
-    """Repository for entities/relationships/text-units serving context."""
+    """Repository for entities/relationships/text-units serving context.
+
+    The CosmosClient is created ONCE at ``__init__`` time (via the
+    ``get_serving_repository()`` singleton factory).  All SDK calls are
+    synchronous — callers that operate in async context must wrap them with
+    ``asyncio.to_thread()`` to avoid blocking the event loop.
+    """
 
     def __init__(
         self,
@@ -107,9 +113,13 @@ class CosmosServingRepository:
     ) -> None:
         kwargs = client_kwargs or {}
         if connection_string:
-            self._client = CosmosClient.from_connection_string(connection_string, **kwargs)
+            self._client = CosmosClient.from_connection_string(
+                connection_string, **kwargs
+            )
         elif endpoint and (key or credential):
-            self._client = CosmosClient(url=endpoint, credential=key or credential, **kwargs)
+            self._client = CosmosClient(
+                url=endpoint, credential=key or credential, **kwargs
+            )
         else:
             raise ValueError(
                 "Cosmos DB is not configured. Set AZURE_COSMOS_CONNECTION_STRING "
@@ -138,7 +148,9 @@ class CosmosServingRepository:
             raise ValueError(f"Unsupported serving dataset: {dataset}")
         return self._containers[self._container_names[dataset]]
 
-    def _delete_dataset_version(self, *, collection_id: str, version: str, dataset: str) -> None:
+    def _delete_dataset_version(
+        self, *, collection_id: str, version: str, dataset: str
+    ) -> None:
         container = self._container(dataset)
         rows = list(
             container.query_items(
@@ -158,7 +170,9 @@ class CosmosServingRepository:
     ) -> int:
         """Replace one dataset for a version with the dataframe rows."""
         container = self._container(dataset)
-        self._delete_dataset_version(collection_id=collection_id, version=version, dataset=dataset)
+        self._delete_dataset_version(
+            collection_id=collection_id, version=version, dataset=dataset
+        )
 
         now = _utcnow_iso()
         row_count = 0
@@ -187,7 +201,9 @@ class CosmosServingRepository:
             row_count += 1
         return row_count
 
-    def load_dataframe(self, *, collection_id: str, version: str, dataset: str) -> pd.DataFrame:
+    def load_dataframe(
+        self, *, collection_id: str, version: str, dataset: str
+    ) -> pd.DataFrame:
         """Load one serving dataset for collection/version as a dataframe."""
         container = self._container(dataset)
         rows = list(
