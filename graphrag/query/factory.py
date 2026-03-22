@@ -385,6 +385,7 @@ def get_tog_search_engine(
             temperature=config.tog_search.temperature_exploration,
             relation_scoring_prompt=relation_scoring_prompt,
             entity_scoring_prompt=entity_scoring_prompt,
+            tokenizer=tokenizer,
         )
     elif config.tog_search.prune_strategy == "semantic":
         pruning_strategy = SemanticPruning(
@@ -404,6 +405,7 @@ def get_tog_search_engine(
         model=chat_model,
         temperature=config.tog_search.temperature_reasoning,
         reasoning_prompt=reasoning_prompt,
+        tokenizer=tokenizer,
     )
 
     return ToGSearch(

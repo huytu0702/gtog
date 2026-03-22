@@ -235,6 +235,25 @@ class ToGSearch:
                 )
                 state.add_node(initial_node)
 
+        # Check depth-0: can starting entities alone answer the query?
+        (
+            should_terminate,
+            answer,
+            early_term_metrics,
+        ) = await self.reasoning_module.check_early_termination(
+            query, state.get_current_frontier(), conversation_history_context=history_context
+        )
+        if should_terminate and answer:
+            reasoning_paths = self.reasoning_module.get_reasoning_paths(
+                state.get_current_frontier()
+            )
+            early_context_text = self.reasoning_module._format_paths(
+                state.get_current_frontier()
+            )
+            yield (answer, reasoning_paths, early_term_metrics, early_context_text)
+            return
+        yield ("", [], early_term_metrics, "")
+
         # Exploration loop
         while state.current_depth < state.max_depth:
             # Get current frontier
@@ -266,9 +285,9 @@ class ToGSearch:
                 # Yield pruning metrics
                 yield ("", [], pruning_metrics, "")
 
-                # Keep top entities based on scores
+                # Keep top relations based on scores (capped by beam width)
                 scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
-                top_relations = scored_relations[: self.num_retain_entity]
+                top_relations = scored_relations[: self.width]
 
                 # Build entity candidates for a second-stage prune (closer to original ToG)
                 # so we do not rely on relation scores alone when many candidates exist.
@@ -296,6 +315,11 @@ class ToGSearch:
 
                 if not candidate_data:
                     continue
+
+                # Sample entity candidates if too many (matches original ToG paper semantics)
+                if len(candidate_data) > self.num_retain_entity:
+                    import random
+                    candidate_data = random.sample(candidate_data, self.num_retain_entity)
 
                 entity_candidates = [
                     (target_id, target_name, target_full_desc)
@@ -331,7 +355,8 @@ class ToGSearch:
                     rel_full_desc,
                 ) in enumerate(candidate_data):
                     entity_score = entity_scores[idx] if idx < len(entity_scores) else 5.0
-                    combined_score = rel_score * (max(entity_score, 0.0) / 10.0)
+                    hop_score = rel_score * (max(entity_score, 0.0) / 10.0)
+                    combined_score = node.score * hop_score
                     new_node = ExplorationNode(
                             entity_id=target_id,
                             entity_name=target_name,

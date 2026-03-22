@@ -71,9 +71,11 @@ class LLMPruning(PruningStrategy):
         temperature: float = 0.4,
         relation_scoring_prompt: str | None = None,
         entity_scoring_prompt: str | None = None,
+        tokenizer=None,
     ):
         self.model = model
         self.temperature = temperature
+        self.tokenizer = tokenizer
         
         # Load prompts - if file path is given, read the file content
         self.relation_scoring_prompt = self._load_prompt(
@@ -139,9 +141,13 @@ class LLMPruning(PruningStrategy):
 
         # Update metrics
         metrics.llm_calls = 1
-        # Estimate tokens (rough approximation: 4 chars per token)
-        metrics.prompt_tokens = len(prompt) // 4
-        metrics.output_tokens = len(response) // 4
+        # Count tokens accurately if tokenizer available
+        if self.tokenizer:
+            metrics.prompt_tokens = self.tokenizer.num_tokens(prompt)
+            metrics.output_tokens = self.tokenizer.num_tokens(response)
+        else:
+            metrics.prompt_tokens = len(prompt) // 4
+            metrics.output_tokens = len(response) // 4
 
         # Parse scores
         scores = self._parse_scores(response, len(relations))
@@ -186,9 +192,13 @@ class LLMPruning(PruningStrategy):
 
         # Update metrics
         metrics.llm_calls = 1
-        # Estimate tokens (rough approximation: 4 chars per token)
-        metrics.prompt_tokens = len(prompt) // 4
-        metrics.output_tokens = len(response) // 4
+        # Count tokens accurately if tokenizer available
+        if self.tokenizer:
+            metrics.prompt_tokens = self.tokenizer.num_tokens(prompt)
+            metrics.output_tokens = self.tokenizer.num_tokens(response)
+        else:
+            metrics.prompt_tokens = len(prompt) // 4
+            metrics.output_tokens = len(response) // 4
 
         return self._parse_scores(response, len(entities)), metrics
 

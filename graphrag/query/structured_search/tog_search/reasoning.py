@@ -22,10 +22,12 @@ class ToGReasoning:
         model: ChatModel,
         temperature: float = 0.0,
         reasoning_prompt: str | None = None,
+        tokenizer=None,
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_prompt = reasoning_prompt or TOG_REASONING_PROMPT
+        self.tokenizer = tokenizer
 
     async def generate_answer(
         self,
@@ -88,7 +90,10 @@ Structure your response as:
 3. Key relationships that support your answer
 """
 
-        metrics.prompt_tokens = len(prompt.split()) * 4 // 3
+        if self.tokenizer:
+            metrics.prompt_tokens = self.tokenizer.num_tokens(prompt)
+        else:
+            metrics.prompt_tokens = len(prompt) // 4
 
         answer = ""
         try:
@@ -104,7 +109,10 @@ Structure your response as:
             answer = f"Error generating answer: {str(e)}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
 
         metrics.llm_calls = 1
-        metrics.output_tokens = len(answer.split()) * 4 // 3
+        if self.tokenizer:
+            metrics.output_tokens = self.tokenizer.num_tokens(answer)
+        else:
+            metrics.output_tokens = len(answer) // 4
 
         # Extract reasoning paths for transparency
         reasoning_paths = [self._path_to_string(node) for node in exploration_paths]
@@ -260,7 +268,10 @@ Respond with:
 
 Response:"""
 
-        metrics.prompt_tokens = len(prompt.split()) * 4 // 3
+        if self.tokenizer:
+            metrics.prompt_tokens = self.tokenizer.num_tokens(prompt)
+        else:
+            metrics.prompt_tokens = len(prompt) // 4
 
         response = ""
         async for chunk in self.model.achat_stream(
@@ -271,7 +282,10 @@ Response:"""
             response += chunk
 
         metrics.llm_calls = 1
-        metrics.output_tokens = len(response.split()) * 4 // 3
+        if self.tokenizer:
+            metrics.output_tokens = self.tokenizer.num_tokens(response)
+        else:
+            metrics.output_tokens = len(response) // 4
 
         if response.strip().upper().startswith("YES:"):
             answer = response[4:].strip()
