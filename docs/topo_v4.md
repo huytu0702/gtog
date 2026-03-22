@@ -32,7 +32,6 @@ flowchart TB
     COSMOS[Azure Cosmos DB]
     BLOB[Azure Blob Storage]
     KV[Azure Key Vault]
-    SEARCH[Azure AI Search]
     OBS[Log Analytics and Azure Monitor]
 
     TUNNEL --> CONN
@@ -43,13 +42,11 @@ flowchart TB
     API --> COSMOS
     API --> BLOB
     API --> KV
-    API --> SEARCH
 
     QUEUE --> WORKER
     WORKER --> COSMOS
     WORKER --> BLOB
     WORKER --> KV
-    WORKER --> SEARCH
 
     FE --> OBS
     API --> OBS
@@ -106,7 +103,6 @@ For the initial production release:
 
 ## Accepted Initial Risks
 
-- Azure AI Search Free SKU remains an accepted production exception.
 - Full private-endpoint alignment for Cosmos DB, Blob Storage, and Key Vault is deferred.
 - Cloudflare Free-tier controls are used for v1, so only a minimal edge policy set is assumed.
 
