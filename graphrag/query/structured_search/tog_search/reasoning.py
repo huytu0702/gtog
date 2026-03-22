@@ -1,8 +1,12 @@
+import os
 from dataclasses import dataclass
 from typing import List, Tuple
+
 from graphrag.language_model.protocol.base import ChatModel
-from .state import ExplorationNode
 from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
+from graphrag.tokenizer.tokenizer import Tokenizer
+
+from .state import ExplorationNode
 
 
 @dataclass
@@ -22,12 +26,18 @@ class ToGReasoning:
         model: ChatModel,
         temperature: float = 0.0,
         reasoning_prompt: str | None = None,
-        tokenizer=None,
+        tokenizer: Tokenizer | None = None,
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_prompt = reasoning_prompt or TOG_REASONING_PROMPT
         self.tokenizer = tokenizer
+
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens using the tokenizer when available, otherwise estimate."""
+        if self.tokenizer:
+            return self.tokenizer.num_tokens(text)
+        return len(text) // 4
 
     async def generate_answer(
         self,
@@ -42,7 +52,7 @@ class ToGReasoning:
         metrics = ReasoningMetrics()
 
         # Format exploration paths
-        paths_text = self._format_paths(exploration_paths)
+        paths_text = self.format_paths(exploration_paths)
 
         # Replace placeholders in the prompt
         try:
@@ -50,8 +60,6 @@ class ToGReasoning:
             if hasattr(
                 self.reasoning_prompt, "endswith"
             ) and self.reasoning_prompt.endswith(".txt"):
-                import os
-
                 if os.path.exists(self.reasoning_prompt):
                     with open(self.reasoning_prompt, "r", encoding="utf-8") as f:
                         prompt_template = f.read()
@@ -90,10 +98,7 @@ Structure your response as:
 3. Key relationships that support your answer
 """
 
-        if self.tokenizer:
-            metrics.prompt_tokens = self.tokenizer.num_tokens(prompt)
-        else:
-            metrics.prompt_tokens = len(prompt) // 4
+        metrics.prompt_tokens = self._count_tokens(prompt)
 
         answer = ""
         try:
@@ -109,17 +114,14 @@ Structure your response as:
             answer = f"Error generating answer: {str(e)}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
 
         metrics.llm_calls = 1
-        if self.tokenizer:
-            metrics.output_tokens = self.tokenizer.num_tokens(answer)
-        else:
-            metrics.output_tokens = len(answer) // 4
+        metrics.output_tokens = self._count_tokens(answer)
 
         # Extract reasoning paths for transparency
         reasoning_paths = [self._path_to_string(node) for node in exploration_paths]
 
         return answer, reasoning_paths, metrics
 
-    def _format_paths(self, nodes: List[ExplorationNode]) -> str:
+    def format_paths(self, nodes: List[ExplorationNode]) -> str:
         """Format exploration paths with rich context including entity and relationship descriptions."""
         if not nodes:
             return "No exploration paths available."
@@ -250,7 +252,7 @@ Structure your response as:
         """
         metrics = ReasoningMetrics()
 
-        paths_text = self._format_paths(current_nodes[:3])  # Check top 3 paths
+        paths_text = self.format_paths(current_nodes[:3])  # Check top 3 paths
 
         history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
         prompt = f"""{history_prefix}Question: {query}
@@ -268,10 +270,7 @@ Respond with:
 
 Response:"""
 
-        if self.tokenizer:
-            metrics.prompt_tokens = self.tokenizer.num_tokens(prompt)
-        else:
-            metrics.prompt_tokens = len(prompt) // 4
+        metrics.prompt_tokens = self._count_tokens(prompt)
 
         response = ""
         async for chunk in self.model.achat_stream(
@@ -282,10 +281,7 @@ Response:"""
             response += chunk
 
         metrics.llm_calls = 1
-        if self.tokenizer:
-            metrics.output_tokens = self.tokenizer.num_tokens(response)
-        else:
-            metrics.output_tokens = len(response) // 4
+        metrics.output_tokens = self._count_tokens(response)
 
         if response.strip().upper().startswith("YES:"):
             answer = response[4:].strip()

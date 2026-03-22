@@ -1,3 +1,4 @@
+import random
 import time
 from dataclasses import dataclass
 from typing import AsyncGenerator, List, Optional, Tuple, Union
@@ -247,7 +248,7 @@ class ToGSearch:
             reasoning_paths = self.reasoning_module.get_reasoning_paths(
                 state.get_current_frontier()
             )
-            early_context_text = self.reasoning_module._format_paths(
+            early_context_text = self.reasoning_module.format_paths(
                 state.get_current_frontier()
             )
             yield (answer, reasoning_paths, early_term_metrics, early_context_text)
@@ -318,7 +319,6 @@ class ToGSearch:
 
                 # Sample entity candidates if too many (matches original ToG paper semantics)
                 if len(candidate_data) > self.num_retain_entity:
-                    import random
                     candidate_data = random.sample(candidate_data, self.num_retain_entity)
 
                 entity_candidates = [
@@ -378,18 +378,6 @@ class ToGSearch:
             state.prune_current_frontier()
 
             # Debug: show exploration steps AFTER pruning (only kept paths)
-            # Disabled to only show final answer
-            if False:  # hasattr(self, "_debug") and self._debug:
-                kept_nodes = state.get_current_frontier()
-                for node in kept_nodes:
-                    if node.parent:
-                        yield (
-                            f"[DEPTH {next_depth}] {node.parent.entity_name} --[{node.relation_from_parent}]--> {node.entity_name} (score: {node.score:.2f})\n",
-                            [],
-                            None,
-                            "",
-                        )
-
             # Check for early termination
             (
                 should_terminate,
@@ -404,20 +392,10 @@ class ToGSearch:
                     state.get_current_frontier()
                 )
                 # Generate context_text for early termination
-                early_context_text = self.reasoning_module._format_paths(
+                early_context_text = self.reasoning_module.format_paths(
                     state.get_current_frontier()
                 )
                 yield (answer, reasoning_paths, early_term_metrics, early_context_text)
-                # Disabled debug output for early termination
-                if False:
-                    yield (f"=== ToG EARLY TERMINATION ===\n", [], None, "")
-                    yield (
-                        f"Terminated at depth {state.current_depth} with {len(state.get_current_frontier())} paths.\n\n",
-                        [],
-                        None,
-                        "",
-                    )
-                    yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
                 return
             # Yield early termination metrics (non-terminating case)
             yield ("", [], early_term_metrics, "")
@@ -437,7 +415,7 @@ class ToGSearch:
             return
 
         # Generate rich context text with entity and relation descriptions
-        context_text = self.reasoning_module._format_paths(all_paths)
+        context_text = self.reasoning_module.format_paths(all_paths)
 
         # Use reasoning module to generate final answer
         try:
@@ -449,56 +427,6 @@ class ToGSearch:
 
             # Yield answer metrics with context_text
             yield ("", reasoning_paths, answer_metrics, context_text)
-
-            # Show exploration paths before answer
-            # Disabled to only show final answer
-            if False:
-                yield (f"=== ToG EXPLORATION ANALYSIS ===\n", [], None, "")
-                yield (f"Query: {query}\n", [], None, "")
-                yield (
-                    f"Max Depth: {self.depth}, Beam Width: {self.width}\n",
-                    [],
-                    None,
-                    "",
-                )
-                yield (
-                    f"Total exploration paths found: {len(all_paths)}\n",
-                    [],
-                    None,
-                    "",
-                )
-                yield (
-                    f"Unique entities explored: {len(set(node.entity_id for node in all_paths))}\n\n",
-                    [],
-                    None,
-                    "",
-                )
-
-                yield (f"=== EXPLORATION PATHS (with scores) ===\n", [], None, "")
-                for i, path in enumerate(reasoning_paths, 1):
-                    yield (f"Path {i}: {path}\n", [], None, "")
-
-                # Show path details with scores
-                yield (f"\n=== PATH DETAILS ===\n", [], None, "")
-                for depth in range(self.depth + 1):
-                    depth_nodes = [node for node in all_paths if node.depth == depth]
-                    if depth_nodes:
-                        yield (f"Depth {depth}:\n", [], None, "")
-                        for node in depth_nodes:
-                            parent_info = (
-                                f" (from: {node.parent.entity_name})"
-                                if node.parent
-                                else ""
-                            )
-                            yield (
-                                f"  - {node.entity_name} [score: {node.score:.2f}]{parent_info}\n",
-                                [],
-                                None,
-                                "",
-                            )
-                        yield ("\n", [], None, "")
-
-                yield (f"=== ToG REASONING ANSWER ===\n\n", [], None, "")
             yield (answer, reasoning_paths, None, context_text)
         except Exception as e:
             # Fallback response if reasoning fails
