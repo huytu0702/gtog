@@ -1,0 +1,402 @@
+[
+  {
+    "id": "Medical-50bafb57",
+    "source": "Medical",
+    "question": "Which blood cell types are abnormally increased in CML and what underlying cellular process causes this?",
+    "ground_truth": "Granulocytes (a type of white blood cell) are increased due to overproduction by myeloid progenitor cells.",
+    "context": "Granulocytes are abnormally increased in CML.; Granulocytes are a type of white blood cell.; Granulocytes are increased due to overproduction by myeloid progenitor cells.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-24373ebe",
+    "source": "Medical",
+    "question": "How does the disease phase of CML affect the types of blood cells present?",
+    "ground_truth": "Blast phase CML is characterized by increased blasts and progenitor cells, while chronic phase has increased mature granulocytes.",
+    "context": "Blast phase CML is characterized by increased blasts.; Blast phase CML is characterized by increased progenitor cells.; Chronic phase CML has increased mature granulocytes.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-9528082d",
+    "source": "Medical",
+    "question": "Why is detecting either the Philadelphia chromosome or BCR::ABL1 gene sufficient for diagnosing CML?",
+    "ground_truth": "Because both result from the same chromosomal translocation specific to CML and serve as key biomarkers.",
+    "context": "Detecting the Philadelphia chromosome is sufficient for diagnosing CML.; Detecting the BCR::ABL1 gene is sufficient for diagnosing CML.; Both the Philadelphia chromosome and BCR::ABL1 gene result from the same chromosomal translocation specific to CML.; The Philadelphia chromosome and BCR::ABL1 gene serve as key biomarkers for CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-8b16a7bd",
+    "source": "Medical",
+    "question": "What is the rationale for targeting BCR::ABL1 protein activity in CML treatment?",
+    "ground_truth": "Since CML is caused by the BCR::ABL1 fusion gene, inhibiting its protein product addresses the underlying cause.",
+    "context": "CML is caused by the BCR::ABL1 fusion gene.; Targeting BCR::ABL1 protein activity addresses the underlying cause of CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4fe06961",
+    "source": "Medical",
+    "question": "What is the sequence of genetic and chromosomal events leading to CML?",
+    "ground_truth": "A translocation between chromosome 9 and 22 creates the Philadelphia chromosome, which produces the BCR::ABL1 fusion gene that causes CML.",
+    "context": "A translocation between chromosome 9 and 22 creates the Philadelphia chromosome.; The Philadelphia chromosome produces the BCR::ABL1 fusion gene.; The BCR::ABL1 fusion gene causes CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-41b1601a",
+    "source": "Medical",
+    "question": "Which two main biomarkers are tested to confirm a diagnosis of CML, and how are they related?",
+    "ground_truth": "BCR::ABL1 fusion gene and Philadelphia chromosome are tested, both resulting from the same chromosomal translocation.",
+    "context": "The BCR::ABL1 fusion gene is tested to confirm a diagnosis of CML.; The Philadelphia chromosome is tested to confirm a diagnosis of CML.; Both the BCR::ABL1 fusion gene and Philadelphia chromosome result from the same chromosomal translocation.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-38fe5331",
+    "source": "Medical",
+    "question": "How does the detection of increased blasts in blood or bone marrow influence the classification of CML phase?",
+    "ground_truth": "Increased blasts indicate progression to blast phase CML (BP-CML), an advanced disease stage.",
+    "context": "Increased blasts in blood or bone marrow indicate progression to blast phase CML.; Blast phase CML (BP-CML) is an advanced disease stage.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4987de7f",
+    "source": "Medical",
+    "question": "What are the cellular and molecular hallmarks required to definitively diagnose CML?",
+    "ground_truth": "Increased granulocytes and presence of either the Philadelphia chromosome or BCR::ABL1 fusion gene are required.",
+    "context": "Increased granulocytes are required to definitively diagnose CML.; The presence of the Philadelphia chromosome is required to definitively diagnose CML.; The presence of the BCR::ABL1 fusion gene is required to definitively diagnose CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c2ead218",
+    "source": "Medical",
+    "question": "Which abnormal blood counts and genetic findings together support a diagnosis of CML?",
+    "ground_truth": "Increased white blood cells and abnormal platelet counts, along with the Philadelphia chromosome or BCR::ABL1 gene, support CML diagnosis.",
+    "context": "Increased white blood cells support a diagnosis of CML.; Abnormal platelet counts support a diagnosis of CML.; The Philadelphia chromosome supports a diagnosis of CML.; The BCR::ABL1 gene supports a diagnosis of CML.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-4d01de98",
+    "source": "Medical",
+    "question": "How do blood stem cells contribute to the abnormal blood cell profile observed in CML?",
+    "ground_truth": "Blood stem cells in CML produce increased myeloid progenitor cells, leading to elevated granulocytes.",
+    "context": "Blood stem cells in CML produce increased myeloid progenitor cells.; Increased myeloid progenitor cells lead to elevated granulocytes.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-34a9155d",
+    "source": "Medical",
+    "question": "Why is a lung nodule detected by imaging not sufficient for a lung cancer diagnosis?",
+    "ground_truth": "Because biopsy is required to confirm the malignancy of a lung nodule detected by imaging.",
+    "context": "A lung nodule detected by imaging is not sufficient for a lung cancer diagnosis.; A biopsy is required to confirm the malignancy of a lung nodule detected by imaging.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b7e4be0e",
+    "source": "Medical",
+    "question": "What combination of risk factors and diagnostic methods would justify recommending lung cancer screening?",
+    "ground_truth": "Individuals with high-risk factors such as tobacco smoking should undergo lung cancer screening using imaging.",
+    "context": "Individuals with high-risk factors such as tobacco smoking should undergo lung cancer screening.; Lung cancer screening should use imaging.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-96bb3762",
+    "source": "Medical",
+    "question": "How does the treatment approach differ between Stage 1 and Stage 2 NSCLC?",
+    "ground_truth": "Stage 1 NSCLC is treated with surgery and possibly radiation therapy, while Stage 2 NSCLC may require surgery and chemoradiation.",
+    "context": "Stage 1 NSCLC is treated with surgery.; Stage 1 NSCLC may be treated with radiation therapy.; Stage 2 NSCLC may require surgery.; Stage 2 NSCLC may require chemoradiation.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-7ea7ec68",
+    "source": "Medical",
+    "question": "Why would a patient with a history of exposure to asbestos and a persistent cough be prioritized for lung cancer screening?",
+    "ground_truth": "Because asbestos exposure is a risk factor and persistent cough is a symptom, both increasing the need for early detection via screening.",
+    "context": "Asbestos exposure is a risk factor for lung cancer.; A persistent cough is a symptom of lung cancer.; Both asbestos exposure and persistent cough increase the need for early detection via screening.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e7d1cd1c",
+    "source": "Medical",
+    "question": "How does the subtype of NSCLC influence the origin of the cancer cells?",
+    "ground_truth": "Adenocarcinoma forms from alveolar mucus-producing cells, while squamous cell carcinoma originates from bronchial lining cells.",
+    "context": "Adenocarcinoma forms from alveolar mucus-producing cells.; Squamous cell carcinoma originates from bronchial lining cells.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c7c59020",
+    "source": "Medical",
+    "question": "What is the rationale for using both imaging and biopsy in the assessment of a lung nodule?",
+    "ground_truth": "Imaging detects the lung nodule, but biopsy is necessary to determine if it is cancerous.",
+    "context": "Imaging detects the lung nodule.; A biopsy is necessary to determine if the lung nodule is cancerous.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ee49f3e8",
+    "source": "Medical",
+    "question": "Why is surgery not typically a treatment option for Stage 4 NSCLC?",
+    "ground_truth": "Because Stage 4 NSCLC is metastatic at diagnosis, making local treatments like surgery ineffective.",
+    "context": "Stage 4 NSCLC is metastatic at diagnosis.; Local treatments like surgery are ineffective for Stage 4 NSCLC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b77d8e3d",
+    "source": "Medical",
+    "question": "How do follow-up strategies change after initial treatment for NSCLC?",
+    "ground_truth": "After initial treatment, follow-up care and surveillance are implemented to monitor for recurrence.",
+    "context": "After initial treatment for NSCLC, follow-up care is implemented.; Surveillance is implemented to monitor for recurrence after initial treatment for NSCLC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-6fb8996b",
+    "source": "Medical",
+    "question": "What factors would lead to recommending a clinical trial for a lung cancer patient?",
+    "ground_truth": "Patients with lung cancer may be eligible for clinical trials as part of their treatment or prevention options.",
+    "context": "Patients with lung cancer may be eligible for clinical trials.; Clinical trials can be part of treatment options for lung cancer patients.; Clinical trials can be part of prevention options for lung cancer patients.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-edc3c6eb",
+    "source": "Medical",
+    "question": "Why is lung cancer screening particularly important for individuals exposed to air pollution and diesel fumes?",
+    "ground_truth": "Because both air pollution and diesel fumes are established risk factors for lung cancer, necessitating early detection strategies.",
+    "context": "Air pollution is an established risk factor for lung cancer.; Diesel fumes are an established risk factor for lung cancer.; Both air pollution and diesel fumes necessitate early detection strategies for lung cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f3048835",
+    "source": "Medical",
+    "question": "What are the main differences in treatment between early and locally advanced NSCLC?",
+    "ground_truth": "Early NSCLC is mainly treated with surgery and sometimes radiation, while locally advanced NSCLC may also require chemoradiation.",
+    "context": "Early NSCLC is mainly treated with surgery.; Early NSCLC may sometimes be treated with radiation.; Locally advanced NSCLC may require chemoradiation.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-f79d978d",
+    "source": "Medical",
+    "question": "How does the presence of a lung nodule on imaging affect the diagnostic workflow for lung cancer?",
+    "ground_truth": "A lung nodule detected by imaging prompts further assessment, including biopsy, to confirm or exclude cancer.",
+    "context": "A lung nodule detected by imaging prompts further assessment.; Further assessment of a lung nodule includes a biopsy.; A biopsy is performed to confirm or exclude cancer in the presence of a lung nodule.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-47504b64",
+    "source": "Medical",
+    "question": "Why is supportive care considered a treatment option for all stages of lung cancer?",
+    "ground_truth": "Supportive care improves quality of life for people with lung cancer regardless of stage.",
+    "context": "Supportive care improves quality of life for people with lung cancer.; Supportive care is considered a treatment option for all stages of lung cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-328006b7",
+    "source": "Medical",
+    "question": "What combination of exposure and symptom would most strongly suggest the need for diagnostic evaluation for lung cancer?",
+    "ground_truth": "A history of tobacco smoking combined with chest pain should prompt diagnostic evaluation for lung cancer.",
+    "context": "A history of tobacco smoking should prompt diagnostic evaluation for lung cancer.; Chest pain should prompt diagnostic evaluation for lung cancer.; The combination of tobacco smoking and chest pain suggests the need for diagnostic evaluation for lung cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-659d7c0a",
+    "source": "Medical",
+    "question": "How do the purposes of lung cancer screening and follow-up care differ?",
+    "ground_truth": "Screening aims for early detection in high-risk individuals, while follow-up care monitors for recurrence after treatment.",
+    "context": "Screening aims for early detection in high-risk individuals.; Follow-up care monitors for recurrence after treatment.; The purposes of lung cancer screening and follow-up care differ.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-689b17ad",
+    "source": "Medical",
+    "question": "Which biomarker should be tested both before and after treatment in nasopharyngeal carcinoma patients, and why is this monitoring important?",
+    "ground_truth": "EBV DNA should be tested before and after treatment because its level serves as a prognostic factor and is used for surveillance.",
+    "context": "EBV DNA should be tested before treatment in nasopharyngeal carcinoma patients.; EBV DNA should be tested after treatment in nasopharyngeal carcinoma patients.; The level of EBV DNA serves as a prognostic factor.; The level of EBV DNA is used for surveillance.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-a7e62dce",
+    "source": "Medical",
+    "question": "What combination of diagnostic methods is necessary to both confirm nasopharyngeal carcinoma and determine its subtype?",
+    "ground_truth": "Biopsy is required to confirm NPC and to determine its cancer subtype.",
+    "context": "A biopsy is required to confirm nasopharyngeal carcinoma.; A biopsy is required to determine the subtype of nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-80912696",
+    "source": "Medical",
+    "question": "Why should fertility counseling be considered for patients undergoing treatment for nasopharyngeal carcinoma?",
+    "ground_truth": "Fertility counseling should be considered because NPC treatment can affect fertility.",
+    "context": "Fertility counseling should be considered for patients undergoing treatment for nasopharyngeal carcinoma.; Nasopharyngeal carcinoma treatment can affect fertility.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-aa1b8dbb",
+    "source": "Medical",
+    "question": "How does a patient's performance status influence nasopharyngeal carcinoma treatment planning?",
+    "ground_truth": "Performance status is assessed and considered in NPC treatment planning as a prognostic factor.",
+    "context": "Performance status is assessed in nasopharyngeal carcinoma treatment planning.; Performance status is considered in nasopharyngeal carcinoma treatment planning.; Performance status is a prognostic factor in nasopharyngeal carcinoma treatment planning.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-d256aef2",
+    "source": "Medical",
+    "question": "If a patient with nasopharyngeal carcinoma presents with enlarged lymph nodes, what does this indicate about possible disease spread and staging?",
+    "ground_truth": "Enlarged lymph nodes suggest lymph node metastasis, which is included in the TNM staging system for NPC.",
+    "context": "Enlarged lymph nodes suggest lymph node metastasis.; Lymph node metastasis is included in the TNM staging system for nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-c09d2bcb",
+    "source": "Medical",
+    "question": "Which populations are at increased risk for nasopharyngeal carcinoma and what risk factors contribute to this increased incidence?",
+    "ground_truth": "People from Asia, Native America, and North Africa are at increased risk due to geographic origin and EBV infection.",
+    "context": "People from Asia are at increased risk for nasopharyngeal carcinoma.; Native Americans are at increased risk for nasopharyngeal carcinoma.; People from North Africa are at increased risk for nasopharyngeal carcinoma.; Geographic origin contributes to the increased incidence of nasopharyngeal carcinoma.; EBV infection contributes to the increased incidence of nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-5fdb115b",
+    "source": "Medical",
+    "question": "What imaging modalities are used for both staging and surveillance of nasopharyngeal carcinoma?",
+    "ground_truth": "CT scan, MRI, PET/CT, and ultrasound are used for both staging and surveillance of NPC.",
+    "context": "CT scan is used for both staging and surveillance of nasopharyngeal carcinoma.; MRI is used for both staging and surveillance of nasopharyngeal carcinoma.; PET/CT is used for both staging and surveillance of nasopharyngeal carcinoma.; Ultrasound is used for both staging and surveillance of nasopharyngeal carcinoma.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-9231a873",
+    "source": "Medical",
+    "question": "Which cancer subtype is most commonly found in the nasopharynx and how is it classified within the cancer ontology?",
+    "ground_truth": "Squamous cell carcinoma (SCC) is the most common subtype of nasopharyngeal cancer, classified under nasopharyngeal carcinoma (NPC) in the ontology.",
+    "context": "Squamous cell carcinoma (SCC) is the most common subtype of nasopharyngeal cancer.; SCC is classified under nasopharyngeal carcinoma (NPC) in the cancer ontology.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ad0cc053",
+    "source": "Medical",
+    "question": "If a nasopharyngeal carcinoma patient has both high EBV DNA levels and poor performance status, what does this indicate about their prognosis?",
+    "ground_truth": "High EBV DNA levels and poor performance status are both poor prognostic factors in NPC.",
+    "context": "High EBV DNA levels are a poor prognostic factor in nasopharyngeal carcinoma (NPC).; Poor performance status is a poor prognostic factor in nasopharyngeal carcinoma (NPC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-5a6b98a7",
+    "source": "Medical",
+    "question": "Why might symptoms of nasopharyngeal carcinoma be absent until advanced stages, and how does this affect the diagnostic process?",
+    "ground_truth": "Symptoms may be absent until advanced stage, making imaging and biopsy essential for early diagnosis.",
+    "context": "Symptoms of nasopharyngeal carcinoma may be absent until advanced stages.; The absence of symptoms until advanced stages makes imaging essential for early diagnosis.; The absence of symptoms until advanced stages makes biopsy essential for early diagnosis.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-1c53b384",
+    "source": "Medical",
+    "question": "What combination of risk factors should prompt clinicians to consider nasopharyngeal carcinoma in a differential diagnosis?",
+    "ground_truth": "Epstein-Barr virus infection, tobacco use, alcohol use, and geographic origin (Asia, Native America, North Africa) should prompt consideration of NPC.",
+    "context": "Epstein-Barr virus infection should prompt consideration of nasopharyngeal carcinoma (NPC).; Tobacco use should prompt consideration of nasopharyngeal carcinoma (NPC).; Alcohol use should prompt consideration of nasopharyngeal carcinoma (NPC).; Geographic origin (Asia, Native America, North Africa) should prompt consideration of nasopharyngeal carcinoma (NPC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-0e2be889",
+    "source": "Medical",
+    "question": "How does the AJCC TNM system contribute to the staging of nasopharyngeal carcinoma, and what aspects does it assess?",
+    "ground_truth": "The AJCC TNM system stages NPC by assessing tumor size (T), lymph node involvement (N), and distant metastasis (M).",
+    "context": "The AJCC TNM system stages nasopharyngeal carcinoma (NPC).; The AJCC TNM system assesses tumor size (T) in NPC.; The AJCC TNM system assesses lymph node involvement (N) in NPC.; The AJCC TNM system assesses distant metastasis (M) in NPC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-ff2105ab",
+    "source": "Medical",
+    "question": "Why is dental health assessment important in the management of nasopharyngeal carcinoma?",
+    "ground_truth": "Dental health can be affected by head and neck cancer and its treatment, so dental exams are part of NPC management.",
+    "context": "Dental health can be affected by head and neck cancer.; Dental health can be affected by the treatment of head and neck cancer.; Dental exams are part of the management of nasopharyngeal carcinoma (NPC).",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-6a90b47e",
+    "source": "Medical",
+    "question": "What methods are used to assess both nutritional status and speech/swallowing function in nasopharyngeal carcinoma patients?",
+    "ground_truth": "Nutrition assessment and speech and swallowing assessment are used in NPC patients.",
+    "context": "Nutrition assessment is used in nasopharyngeal carcinoma (NPC) patients.; Speech and swallowing assessment is used in nasopharyngeal carcinoma (NPC) patients.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-0d237b40",
+    "source": "Medical",
+    "question": "Which metastatic sites are most common in nasopharyngeal carcinoma and how is this reflected in the ontology?",
+    "ground_truth": "Lymph node and lung are the most common metastatic sites for NPC, as indicated in the ontology.",
+    "context": "Lymph node is a common metastatic site for nasopharyngeal carcinoma (NPC).; Lung is a common metastatic site for nasopharyngeal carcinoma (NPC).; The ontology indicates lymph node and lung as common metastatic sites for NPC.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-cfab4b2d",
+    "source": "Medical",
+    "question": "Why is immunotherapy with checkpoint inhibitors recommended for some colon cancer patients but not others?",
+    "ground_truth": "Immunotherapy with checkpoint inhibitors is recommended for dMMR/MSI-H colon cancers but not for pMMR/MSS cancers, which are treated with chemotherapy.",
+    "context": "Immunotherapy with checkpoint inhibitors is recommended for dMMR/MSI-H colon cancers.; Immunotherapy with checkpoint inhibitors is not recommended for pMMR/MSS colon cancers.; pMMR/MSS colon cancers are treated with chemotherapy.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-b2da7aee",
+    "source": "Medical",
+    "question": "What are the recommended surveillance strategies after treatment for colon cancer and which biomarkers are involved?",
+    "ground_truth": "Surveillance includes colonoscopy, CEA testing, and CT scans, with CEA serving as a biomarker for monitoring.",
+    "context": "Surveillance after treatment for colon cancer includes colonoscopy.; Surveillance after treatment for colon cancer includes CEA testing.; Surveillance after treatment for colon cancer includes CT scans.; CEA serves as a biomarker for monitoring after treatment for colon cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-7b422282",
+    "source": "Medical",
+    "question": "How does the presence of Lynch syndrome affect colon cancer risk and management?",
+    "ground_truth": "Lynch syndrome increases colon cancer risk and requires testing for mismatch repair deficiency (dMMR) or MSI-H, which guides immunotherapy decisions.",
+    "context": "Lynch syndrome increases colon cancer risk.; Lynch syndrome requires testing for mismatch repair deficiency (dMMR) or MSI-H.; Testing for dMMR or MSI-H guides immunotherapy decisions.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-fc13ecfe",
+    "source": "Medical",
+    "question": "What is the rationale for recommending chemotherapy after colectomy in stage 3 colon cancer but not always in stage 2?",
+    "ground_truth": "Chemotherapy is recommended after colectomy for all stage 3 colon cancers due to lymph node involvement, while only some stage 2 cases receive it as they lack lymph node spread.",
+    "context": "Chemotherapy is recommended after colectomy for all stage 3 colon cancers.; Stage 3 colon cancers have lymph node involvement.; Only some stage 2 colon cancer cases receive chemotherapy.; Some stage 2 colon cancer cases lack lymph node spread.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-3447851a",
+    "source": "Medical",
+    "question": "Why should young adults with colon cancer be counseled about fertility preservation before treatment?",
+    "ground_truth": "Young adults should be counseled because treatments like chemotherapy and surgery can impair fertility, and options such as sperm banking, egg freezing, or ovarian tissue banking are available.",
+    "context": "Young adults with colon cancer should be counseled about fertility preservation.; Treatments like chemotherapy and surgery can impair fertility.; Options for fertility preservation include sperm banking, egg freezing, and ovarian tissue banking.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-97022167",
+    "source": "Medical",
+    "question": "How does the origin of colon cancer from adenomas influence early detection and prevention strategies?",
+    "ground_truth": "Since most colon cancers start in adenomas, early detection and removal of polyps via colonoscopy and polypectomy are crucial for prevention.",
+    "context": "Most colon cancers start in adenomas.; Early detection and removal of polyps are crucial for prevention.; Colonoscopy and polypectomy are methods for early detection and removal of polyps.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-781a9787",
+    "source": "Medical",
+    "question": "What diagnostic tests are used for both initial evaluation and staging of colon cancer, and what unique information does each provide?",
+    "ground_truth": "Blood tests (CBC, chemistry profile, CEA) are used for initial evaluation, while CT with contrast is the main imaging test for staging and surveillance; CEA is also a biomarker for monitoring.",
+    "context": "Blood tests like CBC, chemistry profile, and CEA are used for initial evaluation of colon cancer.; CT with contrast is the main imaging test for staging and surveillance of colon cancer.; CEA is a biomarker for monitoring colon cancer.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-104b2f70",
+    "source": "Medical",
+    "question": "For a patient with a first-degree relative with colorectal cancer, what risk factors and inherited syndromes should be considered?",
+    "ground_truth": "A first-degree relative is a risk factor, and inherited syndromes like Lynch syndrome and FAP should be evaluated for increased colon cancer risk.",
+    "context": "A first-degree relative with colorectal cancer is a risk factor.; Inherited syndromes like Lynch syndrome and FAP should be evaluated for increased colon cancer risk.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e1ede6d6",
+    "source": "Medical",
+    "question": "What distinguishes stage 4 colon cancer from earlier stages in terms of spread and treatment approach?",
+    "ground_truth": "Stage 4 colon cancer has spread to distant organs like the liver or lungs, requiring different treatment strategies compared to localized or regional disease.",
+    "context": "Stage 4 colon cancer has spread to distant organs like the liver or lungs.; Stage 4 colon cancer requires different treatment strategies compared to localized or regional disease.",
+    "question_type": "Complex Reasoning"
+  },
+  {
+    "id": "Medical-e8957bed",
+    "source": "Medical",
+    "question": "Why is ctDNA testing not routinely used in colon cancer management outside clinical trials?",
+    "ground_truth": "ctDNA testing is considered investigational and recommended only in clinical trials, not in standard management.",
+    "context": "ctDNA testing is considered investigational.; ctDNA testing is recommended only in clinical trials.; ctDNA testing is not used in standard management of colon cancer.",
+    "question_type": "Complex Reasoning"
+  }
+]

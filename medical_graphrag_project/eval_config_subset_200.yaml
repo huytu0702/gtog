@@ -1,0 +1,17 @@
+dataset:
+  path: "F:/KL/gtog-eval/Datasets/Questions/medical_questions_eval_subset_200.json"
+
+indexes:
+  medical: "F:/KL/gtog-eval/medical_graphrag_project"
+
+methods:
+  - tog
+  - local
+
+output:
+  dir: "eval_results_medical"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0

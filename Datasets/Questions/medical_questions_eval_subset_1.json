@@ -1,0 +1,10 @@
+[
+  {
+    "id": "Medical-73586ddc",
+    "source": "Medical",
+    "question": "What is the most common type of skin cancer?",
+    "ground_truth": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "context": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  }
+]

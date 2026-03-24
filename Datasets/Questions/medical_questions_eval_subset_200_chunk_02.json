@@ -1,0 +1,402 @@
+[
+  {
+    "id": "Medical-0b2a33fc",
+    "source": "Medical",
+    "question": "Can a history of radiation therapy increase BCC risk?",
+    "ground_truth": "Radiation therapy is a risk factor for BCC.",
+    "context": "Radiation therapy is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-de0b30b1",
+    "source": "Medical",
+    "question": "Are organ transplant recipients at higher risk for BCC?",
+    "ground_truth": "Organ transplant is a risk factor for BCC.",
+    "context": "Organ transplant is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4f1779a5",
+    "source": "Medical",
+    "question": "Is autoimmune disease a risk factor for BCC?",
+    "ground_truth": "Autoimmune disease is a risk factor for BCC.",
+    "context": "Autoimmune disease is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-d675eecd",
+    "source": "Medical",
+    "question": "What is a flat, pale or yellow area on the skin indicative of in BCC?",
+    "ground_truth": "A flat, pale or yellow area is a symptom of BCC.",
+    "context": "A flat, pale or yellow area is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-7e4192af",
+    "source": "Medical",
+    "question": "What does a shiny bump on the skin suggest in the context of BCC?",
+    "ground_truth": "A shiny bump is a symptom of BCC.",
+    "context": "A shiny bump is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f8b6c41e",
+    "source": "Medical",
+    "question": "What is the significance of a brown or glossy black bump with rolled border?",
+    "ground_truth": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "context": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-cef34fff",
+    "source": "Medical",
+    "question": "Which exams are essential for diagnosing BCC?",
+    "ground_truth": "Physical exam and skin exam are essential for diagnosing BCC.",
+    "context": "Physical exam is essential for diagnosing BCC.; Skin exam is essential for diagnosing BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-27280ca7",
+    "source": "Medical",
+    "question": "What role does biopsy play in BCC diagnosis?",
+    "ground_truth": "Biopsy is a diagnostic method for BCC.",
+    "context": "Biopsy is a diagnostic method for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-04249246",
+    "source": "Medical",
+    "question": "Is imaging sometimes used in the diagnosis of BCC?",
+    "ground_truth": "Imaging may be used in the diagnosis of BCC.",
+    "context": "Imaging may be used in the diagnosis of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3e18a314",
+    "source": "Medical",
+    "question": "What treatments are available for BCC besides surgery?",
+    "ground_truth": "Radiation therapy and systemic therapy are treatments for BCC besides surgery.",
+    "context": "Radiation therapy is a treatment for BCC besides surgery.; Systemic therapy is a treatment for BCC besides surgery.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-34ad11ec",
+    "source": "Medical",
+    "question": "How is recurrence of BCC managed?",
+    "ground_truth": "Recurrence is managed with treatment options based on risk and recurrence.",
+    "context": "Recurrence of BCC is managed with treatment options.; Treatment options for recurrence are based on risk.; Treatment options for recurrence are based on recurrence.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-74440a6a",
+    "source": "Medical",
+    "question": "What is included in annual follow-up for BCC patients?",
+    "ground_truth": "Annual follow-up includes a full skin exam.",
+    "context": "Annual follow-up for BCC patients includes a full skin exam.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a296a86b",
+    "source": "Medical",
+    "question": "What is the primary cancer type discussed in this context?",
+    "ground_truth": "Primary CNS lymphoma is the primary cancer type.",
+    "context": "Primary CNS lymphoma is the primary cancer type.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f907720b",
+    "source": "Medical",
+    "question": "Which cells does primary CNS lymphoma originate from?",
+    "ground_truth": "Primary CNS lymphoma originates from lymphocytes.",
+    "context": "Primary CNS lymphoma originates from lymphocytes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f80cbf85",
+    "source": "Medical",
+    "question": "What is the most common location affected by primary CNS lymphoma?",
+    "ground_truth": "The brain is most commonly affected by primary CNS lymphoma.",
+    "context": "The brain is most commonly affected by primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b3c430ef",
+    "source": "Medical",
+    "question": "Name a cancer subtype of primary CNS lymphoma that affects the eyes.",
+    "ground_truth": "Vitreoretinal lymphoma is a subtype that affects the eyes.",
+    "context": "Vitreoretinal lymphoma is a subtype of primary CNS lymphoma.; Vitreoretinal lymphoma affects the eyes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-304b0354",
+    "source": "Medical",
+    "question": "List three anatomical sites, other than the brain, that primary CNS lymphoma can involve.",
+    "ground_truth": "Primary CNS lymphoma can involve the spinal cord, cerebrospinal fluid, and eyes.",
+    "context": "Primary CNS lymphoma can involve the spinal cord.; Primary CNS lymphoma can involve cerebrospinal fluid.; Primary CNS lymphoma can involve the eyes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-bc34a6a1",
+    "source": "Medical",
+    "question": "What is a major risk factor for developing primary CNS lymphoma?",
+    "ground_truth": "An impaired immune system is a major risk factor.",
+    "context": "An impaired immune system is a major risk factor for developing primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b1a95144",
+    "source": "Medical",
+    "question": "Which viral infection is considered a risk factor for primary CNS lymphoma?",
+    "ground_truth": "HIV infection is a risk factor for primary CNS lymphoma.",
+    "context": "HIV infection is a risk factor for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-473eae59",
+    "source": "Medical",
+    "question": "Name two autoimmune conditions listed as risk factors for primary CNS lymphoma.",
+    "ground_truth": "Autoimmune disease and lupus are risk factors.",
+    "context": "Autoimmune disease is a risk factor for primary CNS lymphoma.; Lupus is a risk factor for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-1b824083",
+    "source": "Medical",
+    "question": "Which diagnostic imaging technique is considered most useful for identifying primary CNS lymphoma?",
+    "ground_truth": "MRI with gadolinium contrast is the most useful imaging technique.",
+    "context": "MRI with gadolinium contrast is the most useful imaging technique for identifying primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ba9d39eb",
+    "source": "Medical",
+    "question": "What is the standard biopsy procedure for diagnosing primary CNS lymphoma?",
+    "ground_truth": "Stereotactic biopsy is the standard diagnostic procedure.",
+    "context": "Stereotactic biopsy is the standard diagnostic procedure for diagnosing primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e306413c",
+    "source": "Medical",
+    "question": "Which laboratory test is commonly used during the diagnosis of primary CNS lymphoma?",
+    "ground_truth": "Complete blood count (CBC) is commonly used.",
+    "context": "Complete blood count (CBC) is commonly used during the diagnosis of primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-64ef6350",
+    "source": "Medical",
+    "question": "What is a typical initial clinical assessment for suspected primary CNS lymphoma?",
+    "ground_truth": "A neurological exam is a typical initial clinical assessment.",
+    "context": "A neurological exam is a typical initial clinical assessment for suspected primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e05d0922",
+    "source": "Medical",
+    "question": "Which procedure is performed if cancer cells are found in the cerebrospinal fluid?",
+    "ground_truth": "Intrathecal chemotherapy may be used if cancer cells are found in the cerebrospinal fluid.",
+    "context": "Intrathecal chemotherapy may be used if cancer cells are found in the cerebrospinal fluid.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-1c1492e7",
+    "source": "Medical",
+    "question": "What specialized treatment is given if the eyes are involved in primary CNS lymphoma?",
+    "ground_truth": "Intraocular chemotherapy or radiation may be used if the eyes are involved.",
+    "context": "Intraocular chemotherapy or radiation may be used if the eyes are involved in primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-dba48e64",
+    "source": "Medical",
+    "question": "What is the main chemotherapy drug for primary CNS lymphoma?",
+    "ground_truth": "High-dose methotrexate is the main chemotherapy drug.",
+    "context": "High-dose methotrexate is the main chemotherapy drug for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f5fc9016",
+    "source": "Medical",
+    "question": "Which immunotherapy drug is primarily used in the treatment of primary CNS lymphoma?",
+    "ground_truth": "Rituximab is the main immunotherapy drug used.",
+    "context": "Rituximab is the main immunotherapy drug used in the treatment of primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b80bf4c5",
+    "source": "Medical",
+    "question": "What is the most commonly used radiation technique for primary CNS lymphoma?",
+    "ground_truth": "Whole-brain radiation therapy (WBRT) is the most commonly used technique.",
+    "context": "Whole-brain radiation therapy (WBRT) is the most commonly used radiation technique for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3978515f",
+    "source": "Medical",
+    "question": "What are the two main treatment phases for primary CNS lymphoma?",
+    "ground_truth": "Treatment is typically given in phases: induction and consolidation.",
+    "context": "Treatment for primary CNS lymphoma is typically given in phases.; The two main treatment phases for primary CNS lymphoma are induction and consolidation.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-afabde7f",
+    "source": "Medical",
+    "question": "What is the purpose of supportive care in primary CNS lymphoma management?",
+    "ground_truth": "Supportive care is provided to relieve symptoms and side effects at any stage of disease.",
+    "context": "Supportive care is provided to relieve symptoms.; Supportive care is provided to relieve side effects.; Supportive care is provided at any stage of disease.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a4081e18",
+    "source": "Medical",
+    "question": "Which performance measure is evaluated to guide treatment decisions in primary CNS lymphoma?",
+    "ground_truth": "Performance status is evaluated to guide treatment decisions and eligibility for clinical trials.",
+    "context": "Performance status is evaluated to guide treatment decisions.; Performance status is evaluated to determine eligibility for clinical trials.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-79a788b8",
+    "source": "Medical",
+    "question": "What is recommended for all patients with primary CNS lymphoma regarding research participation?",
+    "ground_truth": "Clinical trial participation is recommended for all patients.",
+    "context": "Clinical trial participation is recommended for all patients with primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-c99256ce",
+    "source": "Medical",
+    "question": "Name three neurological symptoms commonly caused by primary CNS lymphoma.",
+    "ground_truth": "Leg weakness, confusion, and seizures are common neurological symptoms.",
+    "context": "Leg weakness is a common neurological symptom caused by primary CNS lymphoma.; Confusion is a common neurological symptom caused by primary CNS lymphoma.; Seizures are a common neurological symptom caused by primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-7b5a8ac6",
+    "source": "Medical",
+    "question": "Which diagnostic method is used to assess eye involvement in primary CNS lymphoma?",
+    "ground_truth": "Eye exam is used to assess eye involvement.",
+    "context": "Eye exam is used to assess eye involvement in primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-26033837",
+    "source": "Medical",
+    "question": "What follow-up method is recommended for surveillance after treatment of primary CNS lymphoma?",
+    "ground_truth": "Repeat MRI is recommended for follow-up surveillance.",
+    "context": "Repeat MRI is recommended for follow-up surveillance after treatment of primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9f3a0a90",
+    "source": "Medical",
+    "question": "Which age group is at higher risk for primary CNS lymphoma?",
+    "ground_truth": "Older adults are at higher risk.",
+    "context": "Older adults are at higher risk for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f619b6ea",
+    "source": "Medical",
+    "question": "What is the role of corticosteroids in the treatment of primary CNS lymphoma?",
+    "ground_truth": "Corticosteroids are one of the treatment options for primary CNS lymphoma.",
+    "context": "Corticosteroids are one of the treatment options for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9474c5bb",
+    "source": "Medical",
+    "question": "Which chemotherapy drugs, besides methotrexate, can be used in induction therapy for primary CNS lymphoma?",
+    "ground_truth": "Temozolomide, vincristine, procarbazine, cytarabine, pemetrexed, pomalidomide, lenalidomide, and ibrutinib can be used.",
+    "context": "Temozolomide can be used in induction therapy for primary CNS lymphoma.; Vincristine can be used in induction therapy for primary CNS lymphoma.; Procarbazine can be used in induction therapy for primary CNS lymphoma.; Cytarabine can be used in induction therapy for primary CNS lymphoma.; Pemetrexed can be used in induction therapy for primary CNS lymphoma.; Pomalidomide can be used in induction therapy for primary CNS lymphoma.; Lenalidomide can be used in induction therapy for primary CNS lymphoma.; Ibrutinib can be used in induction therapy for primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5825991f",
+    "source": "Medical",
+    "question": "Which procedure is included in laboratory tests for diagnosing primary CNS lymphoma?",
+    "ground_truth": "Lactate dehydrogenase (LDH) testing is included in laboratory tests.",
+    "context": "Lactate dehydrogenase (LDH) testing is included in laboratory tests for diagnosing primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a4dcffa3",
+    "source": "Medical",
+    "question": "What is a potential site of relapse for primary CNS lymphoma?",
+    "ground_truth": "Primary CNS lymphoma can relapse in the brain, spinal cord, or eyes.",
+    "context": "Primary CNS lymphoma can relapse in the brain.; Primary CNS lymphoma can relapse in the spinal cord.; Primary CNS lymphoma can relapse in the eyes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3919018c",
+    "source": "Medical",
+    "question": "How often does primary CNS lymphoma spread outside the central nervous system?",
+    "ground_truth": "Primary CNS lymphoma rarely spreads outside the central nervous system.",
+    "context": "Primary CNS lymphoma rarely spreads outside the central nervous system.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-d7180179",
+    "source": "Medical",
+    "question": "Which imaging technique uses gadolinium contrast for better visualization in primary CNS lymphoma?",
+    "ground_truth": "MRI uses gadolinium contrast for better visualization.",
+    "context": "MRI uses gadolinium contrast for better visualization in primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f05a2e9b",
+    "source": "Medical",
+    "question": "What supportive care interventions are recommended for patients with primary CNS lymphoma?",
+    "ground_truth": "Symptom management, palliative care, and quality of life interventions are recommended.",
+    "context": "Symptom management is recommended for patients with primary CNS lymphoma.; Palliative care is recommended for patients with primary CNS lymphoma.; Quality of life interventions are recommended for patients with primary CNS lymphoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5b1265c0",
+    "source": "Medical",
+    "question": "What is the second most common type of skin cancer?",
+    "ground_truth": "Squamous cell skin cancer (CSCC) is the second most common type of skin cancer.",
+    "context": "Squamous cell skin cancer (CSCC) is the second most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-d1e50927",
+    "source": "Medical",
+    "question": "Which cancer subtype is classified as a type of nonmelanoma skin cancer?",
+    "ground_truth": "CSCC is a type of nonmelanoma skin cancer.",
+    "context": "CSCC is a type of nonmelanoma skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9536f8e7",
+    "source": "Medical",
+    "question": "What are the main stages of cutaneous squamous cell carcinoma (CSCC)?",
+    "ground_truth": "CSCC is staged as local (confined to skin), regional (spread to lymph nodes), or metastatic (distant spread).",
+    "context": "CSCC is staged as local.; CSCC is staged as regional.; CSCC is staged as metastatic.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-1f290988",
+    "source": "Medical",
+    "question": "What is a precancerous lesion that can progress to CSCC?",
+    "ground_truth": "Actinic keratosis is a precancerous lesion that can progress to CSCC.",
+    "context": "Actinic keratosis is a precancerous lesion that can progress to CSCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-3d21bfb3",
+    "source": "Medical",
+    "question": "Which risk factors are major contributors to CSCC development?",
+    "ground_truth": "Major risk factors for CSCC include chronic sun exposure, indoor tanning, environmental toxins, actinic keratoses, genetic syndromes, weakened immune system, and chronic wounds or scars.",
+    "context": "Chronic sun exposure is a major risk factor for CSCC.; Indoor tanning is a major risk factor for CSCC.; Environmental toxins are a major risk factor for CSCC.; Actinic keratoses are a major risk factor for CSCC.; Genetic syndromes are a major risk factor for CSCC.; A weakened immune system is a major risk factor for CSCC.; Chronic wounds or scars are a major risk factor for CSCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a2555661",
+    "source": "Medical",
+    "question": "Which genetic syndromes increase the risk for CSCC?",
+    "ground_truth": "Xeroderma pigmentosum and RDEB increase risk for CSCC.",
+    "context": "Xeroderma pigmentosum increases the risk for CSCC.; RDEB increases the risk for CSCC.",
+    "question_type": "Fact Retrieval"
+  }
+]

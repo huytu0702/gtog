@@ -1,0 +1,402 @@
+[
+  {
+    "id": "Medical-73586ddc",
+    "source": "Medical",
+    "question": "What is the most common type of skin cancer?",
+    "ground_truth": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "context": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a8bad1cf",
+    "source": "Medical",
+    "question": "From which cell type does basal cell carcinoma arise?",
+    "ground_truth": "Basal cell carcinoma arises from basal cells in the lower part of the epidermis.",
+    "context": "Basal cell carcinoma arises from basal cells.; Basal cells are located in the lower part of the epidermis.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-422500d5",
+    "source": "Medical",
+    "question": "Which anatomical locations are most commonly affected by basal cell carcinoma?",
+    "ground_truth": "BCC most commonly develops in sun-exposed areas such as the face, head, and neck.",
+    "context": "BCC most commonly develops in sun-exposed areas.; Common sun-exposed areas for BCC include the face.; Common sun-exposed areas for BCC include the head.; Common sun-exposed areas for BCC include the neck.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-6d2a190d",
+    "source": "Medical",
+    "question": "What is the primary risk factor for basal cell carcinoma?",
+    "ground_truth": "UV radiation exposure is a primary risk factor for BCC.",
+    "context": "UV radiation exposure is a primary risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5ad931db",
+    "source": "Medical",
+    "question": "How does fair skin affect the risk of developing BCC?",
+    "ground_truth": "Fair skin increases the risk of BCC.",
+    "context": "Fair skin increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-6b0f8bc4",
+    "source": "Medical",
+    "question": "Does older age influence the risk of basal cell carcinoma?",
+    "ground_truth": "Older age is associated with higher risk of BCC.",
+    "context": "Older age is associated with a higher risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-75c9949b",
+    "source": "Medical",
+    "question": "How does family history impact the risk of basal cell carcinoma?",
+    "ground_truth": "Family history of skin cancer increases risk of BCC.",
+    "context": "Family history of skin cancer increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ec091b24",
+    "source": "Medical",
+    "question": "Is immune suppression a risk factor for BCC?",
+    "ground_truth": "Immune suppression is a risk factor for BCC.",
+    "context": "Immune suppression is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-8d39da2e",
+    "source": "Medical",
+    "question": "What are common symptoms of basal cell carcinoma?",
+    "ground_truth": "BCC presents as flat, pale or yellow areas, red patches, shiny bumps, open sores, or brown/black bumps with rolled borders.",
+    "context": "BCC presents as flat, pale areas.; BCC presents as yellow areas.; BCC presents as red patches.; BCC presents as shiny bumps.; BCC presents as open sores.; BCC presents as brown bumps.; BCC presents as black bumps.; BCC presents as bumps with rolled borders.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-88c0b2ba",
+    "source": "Medical",
+    "question": "Which diagnostic methods are used for BCC?",
+    "ground_truth": "Diagnosis of BCC involves medical and family history, physical exam, skin exam, biopsy, and sometimes imaging.",
+    "context": "Diagnosis of BCC involves medical history.; Diagnosis of BCC involves family history.; Diagnosis of BCC involves a physical exam.; Diagnosis of BCC involves a skin exam.; Diagnosis of BCC involves a biopsy.; Diagnosis of BCC may involve imaging.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-a8ee8ba1",
+    "source": "Medical",
+    "question": "What is the most common treatment for basal cell carcinoma?",
+    "ground_truth": "Surgery is the most common treatment for BCC.",
+    "context": "Surgery is the most common treatment for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ec7d8801",
+    "source": "Medical",
+    "question": "When might radiation therapy be used in BCC?",
+    "ground_truth": "Radiation therapy may be used in some cases of BCC.",
+    "context": "Radiation therapy may be used in some cases of basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-9797af69",
+    "source": "Medical",
+    "question": "What is recurrence in the context of BCC?",
+    "ground_truth": "Recurrence refers to BCC returning to the original site or spreading to lymph nodes or distant sites.",
+    "context": "Recurrence refers to basal cell carcinoma returning to the original site.; Recurrence refers to basal cell carcinoma spreading to lymph nodes.; Recurrence refers to basal cell carcinoma spreading to distant sites.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-6884d3fa",
+    "source": "Medical",
+    "question": "What does follow-up for BCC typically include?",
+    "ground_truth": "Follow-up includes full skin exams with a doctor at least once a year.",
+    "context": "Follow-up for basal cell carcinoma includes full skin exams with a doctor.; Follow-up for basal cell carcinoma occurs at least once a year.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-fc6d1c33",
+    "source": "Medical",
+    "question": "Which skin cancer subtype arises from basal cells?",
+    "ground_truth": "Basal cell carcinoma is the skin cancer subtype that arises from basal cells.",
+    "context": "Basal cell carcinoma is the skin cancer subtype that arises from basal cells.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-97abee55",
+    "source": "Medical",
+    "question": "What anatomical layer do basal cells belong to?",
+    "ground_truth": "Basal cells are located in the lower part of the epidermis.",
+    "context": "Basal cells are located in the lower part of the epidermis.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-28d1e2d7",
+    "source": "Medical",
+    "question": "Is sun exposure a risk factor for BCC?",
+    "ground_truth": "Sun exposure is a risk factor for BCC.",
+    "context": "Sun exposure is a risk factor for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4cf524cb",
+    "source": "Medical",
+    "question": "Do tanning beds increase the risk of BCC?",
+    "ground_truth": "Tanning beds are a risk factor for BCC.",
+    "context": "Tanning beds are a risk factor for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-df1408f4",
+    "source": "Medical",
+    "question": "What hair and eye colors are associated with increased BCC risk?",
+    "ground_truth": "Red hair, blond hair, and light eye color increase the risk of BCC.",
+    "context": "Red hair increases the risk of basal cell carcinoma.; Blond hair increases the risk of basal cell carcinoma.; Light eye color increases the risk of basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-17ae12cd",
+    "source": "Medical",
+    "question": "Can a history of radiation therapy increase BCC risk?",
+    "ground_truth": "Radiation therapy is a risk factor for BCC.",
+    "context": "A history of radiation therapy is a risk factor for basal cell carcinoma.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-965ad8a8",
+    "source": "Medical",
+    "question": "What is a common presentation of BCC on the skin?",
+    "ground_truth": "BCC may present as a shiny bump.",
+    "context": "BCC may present as a shiny bump.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5175a85e",
+    "source": "Medical",
+    "question": "What is the role of biopsy in BCC diagnosis?",
+    "ground_truth": "Biopsy is used as a diagnostic method for BCC.",
+    "context": "Biopsy is used as a diagnostic method for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5f2cb8a5",
+    "source": "Medical",
+    "question": "Which systemic therapy may be considered for BCC?",
+    "ground_truth": "Systemic therapy may be used in some cases of BCC.",
+    "context": "Systemic therapy may be used in some cases of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0429f83c",
+    "source": "Medical",
+    "question": "What is included in the management of BCC recurrence?",
+    "ground_truth": "Management of recurrence involves treatment options based on risk and recurrence.",
+    "context": "Management of BCC recurrence involves treatment options.; Treatment options for BCC recurrence are based on risk and recurrence.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-152bec6a",
+    "source": "Medical",
+    "question": "What is the recommended frequency for full skin exams in BCC follow-up?",
+    "ground_truth": "Full skin exams with a doctor are recommended at least once a year.",
+    "context": "Full skin exams with a doctor are recommended at least once a year.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e3923e5f",
+    "source": "Medical",
+    "question": "Can BCC spread to lymph nodes?",
+    "ground_truth": "BCC recurrence can involve spread to lymph nodes.",
+    "context": "BCC recurrence can involve spread to lymph nodes.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0c2f999d",
+    "source": "Medical",
+    "question": "What is a brown or glossy black bump with rolled border a symptom of?",
+    "ground_truth": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "context": "A brown or glossy black bump with rolled border is a symptom of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b6dc1118",
+    "source": "Medical",
+    "question": "What is the relationship between organ transplant and BCC risk?",
+    "ground_truth": "Organ transplant is a risk factor for BCC.",
+    "context": "Organ transplant is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ba2c8007",
+    "source": "Medical",
+    "question": "Is autoimmune disease associated with increased BCC risk?",
+    "ground_truth": "Autoimmune disease is a risk factor for BCC.",
+    "context": "Autoimmune disease is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-5c30dd24",
+    "source": "Medical",
+    "question": "What is the role of imaging in BCC diagnosis?",
+    "ground_truth": "Imaging may be used in the diagnosis of BCC.",
+    "context": "Imaging may be used in the diagnosis of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-8622e4cc",
+    "source": "Medical",
+    "question": "Can BCC occur anywhere on the body?",
+    "ground_truth": "BCC can occur anywhere on the body, but most commonly in sun-exposed areas.",
+    "context": "BCC can occur anywhere on the body.; BCC most commonly occurs in sun-exposed areas.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-b0b58bf2",
+    "source": "Medical",
+    "question": "What is the most common type of skin cancer?",
+    "ground_truth": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "context": "Basal cell carcinoma (BCC) is the most common type of skin cancer.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-90704d0a",
+    "source": "Medical",
+    "question": "From which cells does basal cell carcinoma arise?",
+    "ground_truth": "BCC arises from basal cells in the lower part of the epidermis.",
+    "context": "BCC arises from basal cells.; BCC arises from cells in the lower part of the epidermis.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-941c0004",
+    "source": "Medical",
+    "question": "Which anatomical locations are most commonly affected by BCC?",
+    "ground_truth": "BCC most commonly develops in sun-exposed areas such as the face, head, and neck.",
+    "context": "BCC most commonly develops in sun-exposed areas.; Common anatomical locations affected by BCC include the face.; Common anatomical locations affected by BCC include the head.; Common anatomical locations affected by BCC include the neck.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4bb300c3",
+    "source": "Medical",
+    "question": "What is the primary risk factor for developing basal cell carcinoma?",
+    "ground_truth": "UV radiation exposure is a primary risk factor for BCC.",
+    "context": "UV radiation exposure is a primary risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-acec9fa2",
+    "source": "Medical",
+    "question": "How does fair skin affect the risk of basal cell carcinoma?",
+    "ground_truth": "Fair skin increases the risk of BCC.",
+    "context": "Fair skin increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-7c81f966",
+    "source": "Medical",
+    "question": "Does older age influence the risk of BCC?",
+    "ground_truth": "Older age is associated with higher risk of BCC.",
+    "context": "Older age is associated with a higher risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-f6b5155a",
+    "source": "Medical",
+    "question": "Does a family history of skin cancer affect the risk of BCC?",
+    "ground_truth": "Family history of skin cancer increases risk of BCC.",
+    "context": "Family history of skin cancer increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4061f8c4",
+    "source": "Medical",
+    "question": "Is immune suppression a risk factor for basal cell carcinoma?",
+    "ground_truth": "Immune suppression is a risk factor for BCC.",
+    "context": "Immune suppression is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-89de49a4",
+    "source": "Medical",
+    "question": "What are common symptoms of basal cell carcinoma?",
+    "ground_truth": "BCC presents as flat, pale or yellow areas, red patches, shiny bumps, open sores, or brown/black bumps with rolled borders.",
+    "context": "BCC presents as flat, pale areas.; BCC presents as yellow areas.; BCC presents as red patches.; BCC presents as shiny bumps.; BCC presents as open sores.; BCC presents as brown bumps.; BCC presents as black bumps.; BCC presents as bumps with rolled borders.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-624c452d",
+    "source": "Medical",
+    "question": "What diagnostic methods are used for BCC?",
+    "ground_truth": "Diagnosis of BCC involves medical and family history, physical exam, skin exam, biopsy, and sometimes imaging.",
+    "context": "Diagnosis of BCC involves medical history.; Diagnosis of BCC involves family history.; Diagnosis of BCC involves a physical exam.; Diagnosis of BCC involves a skin exam.; Diagnosis of BCC involves a biopsy.; Diagnosis of BCC sometimes involves imaging.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-4aab8ef7",
+    "source": "Medical",
+    "question": "What is the most common treatment for basal cell carcinoma?",
+    "ground_truth": "Surgery is the most common treatment for BCC.",
+    "context": "Surgery is the most common treatment for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-bc412bb6",
+    "source": "Medical",
+    "question": "When might radiation therapy or systemic therapy be used for BCC?",
+    "ground_truth": "Radiation therapy or systemic therapy may be used in some cases of BCC.",
+    "context": "Radiation therapy may be used in some cases of BCC.; Systemic therapy may be used in some cases of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-cb249d9b",
+    "source": "Medical",
+    "question": "What does recurrence mean in the context of BCC?",
+    "ground_truth": "Recurrence refers to BCC returning to the original site or spreading to lymph nodes or distant sites.",
+    "context": "Recurrence refers to BCC returning to the original site.; Recurrence refers to BCC spreading to lymph nodes.; Recurrence refers to BCC spreading to distant sites.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-e506aa4e",
+    "source": "Medical",
+    "question": "What is recommended for follow-up after BCC treatment?",
+    "ground_truth": "Follow-up includes full skin exams with a doctor at least once a year.",
+    "context": "Follow-up after BCC treatment includes full skin exams.; Follow-up after BCC treatment should be done with a doctor.; Follow-up after BCC treatment is recommended at least once a year.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-14cee623",
+    "source": "Medical",
+    "question": "Which cell type is affected in basal cell carcinoma?",
+    "ground_truth": "Basal cells are the cell type affected in BCC.",
+    "context": "Basal cells are the cell type affected in BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ae28e711",
+    "source": "Medical",
+    "question": "Is sun exposure a risk factor for BCC?",
+    "ground_truth": "Sun exposure is a risk factor for BCC.",
+    "context": "Sun exposure is a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-2bef6940",
+    "source": "Medical",
+    "question": "Are tanning beds considered a risk factor for BCC?",
+    "ground_truth": "Tanning beds are a risk factor for BCC.",
+    "context": "Tanning beds are a risk factor for BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-0047c320",
+    "source": "Medical",
+    "question": "Does having red or blond hair increase the risk of BCC?",
+    "ground_truth": "Red hair and blond hair increase the risk of BCC.",
+    "context": "Red hair increases the risk of BCC.; Blond hair increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  },
+  {
+    "id": "Medical-ca377f8d",
+    "source": "Medical",
+    "question": "Is light eye color associated with increased risk of BCC?",
+    "ground_truth": "Light eye color increases the risk of BCC.",
+    "context": "Light eye color increases the risk of BCC.",
+    "question_type": "Fact Retrieval"
+  }
+]

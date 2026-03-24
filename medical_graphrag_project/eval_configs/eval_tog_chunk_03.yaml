@@ -1,0 +1,16 @@
+dataset:
+  path: "F:/KL/gtog-eval/Datasets/Questions/medical_questions_eval_subset_200_chunk_03.json"
+
+indexes:
+  medical: "F:/KL/gtog-eval/medical_graphrag_project"
+
+methods:
+  - tog
+
+output:
+  dir: "eval_results/tog_chunk_03"
+  save_intermediate: true
+
+judge:
+  model: null
+  temperature: 0.0

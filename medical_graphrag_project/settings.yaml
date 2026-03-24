@@ -19,8 +19,8 @@ models:
     retry_strategy: exponential_backoff
     max_retries: 7
     max_retry_wait: 60.0
-    tokens_per_minute: 100000
-    requests_per_minute: 1000
+    tokens_per_minute: 1000000
+    requests_per_minute: 10000
 
   # Lighter model for querying (local, global, drift, basic, ToG search)
   query_chat_model:
