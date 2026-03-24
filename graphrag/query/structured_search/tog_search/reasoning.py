@@ -4,6 +4,7 @@ from typing import List, Tuple
 from graphrag.data_model.text_unit import TextUnit
 from graphrag.language_model.protocol.base import ChatModel
 from graphrag.query.context_builder.source_context import build_text_unit_context
+from graphrag.tokenizer.tokenizer import Tokenizer
 from .state import ExplorationNode
 from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
 
@@ -25,10 +26,18 @@ class ToGReasoning:
         model: ChatModel,
         temperature: float = 0.0,
         reasoning_prompt: str | None = None,
+        tokenizer: Tokenizer | None = None,
     ):
         self.model = model
         self.temperature = temperature
         self.reasoning_prompt = reasoning_prompt or TOG_REASONING_PROMPT
+        self.tokenizer = tokenizer
+
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens using the tokenizer when available, otherwise estimate."""
+        if self.tokenizer:
+            return self.tokenizer.num_tokens(text)
+        return len(text) // 4
 
     def _load_reasoning_prompt_template(self) -> str:
         """Load the configured reasoning prompt template."""
@@ -104,7 +113,7 @@ Structure your response as:
 3. Key relationships that support your answer
 """
 
-        metrics.prompt_tokens = len(prompt.split()) * 4 // 3
+        metrics.prompt_tokens = self._count_tokens(prompt)
 
         answer = ""
         try:
@@ -120,7 +129,7 @@ Structure your response as:
             answer = f"Error generating answer: {str(e)}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
 
         metrics.llm_calls = 1
-        metrics.output_tokens = len(answer.split()) * 4 // 3
+        metrics.output_tokens = self._count_tokens(answer)
 
         # Extract reasoning paths for transparency
         reasoning_paths = [self._path_to_string(node) for node in exploration_paths]
@@ -305,7 +314,7 @@ If you answer YES, keep the answer grounded in the provided context and preserve
 If you answer NO, do not answer the question itself.
 """
 
-        metrics.prompt_tokens = len(prompt.split()) * 4 // 3
+        metrics.prompt_tokens = self._count_tokens(prompt)
 
         response = ""
         async for chunk in self.model.achat_stream(
@@ -316,7 +325,7 @@ If you answer NO, do not answer the question itself.
             response += chunk
 
         metrics.llm_calls = 1
-        metrics.output_tokens = len(response.split()) * 4 // 3
+        metrics.output_tokens = self._count_tokens(response)
 
         if response.strip().upper().startswith("YES:"):
             answer = response[4:].strip()

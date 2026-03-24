@@ -1,3 +1,4 @@
+import random
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, List, Optional, Tuple, Union, cast
@@ -121,14 +122,16 @@ class ToGSearch:
         ) in self._stream_search_with_metrics(query, conversation_history):
             if chunk:
                 response_chunks.append(chunk)
-            context_paths = paths
+            if paths:
+                context_paths = paths
             chunk_ids = ctx_chunk_ids
             if chunk_metrics:
                 if isinstance(chunk_metrics, PruningMetrics):
                     metrics.add_pruning(chunk_metrics)
                 elif isinstance(chunk_metrics, ReasoningMetrics):
                     metrics.add_reasoning(chunk_metrics)
-            context_text = ctx_text
+            if ctx_text:
+                context_text = ctx_text
 
         response = "".join(response_chunks)
         completion_time = time.time() - start_time
@@ -249,6 +252,29 @@ class ToGSearch:
                 )
                 state.add_node(initial_node)
 
+        # Check depth-0: can starting entities alone answer the query?
+        seed_nodes = state.get_current_frontier()
+        seed_text_units = self.explorer.get_text_units_for_nodes(seed_nodes)
+        seed_chunk_ids = [tu.id for tu in seed_text_units]
+        (
+            should_terminate,
+            answer,
+            early_term_metrics,
+        ) = await self.reasoning_module.check_early_termination(
+            query,
+            seed_nodes,
+            conversation_history_context=history_context,
+            text_units=seed_text_units,
+        )
+        if should_terminate and answer:
+            reasoning_paths = self.reasoning_module.get_reasoning_paths(seed_nodes)
+            early_context_text = self.reasoning_module._format_paths(
+                seed_nodes, text_units=seed_text_units
+            )
+            yield (answer, reasoning_paths, early_term_metrics, early_context_text, seed_chunk_ids)
+            return
+        yield ("", [], early_term_metrics, "", seed_chunk_ids)
+
         # Exploration loop
         while state.current_depth < state.max_depth:
             # Get current frontier
@@ -280,9 +306,9 @@ class ToGSearch:
                 # Yield pruning metrics
                 yield ("", [], pruning_metrics, "", [])
 
-                # Keep top entities based on scores
+                # Keep top relations based on scores (capped by beam width)
                 scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
-                top_relations = scored_relations[: self.num_retain_entity]
+                top_relations = scored_relations[: self.width]
 
                 # Build entity candidates for a second-stage prune (closer to original ToG)
                 # so we do not rely on relation scores alone when many candidates exist.
@@ -310,6 +336,10 @@ class ToGSearch:
 
                 if not candidate_data:
                     continue
+
+                # Sample entity candidates if too many (matches original ToG paper semantics)
+                if len(candidate_data) > self.num_retain_entity:
+                    candidate_data = random.sample(candidate_data, self.num_retain_entity)
 
                 entity_candidates = [
                     (target_id, target_name, target_full_desc)
@@ -349,7 +379,8 @@ class ToGSearch:
                     entity_score = (
                         entity_scores[idx] if idx < len(entity_scores) else 5.0
                     )
-                    combined_score = rel_score * (max(entity_score, 0.0) / 10.0)
+                    hop_score = rel_score * (max(entity_score, 0.0) / 10.0)
+                    combined_score = node.score * hop_score
                     new_node = ExplorationNode(
                         entity_id=target_id,
                         entity_name=target_name,
