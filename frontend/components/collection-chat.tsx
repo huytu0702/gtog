@@ -135,15 +135,33 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
     const searchMutation = useMutation({
         mutationFn: async (query: string) => {
-            switch (method) {
-                case 'global': return searchApi.global(collection.id, query);
-                case 'local': return searchApi.local(collection.id, query);
-                case 'tog': return searchApi.tog(collection.id, query);
-                case 'drift': return searchApi.drift(collection.id, query);
-                case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
-                case 'web': return searchApi.web(collection.id, query);
-                default: return searchApi.agent(collection.id, query, convHistory, convSummary);
+            // Helper to get the base search result for the selected method
+            const fetchBase = () => {
+                switch (method) {
+                    case 'global': return searchApi.global(collection.id, query);
+                    case 'local': return searchApi.local(collection.id, query);
+                    case 'tog': return searchApi.tog(collection.id, query);
+                    case 'drift': return searchApi.drift(collection.id, query);
+                    case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
+                    case 'web': return searchApi.web(collection.id, query);
+                    default: return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
+                }
+            };
+
+            // For non-agent methods with web search enabled, run both in parallel
+            if (webSearchEnabled && method !== 'agent' && method !== 'web') {
+                const [baseResult, webResult] = await Promise.all([
+                    fetchBase(),
+                    searchApi.web(collection.id, query),
+                ]);
+                return {
+                    ...baseResult,
+                    web_response: webResult.response,
+                    web_sources: webResult.sources,
+                };
             }
+
+            return fetchBase();
         },
         onSuccess: async (data: SearchResult | any, query: string) => {
             const methodUsed = data.method_used || data.method;
@@ -360,10 +378,14 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                             <p className="font-bold mb-1">Tip:</p>
                             {method === 'agent' && !webSearchEnabled && 'Automatically selects the best search method for your query.'}
                             {method === 'agent' && webSearchEnabled && 'Auto + Web: Combines knowledge base with live web search results.'}
-                            {method === 'global' && 'Best for overview questions about the entire collection.'}
-                            {method === 'local' && 'Best for specific questions about entities and their relationships.'}
-                            {method === 'tog' && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
-                            {method === 'drift' && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
+                            {method === 'global' && !webSearchEnabled && 'Best for overview questions about the entire collection.'}
+                            {method === 'global' && webSearchEnabled && 'Global + Web: Overview of collection combined with live web results.'}
+                            {method === 'local' && !webSearchEnabled && 'Best for specific questions about entities and their relationships.'}
+                            {method === 'local' && webSearchEnabled && 'Local + Web: Entity search combined with live web results.'}
+                            {method === 'tog' && !webSearchEnabled && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
+                            {method === 'tog' && webSearchEnabled && 'ToG + Web: Deep graph reasoning combined with live web results.'}
+                            {method === 'drift' && !webSearchEnabled && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
+                            {method === 'drift' && webSearchEnabled && 'DRIFT + Web: Dynamic reasoning combined with live web results.'}
                             {method === 'web' && 'Search the web for current information not in your collection.'}
                         </div>
 
@@ -374,20 +396,20 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                             </label>
                             <button
                                 onClick={() => setWebSearchEnabled((v) => !v)}
-                                disabled={method !== 'agent'}
+                                disabled={method === 'web'}
                                 className={cn(
                                     'w-full px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center justify-between',
-                                    webSearchEnabled && method === 'agent'
+                                    webSearchEnabled && method !== 'web'
                                         ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
                                         : 'bg-white hover:bg-gray-100',
-                                    method !== 'agent' && 'opacity-40 cursor-not-allowed'
+                                    method === 'web' && 'opacity-40 cursor-not-allowed'
                                 )}
                             >
                                 <span>Kết hợp Web</span>
-                                <span>{webSearchEnabled && method === 'agent' ? 'ON' : 'OFF'}</span>
+                                <span>{webSearchEnabled && method !== 'web' ? 'ON' : 'OFF'}</span>
                             </button>
-                            {method !== 'agent' && (
-                                <p className="text-xs text-gray-500 mt-1">Chỉ hoạt động với Auto (Agent)</p>
+                            {method === 'web' && (
+                                <p className="text-xs text-gray-500 mt-1">Không áp dụng khi đã chọn Web Search</p>
                             )}
                         </div>
                     </div>
