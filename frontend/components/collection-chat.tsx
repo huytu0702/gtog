@@ -110,7 +110,7 @@ type Message = {
     webSources?: Array<{ id: number; title: string; url?: string }>;
 };
 
-type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent' | 'web';
+type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent';
 
 // Summarize when history exceeds this many user turns
 const SUMMARIZE_THRESHOLD = 6;
@@ -143,13 +143,12 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                     case 'tog': return searchApi.tog(collection.id, query);
                     case 'drift': return searchApi.drift(collection.id, query);
                     case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
-                    case 'web': return searchApi.web(collection.id, query);
                     default: return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
                 }
             };
 
             // For non-agent methods with web search enabled, run both in parallel
-            if (webSearchEnabled && method !== 'agent' && method !== 'web') {
+            if (webSearchEnabled && method !== 'agent') {
                 const [baseResult, webResult] = await Promise.all([
                     fetchBase(),
                     searchApi.web(collection.id, query),
@@ -297,7 +296,6 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
                         {msg.method && (
                             <div className="text-xs text-gray-500 font-bold flex items-center gap-1">
-                                {msg.method === 'web' && <Globe className="w-3 h-3" />}
                                 {msg.method === 'agent' && <Sparkles className="w-3 h-3" />}
                                 Used {msg.method} search
                             </div>
@@ -355,7 +353,6 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                     { id: 'local', label: 'Local', icon: null },
                                     { id: 'tog', label: 'ToG', icon: null },
                                     { id: 'drift', label: 'DRIFT', icon: null },
-                                    { id: 'web', label: 'Web Search', icon: Globe },
                                 ] as const).map((m) => (
                                     <button
                                         key={m.id}
@@ -386,7 +383,6 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                             {method === 'tog' && webSearchEnabled && 'ToG + Web: Deep graph reasoning combined with live web results.'}
                             {method === 'drift' && !webSearchEnabled && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
                             {method === 'drift' && webSearchEnabled && 'DRIFT + Web: Dynamic reasoning combined with live web results.'}
-                            {method === 'web' && 'Search the web for current information not in your collection.'}
                         </div>
 
                         <div className="border-t-2 border-black pt-4">
@@ -396,21 +392,16 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                             </label>
                             <button
                                 onClick={() => setWebSearchEnabled((v) => !v)}
-                                disabled={method === 'web'}
                                 className={cn(
                                     'w-full px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center justify-between',
-                                    webSearchEnabled && method !== 'web'
+                                    webSearchEnabled
                                         ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
-                                        : 'bg-white hover:bg-gray-100',
-                                    method === 'web' && 'opacity-40 cursor-not-allowed'
+                                        : 'bg-white hover:bg-gray-100'
                                 )}
                             >
                                 <span>Kết hợp Web</span>
-                                <span>{webSearchEnabled && method !== 'web' ? 'ON' : 'OFF'}</span>
+                                <span>{webSearchEnabled ? 'ON' : 'OFF'}</span>
                             </button>
-                            {method === 'web' && (
-                                <p className="text-xs text-gray-500 mt-1">Không áp dụng khi đã chọn Web Search</p>
-                            )}
                         </div>
                     </div>
                 </NBCard>
