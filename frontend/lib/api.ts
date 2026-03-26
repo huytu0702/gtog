@@ -83,6 +83,12 @@ export interface AgentSearchResult {
         url?: string;
         text_unit_id?: string;
     }>;
+    web_response?: string | null;
+    web_sources?: Array<{
+        id: number;
+        title: string;
+        url?: string;
+    }>;
 }
 
 export interface SummarizeResult {
@@ -183,12 +189,14 @@ export const searchApi = {
         query: string,
         conversationHistory: ConversationTurn[] = [],
         conversationSummary?: string,
+        webSearchEnabled: boolean = false,
     ) => {
         const response = await api.post<AgentSearchResult>(`/collections/${collectionId}/search/agent`, {
             query,
             stream: false,
             conversation_history: conversationHistory,
             conversation_summary: conversationSummary,
+            web_search_enabled: webSearchEnabled,
         });
         return response.data;
     },

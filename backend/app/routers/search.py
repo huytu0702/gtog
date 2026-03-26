@@ -1,5 +1,6 @@
 """Search endpoints for all GraphRAG search methods."""
 
+import asyncio
 import json
 import logging
 
@@ -152,9 +153,28 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         _raise_for_unknown(e)
 
 
+async def _run_graphrag_search(route_decision, collection_id: str, search_query: str):
+    """Dispatch to the appropriate GraphRAG search method based on route decision."""
+    if route_decision.method == "global":
+        return await query_service.global_search(
+            collection_id=collection_id, query=search_query
+        )
+    elif route_decision.method == "tog":
+        return await query_service.tog_search(
+            collection_id=collection_id, query=search_query
+        )
+    elif route_decision.method == "drift":
+        return await query_service.drift_search(
+            collection_id=collection_id, query=search_query
+        )
+    else:
+        return await query_service.local_search(
+            collection_id=collection_id, query=search_query
+        )
+
+
 @router.post("/agent/summarize", response_model=SummarizeResponse)
-async def summarize_conversation(collection_id: str, request: SummarizeRequest):
-    """
+async def summarize_conversation(collection_id: str, request: SummarizeRequest):    """
     Compress conversation history into a summary.
 
     Call this when conversation_history exceeds your threshold (e.g. 6 turns).
@@ -216,44 +236,36 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
 
         search_query = route_decision.rewritten_query or request.query
 
-        if route_decision.method == "web":
-            from ..services import web_search_service
+        if request.web_search_enabled:
+            # Run GraphRAG + web search in parallel; each synthesizes independently
+            graphrag_result, web_result = await asyncio.gather(
+                _run_graphrag_search(route_decision, collection_id, search_query),
+                web_search_service.search(search_query),
+            )
 
-            result = await web_search_service.search(search_query)
             if session_id:
                 await conversation_service.append_exchange(
                     collection_id=collection_id,
                     session_id=session_id,
                     user_query=request.query,
-                    assistant_response=result.response,
+                    assistant_response=graphrag_result.response,
                     rewritten_query=route_decision.rewritten_query,
-                    method_used="web",
+                    method_used=route_decision.method,
                 )
+
             return AgentSearchResponse(
-                method_used="web",
+                method_used=route_decision.method,
                 router_reasoning=route_decision.reasoning,
                 rewritten_query=route_decision.rewritten_query,
-                response=result.response,
-                sources=[s.model_dump() for s in result.sources],
+                response=graphrag_result.response,
+                sources=[],
+                context_data=graphrag_result.context_data,
+                web_response=web_result.response,
+                web_sources=[s.model_dump() for s in web_result.sources],
                 session_id=session_id,
             )
 
-        if route_decision.method == "global":
-            result = await query_service.global_search(
-                collection_id=collection_id, query=search_query
-            )
-        elif route_decision.method == "tog":
-            result = await query_service.tog_search(
-                collection_id=collection_id, query=search_query
-            )
-        elif route_decision.method == "drift":
-            result = await query_service.drift_search(
-                collection_id=collection_id, query=search_query
-            )
-        else:
-            result = await query_service.local_search(
-                collection_id=collection_id, query=search_query
-            )
+        result = await _run_graphrag_search(route_decision, collection_id, search_query)
 
         if session_id:
             await conversation_service.append_exchange(
@@ -373,46 +385,27 @@ def _build_agent_stream_response(
             assistant_response = ""
 
             # Execute search
-            if route_decision.method == "web":
-                async for chunk in web_search_service.search_streaming(search_query):
-                    assistant_response += chunk
-                    yield {"event": "content", "data": json.dumps({"delta": chunk})}
-                sources = []
-            else:
-                # For GraphRAG methods, get full response (non-streaming for now)
-                if route_decision.method == "global":
-                    result = await query_service.global_search(
-                        collection_id, search_query
-                    )
-                elif route_decision.method == "tog":
-                    result = await query_service.tog_search(collection_id, search_query)
-                elif route_decision.method == "drift":
-                    result = await query_service.drift_search(
-                        collection_id, search_query
-                    )
-                else:
-                    result = await query_service.local_search(
-                        collection_id, search_query
-                    )
-                assistant_response = result.response
+            # For GraphRAG methods, get full response (non-streaming for now)
+            result = await _run_graphrag_search(route_decision, collection_id, search_query)
+            assistant_response = result.response
 
-                # Coerce response to str for streaming chunks (response may be
-                # str | dict | list depending on the search method).
-                response_str = (
-                    result.response
-                    if isinstance(result.response, str)
-                    else json.dumps(result.response)
-                )
+            # Coerce response to str for streaming chunks (response may be
+            # str | dict | list depending on the search method).
+            response_str = (
+                result.response
+                if isinstance(result.response, str)
+                else json.dumps(result.response)
+            )
 
-                # Stream the response in chunks
-                for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
-                    yield {
-                        "event": "content",
-                        "data": json.dumps({
-                            "delta": response_str[i : i + _SSE_CHUNK_SIZE]
-                        }),
-                    }
-                sources = []
+            # Stream the response in chunks
+            for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
+                yield {
+                    "event": "content",
+                    "data": json.dumps({
+                        "delta": response_str[i : i + _SSE_CHUNK_SIZE]
+                    }),
+                }
+            sources = []
 
             if session_id:
                 await conversation_service.append_exchange(

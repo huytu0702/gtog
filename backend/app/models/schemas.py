@@ -200,6 +200,7 @@ class AgentSearchRequest(BaseModel):
     session_id: str | None = Field(default=None, min_length=1, max_length=128)
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
     conversation_summary: str | None = Field(default=None, max_length=2000)
+    web_search_enabled: bool = Field(default=False)
 
 
 class WebSearchRequest(BaseModel):
@@ -219,6 +220,8 @@ class AgentSearchResponse(BaseModel):
     sources: list = Field(default_factory=list)
     context_data: dict | None = None
     session_id: str | None = None
+    web_response: str | None = None
+    web_sources: list = Field(default_factory=list)
 
 
 class SessionCreateResponse(BaseModel):

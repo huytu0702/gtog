@@ -106,6 +106,8 @@ type Message = {
     content: string;
     context?: any;
     method?: string;
+    webContent?: string;
+    webSources?: Array<{ id: number; title: string; url?: string }>;
 };
 
 type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent' | 'web';
@@ -119,6 +121,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     ]);
     const [input, setInput] = React.useState('');
     const [method, setMethod] = React.useState<SearchMethod>('agent');
+    const [webSearchEnabled, setWebSearchEnabled] = React.useState(false);
     const [isStreaming, setIsStreaming] = React.useState(false);
     const [convHistory, setConvHistory] = React.useState<ConversationTurn[]>([]);
     const [convSummary, setConvSummary] = React.useState<string | undefined>(undefined);
@@ -137,7 +140,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                 case 'local': return searchApi.local(collection.id, query);
                 case 'tog': return searchApi.tog(collection.id, query);
                 case 'drift': return searchApi.drift(collection.id, query);
-                case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary);
+                case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
                 case 'web': return searchApi.web(collection.id, query);
                 default: return searchApi.agent(collection.id, query, convHistory, convSummary);
             }
@@ -154,7 +157,14 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
             setMessages((prev) => [
                 ...prev,
-                { role: 'bot', content, context: data.context_data, method: methodUsed },
+                {
+                    role: 'bot',
+                    content,
+                    context: data.context_data,
+                    method: methodUsed,
+                    webContent: (data as any).web_response ?? undefined,
+                    webSources: (data as any).web_sources ?? undefined,
+                },
             ]);
 
             // Update conversation history for agent method
@@ -242,6 +252,31 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                         <MessageContent text={msg.content} context={msg.context ?? null} />
                                     </div>
 
+                                    {msg.webContent && (
+                                        <div className="p-4 border-2 border-black shadow-hard-sm bg-blue-50">
+                                            <div className="flex items-center gap-1 mb-2 text-xs font-bold text-blue-700">
+                                                <Globe className="w-3 h-3" />
+                                                Web Search Results
+                                            </div>
+                                            <MessageContent text={msg.webContent} context={null} />
+                                            {msg.webSources && msg.webSources.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                    {msg.webSources.map((s) => (
+                                                        <a
+                                                            key={s.id}
+                                                            href={s.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="text-xs text-blue-600 underline hover:text-blue-800"
+                                                        >
+                                                            [{s.id}] {s.title}
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                         {msg.method && (
                             <div className="text-xs text-gray-500 font-bold flex items-center gap-1">
                                 {msg.method === 'web' && <Globe className="w-3 h-3" />}
@@ -323,12 +358,37 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
                         <div className="p-4 bg-yellow-100 border-2 border-black text-sm">
                             <p className="font-bold mb-1">Tip:</p>
-                            {method === 'agent' && 'Automatically selects the best search method for your query.'}
+                            {method === 'agent' && !webSearchEnabled && 'Automatically selects the best search method for your query.'}
+                            {method === 'agent' && webSearchEnabled && 'Auto + Web: Combines knowledge base with live web search results.'}
                             {method === 'global' && 'Best for overview questions about the entire collection.'}
                             {method === 'local' && 'Best for specific questions about entities and their relationships.'}
                             {method === 'tog' && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
                             {method === 'drift' && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
                             {method === 'web' && 'Search the web for current information not in your collection.'}
+                        </div>
+
+                        <div className="border-t-2 border-black pt-4">
+                            <label className="block font-bold mb-2 flex items-center gap-2">
+                                <Globe className="w-4 h-4" />
+                                Web Search
+                            </label>
+                            <button
+                                onClick={() => setWebSearchEnabled((v) => !v)}
+                                disabled={method !== 'agent'}
+                                className={cn(
+                                    'w-full px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center justify-between',
+                                    webSearchEnabled && method === 'agent'
+                                        ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
+                                        : 'bg-white hover:bg-gray-100',
+                                    method !== 'agent' && 'opacity-40 cursor-not-allowed'
+                                )}
+                            >
+                                <span>Kết hợp Web</span>
+                                <span>{webSearchEnabled && method === 'agent' ? 'ON' : 'OFF'}</span>
+                            </button>
+                            {method !== 'agent' && (
+                                <p className="text-xs text-gray-500 mt-1">Chỉ hoạt động với Auto (Agent)</p>
+                            )}
                         </div>
                     </div>
                 </NBCard>

@@ -15,7 +15,7 @@ from ..models.schemas import ConversationTurn
 
 logger = logging.getLogger(__name__)
 
-SearchMethodType = Literal["local", "global", "tog", "drift", "web"]
+SearchMethodType = Literal["local", "global", "tog", "drift"]
 
 RECENT_TURNS_IN_PROMPT = 3  # user turns to include in prompt (after summary)
 _LLM_MAX_TOKENS = 500
@@ -222,7 +222,7 @@ Collection: {collection_context}
             decision = json.loads(content)
 
             method = decision.get("method", "local").lower()
-            if method not in ("local", "global", "tog", "drift", "web"):
+            if method not in ("local", "global", "tog", "drift"):
                 logger.warning(
                     "Invalid method '%s' returned, defaulting to 'local'", method
                 )
