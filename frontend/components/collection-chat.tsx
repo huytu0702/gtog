@@ -6,15 +6,15 @@ import { searchApi, Collection, SearchResult, ConversationTurn } from '@/lib/api
 import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { NBInput } from '@/components/ui/NBInput';
-import { Send, Bot, User, Settings, Loader2, Globe, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Settings, Loader2, Globe, Sparkles, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DATASET_COLORS: Record<string, string> = {
-    Reports:       'bg-blue-100 text-blue-800 border-blue-400',
-    Entities:      'bg-green-100 text-green-800 border-green-400',
+    Reports: 'bg-blue-100 text-blue-800 border-blue-400',
+    Entities: 'bg-green-100 text-green-800 border-green-400',
     Relationships: 'bg-purple-100 text-purple-800 border-purple-400',
-    Sources:       'bg-orange-100 text-orange-800 border-orange-400',
-    Claims:        'bg-red-100 text-red-800 border-red-400',
+    Sources: 'bg-orange-100 text-orange-800 border-orange-400',
+    Claims: 'bg-red-100 text-red-800 border-red-400',
 };
 
 // context_data shape: { [dataset: string]: { [id: string]: { name: string, description: string } } }
@@ -121,7 +121,13 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     ]);
     const [input, setInput] = React.useState('');
     const [method, setMethod] = React.useState<SearchMethod>('agent');
+    const [showAdvancedMethods, setShowAdvancedMethods] = React.useState(false);
     const [webSearchEnabled, setWebSearchEnabled] = React.useState(false);
+
+    // Auto-expand manual methods panel when an advanced method is active
+    React.useEffect(() => {
+        if (method !== 'agent') setShowAdvancedMethods(true);
+    }, [method]);
     const [isStreaming, setIsStreaming] = React.useState(false);
     const [convHistory, setConvHistory] = React.useState<ConversationTurn[]>([]);
     const [convSummary, setConvSummary] = React.useState<string | undefined>(undefined);
@@ -233,9 +239,9 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6" style={{ height: 'calc(100vh - 120px)' }}>
             {/* Chat Area */}
-            <div className="lg:col-span-3 flex flex-col h-[600px] lg:h-full min-h-0">
+            <div className="lg:col-span-3 flex flex-col h-full min-h-0">
                 <NBCard className="flex-1 h-full flex flex-col p-0 overflow-hidden bg-gray-50">
                     {/* Messages */}
                     <div
@@ -294,12 +300,12 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                         </div>
                                     )}
 
-                        {msg.method && (
-                            <div className="text-xs text-gray-500 font-bold flex items-center gap-1">
-                                {msg.method === 'agent' && <Sparkles className="w-3 h-3" />}
-                                Used {msg.method} search
-                            </div>
-                        )}
+                                    {msg.method && (
+                                        <div className="text-xs text-gray-500 font-bold flex items-center gap-1">
+                                            {msg.method === 'agent' && <Sparkles className="w-3 h-3" />}
+                                            Used {msg.method} search
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -336,8 +342,8 @@ export function CollectionChat({ collection }: CollectionChatProps) {
             </div>
 
             {/* Settings Sidebar */}
-            <div className="lg:col-span-1">
-                <NBCard className="h-full bg-white">
+            <div className="lg:col-span-1 h-full min-h-0">
+                <NBCard className="h-full bg-white overflow-y-auto">
                     <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                         <Settings className="w-5 h-5" />
                         Search Settings
@@ -347,27 +353,55 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                         <div>
                             <label className="block font-bold mb-2">Search Method</label>
                             <div className="space-y-2">
-                                {([
-                                    { id: 'agent', label: 'Auto (Agent)', icon: Sparkles },
-                                    { id: 'global', label: 'Global', icon: null },
-                                    { id: 'local', label: 'Local', icon: null },
-                                    { id: 'tog', label: 'ToG', icon: null },
-                                    { id: 'drift', label: 'DRIFT', icon: null },
-                                ] as const).map((m) => (
-                                    <button
-                                        key={m.id}
-                                        onClick={() => setMethod(m.id)}
-                                        className={cn(
-                                            'w-full text-left px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center gap-2',
-                                            method === m.id
-                                                ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
-                                                : 'bg-white hover:bg-gray-100'
-                                        )}
-                                    >
-                                        {m.icon && <m.icon className="w-4 h-4" />}
-                                        {m.label}
-                                    </button>
-                                ))}
+                                {/* Auto (Agent) — always visible */}
+                                <button
+                                    onClick={() => setMethod('agent')}
+                                    className={cn(
+                                        'w-full text-left px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center gap-2',
+                                        method === 'agent'
+                                            ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
+                                            : 'bg-white hover:bg-gray-100'
+                                    )}
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    Auto (Agent)
+                                </button>
+
+                                {/* Toggle advanced methods */}
+                                <button
+                                    onClick={() => setShowAdvancedMethods((v) => !v)}
+                                    className="w-full text-left px-4 py-2 border-2 border-black border-dashed font-bold text-xs uppercase flex items-center justify-between text-gray-500 hover:bg-gray-50 transition-all"
+                                >
+                                    <span>Manual Methods</span>
+                                    <ChevronDown
+                                        className={cn('w-4 h-4 transition-transform duration-200', showAdvancedMethods && 'rotate-180')}
+                                    />
+                                </button>
+
+                                {/* Collapsible: Global, Local, ToG, DRIFT */}
+                                {showAdvancedMethods && (
+                                    <div className="space-y-2">
+                                        {([
+                                            { id: 'global', label: 'Global' },
+                                            { id: 'local', label: 'Local' },
+                                            { id: 'tog', label: 'ToG' },
+                                            { id: 'drift', label: 'DRIFT' },
+                                        ] as const).map((m) => (
+                                            <button
+                                                key={m.id}
+                                                onClick={() => setMethod(m.id)}
+                                                className={cn(
+                                                    'w-full text-left px-4 py-3 border-2 border-black font-bold transition-all uppercase',
+                                                    method === m.id
+                                                        ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
+                                                        : 'bg-white hover:bg-gray-100'
+                                                )}
+                                            >
+                                                {m.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -399,7 +433,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                         : 'bg-white hover:bg-gray-100'
                                 )}
                             >
-                                <span>Kết hợp Web</span>
+                                <span>Web</span>
                                 <span>{webSearchEnabled ? 'ON' : 'OFF'}</span>
                             </button>
                         </div>
