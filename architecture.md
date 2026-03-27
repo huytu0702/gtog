@@ -32,10 +32,12 @@ GToG is a **knowledge-graph-based RAG system** that transforms unstructured docu
 
 Standard vector-similarity RAG fails at two classes of questions:
 
-| Problem | Baseline RAG | GraphRAG |
-|---------|-------------|----------|
-| Multi-hop reasoning across disparate facts | Fails — no traversal | Supported via graph paths |
-| Holistic summarization of a large corpus | Fails — no hierarchy | Supported via community reports |
+
+| Problem                                    | Baseline RAG         | GraphRAG                        |
+| ------------------------------------------ | -------------------- | ------------------------------- |
+| Multi-hop reasoning across disparate facts | Fails — no traversal | Supported via graph paths       |
+| Holistic summarization of a large corpus   | Fails — no hierarchy | Supported via community reports |
+
 
 GraphRAG builds a **hierarchical knowledge graph** (entities → relationships → communities) and lets each query method pick the most appropriate slice of that graph.
 
@@ -80,16 +82,18 @@ ToG adds a sixth dimension: **iterative beam-search exploration** with LLM-guide
 
 ### Component Summary
 
-| Component | Role | Runtime |
-|-----------|------|---------|
-| **Frontend** | Neo-brutalist SPA for collections, documents, and chat | Next.js 16 on Node 20 |
-| **API Backend** | REST + SSE gateway; routes queries, manages jobs | FastAPI (Python 3.11) |
-| **Indexing Worker** | Async consumer of indexing jobs from queue | Same image, `APP_ROLE=worker` |
-| **GraphRAG Core** | Knowledge graph build + query library | Python package |
-| **Cosmos DB** | **Unified Storage**: Control-plane metadata + Vector Store | Azure PaaS |
-| **Blob Storage** | Raw documents + indexed Parquet artifacts | Azure PaaS |
-| **Storage Queue** | Durable indexing job dispatch | Azure PaaS |
-| **Key Vault** | Runtime secret management | Azure PaaS |
+
+| Component           | Role                                                       | Runtime                       |
+| ------------------- | ---------------------------------------------------------- | ----------------------------- |
+| **Frontend**        | Neo-brutalist SPA for collections, documents, and chat     | Next.js 16 on Node 20         |
+| **API Backend**     | REST + SSE gateway; routes queries, manages jobs           | FastAPI (Python 3.11)         |
+| **Indexing Worker** | Async consumer of indexing jobs from queue                 | Same image, `APP_ROLE=worker` |
+| **GraphRAG Core**   | Knowledge graph build + query library                      | Python package                |
+| **Cosmos DB**       | **Unified Storage**: Control-plane metadata + Vector Store | Azure PaaS                    |
+| **Blob Storage**    | Raw documents + indexed Parquet artifacts                  | Azure PaaS                    |
+| **Storage Queue**   | Durable indexing job dispatch                              | Azure PaaS                    |
+| **Key Vault**       | Runtime secret management                                  | Azure PaaS                    |
+
 
 ---
 
@@ -132,8 +136,8 @@ frontend/
 
 1. **Dashboard** — CRUD for collections; each card shows document count and index status.
 2. **Collection Detail** — two tabs:
-   - *Documents*: upload files, trigger indexing, monitor job status via polling.
-   - *Chat*: select search method (Global / Local / DRIFT / ToG / Agent), send queries, receive SSE-streamed responses.
+  - *Documents*: upload files, trigger indexing, monitor job status via polling.
+  - *Chat*: select search method (Global / Local / DRIFT / ToG / Agent), send queries, receive SSE-streamed responses.
 3. **Agent Search** — calls `/agent/stream` SSE endpoint; frontend renders routing decision and progressive content chunks.
 
 ### API Communication
@@ -206,21 +210,23 @@ Request → CORS preflight check
 
 ### Router Inventory
 
-| Prefix | Purpose |
-|--------|---------|
-| `GET/POST/DELETE /api/collections` | Collection management |
-| `POST /api/collections/{id}/documents` | Document upload |
-| `GET /api/collections/{id}/documents` | List documents |
-| `POST /api/collections/{id}/index` | Submit indexing job |
-| `GET /api/collections/{id}/index/jobs` | List jobs |
-| `GET /api/collections/{id}/index/jobs/{job_id}` | Job status |
-| `POST /api/collections/{id}/search/{method}` | Direct search (global/local/drift/tog) |
-| `POST /api/collections/{id}/search/agent` | Agent-routed search |
-| `GET/POST /api/collections/{id}/search/agent/stream` | SSE streaming agent search |
-| `POST /api/collections/{id}/search/agent/summarize` | Conversation compression |
-| `POST /api/collections/{id}/search/web` | Direct Tavily web search |
-| `GET /health` | Liveness probe |
-| `GET /health/readiness` | Readiness probe (Cosmos, Blob, Queue, KV) |
+
+| Prefix                                               | Purpose                                   |
+| ---------------------------------------------------- | ----------------------------------------- |
+| `GET/POST/DELETE /api/collections`                   | Collection management                     |
+| `POST /api/collections/{id}/documents`               | Document upload                           |
+| `GET /api/collections/{id}/documents`                | List documents                            |
+| `POST /api/collections/{id}/index`                   | Submit indexing job                       |
+| `GET /api/collections/{id}/index/jobs`               | List jobs                                 |
+| `GET /api/collections/{id}/index/jobs/{job_id}`      | Job status                                |
+| `POST /api/collections/{id}/search/{method}`         | Direct search (global/local/drift/tog)    |
+| `POST /api/collections/{id}/search/agent`            | Agent-routed search                       |
+| `GET/POST /api/collections/{id}/search/agent/stream` | SSE streaming agent search                |
+| `POST /api/collections/{id}/search/agent/summarize`  | Conversation compression                  |
+| `POST /api/collections/{id}/search/web`              | Direct Tavily web search                  |
+| `GET /health`                                        | Liveness probe                            |
+| `GET /health/readiness`                              | Readiness probe (Cosmos, Blob, Queue, KV) |
+
 
 ### Indexing Worker
 
@@ -241,6 +247,7 @@ The worker uses a **lease pattern** — it acquires a time-limited lease before 
 ### Agent Router
 
 `router_agent.py` performs a **single LLM call** that simultaneously:
+
 1. Rewrites the user query for clarity/context.
 2. Selects the optimal search method (`global`, `local`, `drift`, `tog`, `web`).
 3. Returns a confidence score and reasoning explanation.
@@ -347,11 +354,13 @@ INPUT: query, entities[], relationships[], config(width, depth, prune_strategy)
 
 ### Pruning Strategies
 
-| Strategy | Mechanism | Speed | Quality |
-|----------|-----------|-------|---------|
-| `LLMPruning` | LLM scores each relation/entity 0–10 | Slower | Highest |
-| `SemanticPruning` | Embedding cosine similarity | Fast | High |
-| `BM25Pruning` | BM25 keyword relevance | Fastest | Good for lexical queries |
+
+| Strategy          | Mechanism                            | Speed   | Quality                  |
+| ----------------- | ------------------------------------ | ------- | ------------------------ |
+| `LLMPruning`      | LLM scores each relation/entity 0–10 | Slower  | Highest                  |
+| `SemanticPruning` | Embedding cosine similarity          | Fast    | High                     |
+| `BM25Pruning`     | BM25 keyword relevance               | Fastest | Good for lexical queries |
+
 
 ### Key Data Structures
 
@@ -417,13 +426,15 @@ Use `semantic` pruning and smaller `width`/`depth` to reduce cost in production.
 
 ### Comparison with Other Search Methods
 
-| Dimension | ToG | Local | Global | DRIFT | Basic |
-|-----------|-----|-------|--------|-------|-------|
-| Best for | Multi-hop reasoning, path-finding | Specific entities | Thematic summaries | Balanced local+community | Simple keyword |
-| Reasoning depth | Multi-hop | Single-hop | Aggregated | Mixed | None |
-| Explainability | **High** — explicit paths | Medium | Low | Medium | Low |
-| LLM calls | Many | Few | Many (map-reduce) | Medium | Minimal |
-| Speed | Slowest | Fast | Medium | Medium | Fastest |
+
+| Dimension       | ToG                               | Local             | Global             | DRIFT                    | Basic          |
+| --------------- | --------------------------------- | ----------------- | ------------------ | ------------------------ | -------------- |
+| Best for        | Multi-hop reasoning, path-finding | Specific entities | Thematic summaries | Balanced local+community | Simple keyword |
+| Reasoning depth | Multi-hop                         | Single-hop        | Aggregated         | Mixed                    | None           |
+| Explainability  | **High** — explicit paths         | Medium            | Low                | Medium                   | Low            |
+| LLM calls       | Many                              | Few               | Many (map-reduce)  | Medium                   | Minimal        |
+| Speed           | Slowest                           | Fast              | Medium             | Medium                   | Fastest        |
+
 
 ---
 
@@ -534,6 +545,7 @@ get_basic_search_engine(config, text_units, ...)
 ```
 
 Each factory function:
+
 1. Resolves the LLM and embedding model from `GraphRagConfig`.
 2. Initializes the appropriate context builder.
 3. Returns a configured search engine instance.
@@ -555,10 +567,12 @@ On indexing completion, the worker triggers cache warm-up via `serving_materiali
 
 The backend supports two context-loading modes (controlled by `QUERY_CONTEXT_MODE`):
 
-| Mode | Source | Use Case |
-|------|--------|---------|
-| `cosmos_only` | Cosmos DB containers (entities, relationships, etc.) | Production — all artifacts in managed storage |
-| `blob_parquet` | Parquet files from Azure Blob / local filesystem | Dev / migration |
+
+| Mode           | Source                                               | Use Case                                      |
+| -------------- | ---------------------------------------------------- | --------------------------------------------- |
+| `cosmos_only`  | Cosmos DB containers (entities, relationships, etc.) | Production — all artifacts in managed storage |
+| `blob_parquet` | Parquet files from Azure Blob / local filesystem     | Dev / migration                               |
+
 
 ---
 
@@ -623,10 +637,10 @@ User types query → selects "Agent" mode
 
 ```
                     ┌──────────────────────────────┐
-  User Browser ───► │       Cloudflare Edge         │
-                    │  Proxied DNS · WAF Rules       │
-                    │  Rate Limit on api.gtog.id.vn │
-                    │  Cache-bypass: /api/* + SSE    │
+  User Browser ───► │       Cloudflare Edge        │
+                    │  Proxied DNS · WAF Rules     │
+                    │  Rate Limit on api.gtog.id.vn│
+                    │                              │
                     └──────────────┬───────────────┘
                                    │ Cloudflare Tunnel
                     ┌──────────────▼───────────────┐
@@ -661,50 +675,58 @@ User types query → selects "Agent" mode
 
 ### Public Hostnames
 
-| Hostname | Service | Routing |
-|----------|---------|---------|
-| `app.gtog.id.vn` | Frontend (Next.js) | Cloudflare → Tunnel → ACA |
+
+| Hostname         | Service               | Routing                   |
+| ---------------- | --------------------- | ------------------------- |
+| `app.gtog.id.vn` | Frontend (Next.js)    | Cloudflare → Tunnel → ACA |
 | `api.gtog.id.vn` | API Backend (FastAPI) | Cloudflare → Tunnel → ACA |
+
 
 ### ACA Ingress Rules
 
-| Container App | Ingress | Rationale |
-|---------------|---------|-----------|
-| Frontend | Internal only | No direct public origin |
-| API Backend | Internal only | No direct public origin |
-| Indexing Worker | None | Background processor |
+
+| Container App   | Ingress       | Rationale               |
+| --------------- | ------------- | ----------------------- |
+| Frontend        | Internal only | No direct public origin |
+| API Backend     | Internal only | No direct public origin |
+| Indexing Worker | None          | Background processor    |
+
 
 ### Cloudflare Edge Policies
 
 - **WAF**: Managed rules for OWASP Top-10.
 - **Rate Limit**: Applied to `api.gtog.id.vn` (complements in-process backend limiter).
-- **Cache Bypass**: Forced for `/api/*` and all SSE routes to prevent stale responses.
+- **Cache Bypass**: Forced for `/api/`* and all SSE routes to prevent stale responses.
 - **Tunnel**: Two `cloudflared` connector replicas for redundancy.
 
 ### Container Images
 
-| Image | Registry | Role env var |
-|-------|----------|-------------|
-| `acrgtogshared.azurecr.io/gtog/backend:*` | ACR | `APP_ROLE=api` or `APP_ROLE=worker` |
-| `acrgtogshared.azurecr.io/gtog/frontend:*` | ACR | N/A |
+
+| Image                                      | Registry | Role env var                        |
+| ------------------------------------------ | -------- | ----------------------------------- |
+| `acrgtogshared.azurecr.io/gtog/backend:`*  | ACR      | `APP_ROLE=api` or `APP_ROLE=worker` |
+| `acrgtogshared.azurecr.io/gtog/frontend:*` | ACR      | N/A                                 |
+
 
 ### Cosmos DB Schema
 
-| Container | Content |
-|-----------|---------|
-| `collections` | Collection metadata |
-| `documents` | Document records per collection |
-| `indexingJobs` | Job lifecycle records |
-| `jobEvents` | Job event log |
-| `artifactManifest` | Index artifact version tracking |
-| `entities` | Extracted entities (query-time context source) |
-| `relationships` | Extracted relationships |
-| `textUnits` | Document chunks |
-| `communities` | Leiden community records |
-| `communityReports` | LLM community summaries |
-| `covariates` | Entity claims |
-| `conversationSessions` | Multi-turn session metadata |
-| `conversationTurns` | Individual Q&A turns |
+
+| Container              | Content                                        |
+| ---------------------- | ---------------------------------------------- |
+| `collections`          | Collection metadata                            |
+| `documents`            | Document records per collection                |
+| `indexingJobs`         | Job lifecycle records                          |
+| `jobEvents`            | Job event log                                  |
+| `artifactManifest`     | Index artifact version tracking                |
+| `entities`             | Extracted entities (query-time context source) |
+| `relationships`        | Extracted relationships                        |
+| `textUnits`            | Document chunks                                |
+| `communities`          | Leiden community records                       |
+| `communityReports`     | LLM community summaries                        |
+| `covariates`           | Entity claims                                  |
+| `conversationSessions` | Multi-turn session metadata                    |
+| `conversationTurns`    | Individual Q&A turns                           |
+
 
 ### Observability
 
@@ -719,71 +741,83 @@ User types query → selects "Agent" mode
 
 ### Core Language & Runtime
 
-| Layer | Language | Runtime |
-|-------|----------|---------|
-| Frontend | TypeScript 5 | Node.js 20 |
-| Backend / Core | Python 3.11 | CPython |
+
+| Layer          | Language     | Runtime    |
+| -------------- | ------------ | ---------- |
+| Frontend       | TypeScript 5 | Node.js 20 |
+| Backend / Core | Python 3.11  | CPython    |
+
 
 ### Frontend Stack
 
-| Concern | Library |
-|---------|---------|
-| Framework | Next.js 16 (App Router) |
-| UI library | React 19 |
-| Styling | Tailwind CSS 4 |
-| Data fetching | TanStack Query v5 + Axios |
-| Icons | Lucide React |
-| Build | npm / Next.js build pipeline |
+
+| Concern       | Library                      |
+| ------------- | ---------------------------- |
+| Framework     | Next.js 16 (App Router)      |
+| UI library    | React 19                     |
+| Styling       | Tailwind CSS 4               |
+| Data fetching | TanStack Query v5 + Axios    |
+| Icons         | Lucide React                 |
+| Build         | npm / Next.js build pipeline |
+
 
 ### Backend Stack
 
-| Concern | Library |
-|---------|---------|
-| API framework | FastAPI |
-| ASGI server | Uvicorn |
-| Config | pydantic-settings v2 |
-| Async queue | Azure SDK (azure-storage-queue) |
-| Database client | Azure SDK (azure-cosmos) |
-| Blob client | Azure SDK (azure-storage-blob) |
+
+| Concern           | Library                            |
+| ----------------- | ---------------------------------- |
+| API framework     | FastAPI                            |
+| ASGI server       | Uvicorn                            |
+| Config            | pydantic-settings v2               |
+| Async queue       | Azure SDK (azure-storage-queue)    |
+| Database client   | Azure SDK (azure-cosmos)           |
+| Blob client       | Azure SDK (azure-storage-blob)     |
 | Secret management | Azure SDK (azure-keyvault-secrets) |
-| Vector search | Azure SDK (azure-cosmos) |
-| SSE streaming | sse-starlette |
-| HTTP client | httpx |
+| Vector search     | Azure SDK (azure-cosmos)           |
+| SSE streaming     | sse-starlette                      |
+| HTTP client       | httpx                              |
+
 
 ### GraphRAG Core Stack
 
-| Concern | Library |
-|---------|---------|
-| LLM orchestration | fnllm (Microsoft), litellm |
-| Embeddings | Supports OpenAI, Azure OpenAI, Gemini, HuggingFace |
-| Default models | `gemini/gemini-2.5-flash-lite` (chat), `gemini/gemini-embedding-001` (embed) |
-| Data processing | pandas, pyarrow |
-| Graph algorithms | graspologic (Leiden community detection) |
-| Vector math | numpy |
-| Tokenization | tiktoken |
-| Serialization | Parquet (via pyarrow) |
+
+| Concern           | Library                                                                      |
+| ----------------- | ---------------------------------------------------------------------------- |
+| LLM orchestration | fnllm (Microsoft), litellm                                                   |
+| Embeddings        | Supports OpenAI, Azure OpenAI, Gemini, HuggingFace                           |
+| Default models    | `gemini/gemini-2.5-flash-lite` (chat), `gemini/gemini-embedding-001` (embed) |
+| Data processing   | pandas, pyarrow                                                              |
+| Graph algorithms  | graspologic (Leiden community detection)                                     |
+| Vector math       | numpy                                                                        |
+| Tokenization      | tiktoken                                                                     |
+| Serialization     | Parquet (via pyarrow)                                                        |
+
 
 ### Vector Store Adapters
 
-| Adapter | Use Case |
-|---------|---------|
-| Azure Cosmos DB (NoSQL Vector) | Production vector index |
-| Azure Cosmos DB (DiskANN) | Alternative cloud vector store |
-| LanceDB | Local development |
+
+| Adapter                        | Use Case                       |
+| ------------------------------ | ------------------------------ |
+| Azure Cosmos DB (NoSQL Vector) | Production vector index        |
+| Azure Cosmos DB (DiskANN)      | Alternative cloud vector store |
+| LanceDB                        | Local development              |
+
 
 ### Infrastructure
 
-| Concern | Technology |
-|---------|-----------|
-| Cloud | Microsoft Azure |
-| Container runtime | Azure Container Apps |
-| Ingress / CDN | Cloudflare (Tunnel, WAF, DNS) |
-| Container registry | Azure Container Registry |
-| Package manager (Python) | uv |
-| Task runner | poethepoet (poe) |
-| Linting / formatting | ruff |
-| Type checking | pyright |
-| Testing | pytest |
+
+| Concern                  | Technology                    |
+| ------------------------ | ----------------------------- |
+| Cloud                    | Microsoft Azure               |
+| Container runtime        | Azure Container Apps          |
+| Ingress / CDN            | Cloudflare (Tunnel, WAF, DNS) |
+| Container registry       | Azure Container Registry      |
+| Package manager (Python) | uv                            |
+| Task runner              | poethepoet (poe)              |
+| Linting / formatting     | ruff                          |
+| Type checking            | pyright                       |
+| Testing                  | pytest                        |
+
 
 ---
 
@@ -794,6 +828,7 @@ The system is configured at two levels:
 ### 1. GraphRAG `settings.yaml` (per project)
 
 Controls the knowledge graph pipeline:
+
 - LLM model references and parameters
 - Embedding model references
 - Storage backends (input, output, cache)
@@ -804,24 +839,26 @@ Controls the knowledge graph pipeline:
 
 Loaded by `pydantic-settings` from environment variables or `.env` file:
 
-| Variable | Purpose |
-|----------|---------|
-| `AZURE_COSMOS_ENDPOINT` | Cosmos DB endpoint |
-| `AZURE_STORAGE_ACCOUNT_NAME` | Blob storage |
-| `AZURE_STORAGE_QUEUE_NAME` | Job queue name |
-| `AZURE_KEY_VAULT_URL` | Runtime secrets |
-| `AZURE_USE_MANAGED_IDENTITY` | MSI vs. key auth |
-| `CORS_ORIGINS` | Allowed frontend origins |
-| `REQUIRE_EDGE_AUTH` | Enforce X-Edge-Secret header |
-| `EDGE_ORIGIN_SECRET` | HMAC secret for edge auth |
-| `RATE_LIMIT_ENABLED` | Toggle rate limiting |
-| `RATE_LIMIT_REQUESTS_PER_MINUTE` | Default: 120 |
-| `QUERY_CONTEXT_MODE` | `cosmos_only` or `blob_parquet` |
-| `DEFAULT_CHAT_MODEL` | Default LLM for backend |
-| `DEFAULT_EMBEDDING_MODEL` | Default embedding model |
-| `ENABLE_TOG_DEBUG_ENDPOINT` | Expose `GET /search/tog/debug` |
-| `CONVERSATION_TURN_TTL_DAYS` | Conversation retention (default: 30) |
-| `APP_ROLE` | `api` or `worker` |
+
+| Variable                         | Purpose                              |
+| -------------------------------- | ------------------------------------ |
+| `AZURE_COSMOS_ENDPOINT`          | Cosmos DB endpoint                   |
+| `AZURE_STORAGE_ACCOUNT_NAME`     | Blob storage                         |
+| `AZURE_STORAGE_QUEUE_NAME`       | Job queue name                       |
+| `AZURE_KEY_VAULT_URL`            | Runtime secrets                      |
+| `AZURE_USE_MANAGED_IDENTITY`     | MSI vs. key auth                     |
+| `CORS_ORIGINS`                   | Allowed frontend origins             |
+| `REQUIRE_EDGE_AUTH`              | Enforce X-Edge-Secret header         |
+| `EDGE_ORIGIN_SECRET`             | HMAC secret for edge auth            |
+| `RATE_LIMIT_ENABLED`             | Toggle rate limiting                 |
+| `RATE_LIMIT_REQUESTS_PER_MINUTE` | Default: 120                         |
+| `QUERY_CONTEXT_MODE`             | `cosmos_only` or `blob_parquet`      |
+| `DEFAULT_CHAT_MODEL`             | Default LLM for backend              |
+| `DEFAULT_EMBEDDING_MODEL`        | Default embedding model              |
+| `ENABLE_TOG_DEBUG_ENDPOINT`      | Expose `GET /search/tog/debug`       |
+| `CONVERSATION_TURN_TTL_DAYS`     | Conversation retention (default: 30) |
+| `APP_ROLE`                       | `api` or `worker`                    |
+
 
 ---
 
@@ -840,12 +877,13 @@ Internet → Cloudflare WAF (OWASP rules)
 
 ### Authentication Flow
 
-- **`REQUIRE_EDGE_AUTH=true`** (production): Every API request must carry `X-Edge-Secret` matching the configured HMAC secret, **or** originate from a trusted Cloudflare Tunnel IP range (RFC 6598 / RFC 1918).
-- **`REQUIRE_EDGE_AUTH=false`**: Restricted to localhost CORS origins only (development).
+- `**REQUIRE_EDGE_AUTH=true**` (production): Every API request must carry `X-Edge-Secret` matching the configured HMAC secret, **or** originate from a trusted Cloudflare Tunnel IP range (RFC 6598 / RFC 1918).
+- `**REQUIRE_EDGE_AUTH=false`**: Restricted to localhost CORS origins only (development).
 
 ### Secret Management
 
 Secrets are never stored in source code or container images. At startup, `bootstrap_runtime_secrets()` reads from Azure Key Vault (via MSI or client credentials) and populates:
+
 - `AZURE_COSMOS_KEY`
 - `OPENAI_API_KEY` (if used)
 - `AZURE_STORAGE_CONNECTION_STRING`
@@ -859,11 +897,13 @@ Secrets are never stored in source code or container images. At startup, `bootst
 
 ### Rate Limiting
 
-| Layer | Mechanism | Notes |
-|-------|-----------|-------|
-| Cloudflare | Edge rate limit on `api.gtog.id.vn` | Global enforcement |
-| Backend | `InMemoryRateLimiter` (process-local) | Defence-in-depth; not distributed across replicas |
-| Recommended | Set `RATE_LIMITER_BACKEND=redis` | For multi-replica distributed enforcement |
+
+| Layer       | Mechanism                             | Notes                                             |
+| ----------- | ------------------------------------- | ------------------------------------------------- |
+| Cloudflare  | Edge rate limit on `api.gtog.id.vn`   | Global enforcement                                |
+| Backend     | `InMemoryRateLimiter` (process-local) | Defence-in-depth; not distributed across replicas |
+| Recommended | Set `RATE_LIMITER_BACKEND=redis`      | For multi-replica distributed enforcement         |
+
 
 ### Data Isolation
 
