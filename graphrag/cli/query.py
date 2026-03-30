@@ -557,11 +557,13 @@ def run_tog_search(
         output_list=[
             "entities",
             "relationships",
+            "text_units",
         ],
     )
 
     final_entities: pd.DataFrame = dataframe_dict["entities"]
     final_relationships: pd.DataFrame = dataframe_dict["relationships"]
+    final_text_units: pd.DataFrame = dataframe_dict["text_units"]
 
     if streaming:
         async def run_streaming_search():
@@ -579,6 +581,7 @@ def run_tog_search(
                 config=config,
                 entities=final_entities,
                 relationships=final_relationships,
+                text_units=final_text_units,
                 query=query,
                 callbacks=[callbacks],
                 verbose=verbose,
@@ -597,6 +600,7 @@ def run_tog_search(
             config=config,
             entities=final_entities,
             relationships=final_relationships,
+            text_units=final_text_units,
             query=query,
             verbose=verbose,
         )

@@ -178,6 +178,8 @@ class EvaluationRunner:
                 community_level=None,
             )
             relationships_ = read_indexer_relationships(relationships)
+            raw_text_units = index_data.get("text_units")
+            text_units_ = read_indexer_text_units(raw_text_units) if raw_text_units is not None else []
 
             vector_store_args = {
                 index: store.model_dump()
@@ -192,6 +194,7 @@ class EvaluationRunner:
                 config=config,
                 entities=entities_,
                 relationships=relationships_,
+                text_units=text_units_,
                 response_type="detailed",
                 entity_text_embeddings=entity_text_embeddings,
             )

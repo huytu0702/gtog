@@ -333,6 +333,7 @@ def get_tog_search_engine(
     entities: list[Entity],
     relationships: list[Relationship],
     response_type: str,
+    text_units: list[TextUnit] | None = None,
     callbacks: list[QueryCallbacks] | None = None,
     entity_text_embeddings: BaseVectorStore | None = None,
 ) -> ToGSearch:
@@ -412,6 +413,7 @@ def get_tog_search_engine(
         model=chat_model,
         entities=entities,
         relationships=relationships,
+        text_units=text_units,
         tokenizer=tokenizer,
         pruning_strategy=pruning_strategy,
         reasoning_module=reasoning_module,

@@ -2,8 +2,10 @@ import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
+from graphrag.data_model.text_unit import TextUnit
 from graphrag.language_model.protocol.base import ChatModel
 from graphrag.prompts.query.tog_reasoning_prompt import TOG_REASONING_PROMPT
+from graphrag.query.context_builder.source_context import build_text_unit_context
 from graphrag.tokenizer.tokenizer import Tokenizer
 
 from .state import ExplorationNode
@@ -44,6 +46,7 @@ class ToGReasoning:
         query: str,
         exploration_paths: List[ExplorationNode],
         conversation_history_context: str = "",
+        text_units: List[TextUnit] | None = None,
     ) -> Tuple[str, List[str], ReasoningMetrics]:
         """
         Generate final answer from exploration paths.
@@ -52,7 +55,7 @@ class ToGReasoning:
         metrics = ReasoningMetrics()
 
         # Format exploration paths
-        paths_text = self.format_paths(exploration_paths)
+        paths_text = self._format_paths(exploration_paths, text_units=text_units or [])
 
         # Replace placeholders in the prompt
         try:
@@ -121,8 +124,8 @@ Structure your response as:
 
         return answer, reasoning_paths, metrics
 
-    def format_paths(self, nodes: List[ExplorationNode]) -> str:
-        """Format exploration paths with rich context including entity and relationship descriptions."""
+    def _format_paths(self, nodes: List[ExplorationNode], text_units: List[TextUnit] | None = None) -> str:
+        """Format exploration paths with chunk, entity, and relationship context."""
         if not nodes:
             return "No exploration paths available."
 
@@ -177,8 +180,18 @@ Structure your response as:
         # Build rich context output
         output_parts = []
 
+        # Section 0: Source Chunks
+        chunk_context_text, _ = build_text_unit_context(
+            text_units=text_units or [],
+            tokenizer=None,
+            shuffle_data=False,
+            context_name="CHUNKS",
+        )
+        output_parts.append("=== CHUNKS ===")
+        output_parts.append(chunk_context_text or "No chunk context available.")
+
         # Section 1: Entity Descriptions
-        output_parts.append("=== ENTITIES ===")
+        output_parts.append("\n=== ENTITIES ===")
         for entity_name, description in seen_entities.items():
             # Include full description, not truncated
             output_parts.append(f"\n[{entity_name}]")
@@ -240,11 +253,16 @@ Structure your response as:
         """Return path strings for a set of exploration nodes."""
         return [self._path_to_string(node) for node in nodes]
 
+    def format_paths(self, nodes: List[ExplorationNode], text_units: List[TextUnit] | None = None) -> str:
+        """Public alias for _format_paths (backward compatible)."""
+        return self._format_paths(nodes, text_units=text_units)
+
     async def check_early_termination(
         self,
         query: str,
         current_nodes: List[ExplorationNode],
         conversation_history_context: str = "",
+        text_units: List[TextUnit] | None = None,
     ) -> Tuple[bool, str | None, ReasoningMetrics]:
         """
         Check if exploration can terminate early with an answer.
@@ -252,7 +270,7 @@ Structure your response as:
         """
         metrics = ReasoningMetrics()
 
-        paths_text = self.format_paths(current_nodes[:3])  # Check top 3 paths
+        paths_text = self._format_paths(current_nodes[:3], text_units=text_units or [])  # Check top 3 paths
 
         history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
         prompt = f"""{history_prefix}Question: {query}

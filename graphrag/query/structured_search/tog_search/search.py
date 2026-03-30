@@ -6,6 +6,7 @@ from graphrag.callbacks.query_callbacks import QueryCallbacks
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
+from graphrag.data_model.text_unit import TextUnit
 from graphrag.tokenizer.tokenizer import Tokenizer
 from graphrag.vector_stores.base import BaseVectorStore
 from graphrag.query.structured_search.base import SearchResult
@@ -71,6 +72,7 @@ class ToGSearch:
         tokenizer: Tokenizer,
         pruning_strategy: PruningStrategy,
         reasoning_module: ToGReasoning,
+        text_units: List[TextUnit] | None = None,
         embedding_model: Optional[EmbeddingModel] = None,
         entity_text_embeddings: Optional[BaseVectorStore] = None,
         width: int = 3,
@@ -84,6 +86,7 @@ class ToGSearch:
         self.explorer = GraphExplorer(
             entities,
             relationships,
+            text_units=text_units,
             embedding_model=embedding_model,
             entity_embedding_store=entity_text_embeddings,
         )
@@ -237,19 +240,22 @@ class ToGSearch:
                 state.add_node(initial_node)
 
         # Check depth-0: can starting entities alone answer the query?
+        frontier_nodes = state.get_current_frontier()
+        frontier_text_units = self.explorer.get_text_units_for_nodes(frontier_nodes)
         (
             should_terminate,
             answer,
             early_term_metrics,
         ) = await self.reasoning_module.check_early_termination(
-            query, state.get_current_frontier(), conversation_history_context=history_context
+            query, frontier_nodes, conversation_history_context=history_context,
+            text_units=frontier_text_units,
         )
         if should_terminate and answer:
             reasoning_paths = self.reasoning_module.get_reasoning_paths(
                 state.get_current_frontier()
             )
             early_context_text = self.reasoning_module.format_paths(
-                state.get_current_frontier()
+                state.get_current_frontier(), text_units=frontier_text_units
             )
             yield (answer, reasoning_paths, early_term_metrics, early_context_text)
             return
@@ -379,12 +385,15 @@ class ToGSearch:
 
             # Debug: show exploration steps AFTER pruning (only kept paths)
             # Check for early termination
+            frontier_nodes = state.get_current_frontier()
+            frontier_text_units = self.explorer.get_text_units_for_nodes(frontier_nodes)
             (
                 should_terminate,
                 answer,
                 early_term_metrics,
             ) = await self.reasoning_module.check_early_termination(
-                query, state.get_current_frontier(), conversation_history_context=history_context
+                query, frontier_nodes, conversation_history_context=history_context,
+                text_units=frontier_text_units,
             )
 
             if should_terminate and answer:
@@ -393,7 +402,7 @@ class ToGSearch:
                 )
                 # Generate context_text for early termination
                 early_context_text = self.reasoning_module.format_paths(
-                    state.get_current_frontier()
+                    state.get_current_frontier(), text_units=frontier_text_units
                 )
                 yield (answer, reasoning_paths, early_term_metrics, early_context_text)
                 return
@@ -415,7 +424,8 @@ class ToGSearch:
             return
 
         # Generate rich context text with entity and relation descriptions
-        context_text = self.reasoning_module.format_paths(all_paths)
+        all_text_units = self.explorer.get_text_units_for_nodes(all_paths)
+        context_text = self.reasoning_module.format_paths(all_paths, text_units=all_text_units)
 
         # Use reasoning module to generate final answer
         try:
@@ -423,7 +433,11 @@ class ToGSearch:
                 answer,
                 reasoning_paths,
                 answer_metrics,
-            ) = await self.reasoning_module.generate_answer(query, all_paths, conversation_history_context=history_context)
+            ) = await self.reasoning_module.generate_answer(
+                query, all_paths,
+                conversation_history_context=history_context,
+                text_units=all_text_units,
+            )
 
             # Yield answer metrics with context_text
             yield ("", reasoning_paths, answer_metrics, context_text)
