@@ -1,1 +1,0 @@
-﻿This is a GraphRAG E2E test document about project Apollo and Lunar Module.
