@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { collectionsApi } from '@/lib/api';
 import { NBButton } from '@/components/ui/NBButton';
-import { NBCard } from '@/components/ui/NBCard';
 import { CollectionDocuments } from '@/components/collection-documents';
 import { CollectionChat } from '@/components/collection-chat';
 import { ArrowLeft, Loader2 } from 'lucide-react';

@@ -333,6 +333,7 @@ def get_tog_search_engine(
     entities: list[Entity],
     relationships: list[Relationship],
     response_type: str,
+    text_units: list[TextUnit] | None = None,
     callbacks: list[QueryCallbacks] | None = None,
     entity_text_embeddings: BaseVectorStore | None = None,
 ) -> ToGSearch:
@@ -385,6 +386,7 @@ def get_tog_search_engine(
             temperature=config.tog_search.temperature_exploration,
             relation_scoring_prompt=relation_scoring_prompt,
             entity_scoring_prompt=entity_scoring_prompt,
+            tokenizer=tokenizer,
         )
     elif config.tog_search.prune_strategy == "semantic":
         pruning_strategy = SemanticPruning(
@@ -404,12 +406,14 @@ def get_tog_search_engine(
         model=chat_model,
         temperature=config.tog_search.temperature_reasoning,
         reasoning_prompt=reasoning_prompt,
+        tokenizer=tokenizer,
     )
 
     return ToGSearch(
         model=chat_model,
         entities=entities,
         relationships=relationships,
+        text_units=text_units,
         tokenizer=tokenizer,
         pruning_strategy=pruning_strategy,
         reasoning_module=reasoning_module,

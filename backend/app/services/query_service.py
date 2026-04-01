@@ -1,4 +1,10 @@
-"""Query service for GraphRAG search operations."""
+"""Query service - orchestrates search operations against the knowledge graph.
+
+Shared data-normalisation helpers live in query_service_base.  All symbols
+that test code patches directly (api, pd, load_graphrag_config,
+_normalize_community_reports_frame) are imported at module level here so
+that patch.object(query_service_module, ...) calls work unchanged.
+"""
 
 import asyncio
 import logging
@@ -6,112 +12,96 @@ import re
 import time
 from typing import Any, Optional
 
-import pandas as pd
-import graphrag.api as api
+import graphrag.api as api  # tests patch query_service_module.api.*
+import pandas as pd  # tests patch query_service_module.pd
+
 from ..errors import ServingContextNotReadyError, ServingContextUnavailableError
 from ..models import SearchMethod, SearchResponse
 from ..repositories import get_control_plane_repository, get_serving_repository
-from ..utils import load_graphrag_config
+from ..utils import load_graphrag_config  # tests patch query_service_module.load_graphrag_config
+from .query_service_base import (
+    _attach_query_log,
+    _detach_query_log,
+    _is_missing_value,
+    _normalize_community_reports_frame,  # tests patch this name on this module
+    _normalize_tog_citations,
+    _preferred_entity_name_column,
+    _serialize_context_records,
+)
 from .serving_context_cache import serving_context_cache
 
 logger = logging.getLogger(__name__)
 
-_LOG_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-
-
-def _attach_query_log(collection_id: str):
-    """No-op query logger in cloud mode (avoid local file writes)."""
-    return None
-
-
-def _detach_query_log(handler) -> None:
-    """No-op query logger in cloud mode."""
-    return None
-
-
-def _is_missing_value(value: Any) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, str):
-        return value.strip() == ""
-    try:
-        is_na = pd.isna(value)
-        if isinstance(is_na, bool):
-            return is_na
-    except Exception:
-        pass
-    return False
-
-
-def _preferred_entity_name_column(entities: pd.DataFrame) -> str:
-    for col in ("title", "name", "entity", "id"):
-        if col in entities.columns:
-            return col
-    return entities.columns[0] if len(entities.columns) > 0 else "id"
-
-# Column name mappings: what to use as the "name" and "description" per dataset
-_CONTEXT_COLS: dict[str, tuple[str, str]] = {
-    "entities":      ("entity", "description"),
-    "relationships": ("source", "description"),
-    "reports":       ("title", "summary"),
-    "sources":       ("text", "text"),
-    "covariates":    ("subject_id", "covariate_type"),
+_REQUIRED_DATASETS: dict[str, list[str]] = {
+    "global": ["entities", "communities", "community_reports"],
+    "local": [
+        "entities",
+        "communities",
+        "community_reports",
+        "text_units",
+        "relationships",
+    ],
+    "tog": ["entities", "relationships"],
+    "drift": [
+        "entities",
+        "communities",
+        "community_reports",
+        "text_units",
+        "relationships",
+    ],
 }
 
 
-def _serialize_context_records(
-    context_data: dict | None,
-) -> dict[str, dict[str, dict]] | None:
-    """Convert context_records DataFrames into a JSON-serializable lookup dict.
+def _build_tog_context(
+    context_data: dict,
+) -> tuple[dict | None, set[str]]:
+    """Parse ToG exploration paths into serialized context and entity-name set.
 
-    Returns: {dataset_name: {short_id: {name, description}}}
+    Returns:
+        (serialized_lookup, known_entity_names)
     """
-    if not context_data:
-        return None
-    result: dict[str, dict[str, dict]] = {}
-    for key, df in context_data.items():
-        if df is None or df.empty:
-            continue
-        key_lower = key.lower()
-        name_col, desc_col = _CONTEXT_COLS.get(key_lower, ("id", ""))
-        lookup: dict[str, dict] = {}
-        for _, row in df.iterrows():
-            short_id = str(row.get("id", ""))
-            name = str(row.get(name_col, "")) if name_col in df.columns else short_id
-            desc = str(row.get(desc_col, "")) if desc_col and desc_col in df.columns else ""
-            lookup[short_id] = {"name": name, "description": desc}
-        result[key] = lookup
-    return result or None
+    paths = context_data.get("exploration_paths", [])
+    if not paths:
+        return None, set()
 
+    entity_paths: dict[str, list[str]] = {}
+    rel_lookup: dict[str, dict] = {}
+    known_entity_names: set[str] = set()
 
-def _normalize_tog_citations(text: str, entity_names: set[str]) -> str:
-    """Normalize ToG LLM citations to the frontend-expected [Data: Entities (...)] format.
+    for path in paths:
+        for segment in path.split(" | "):
+            m = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment.strip())
+            if m:
+                src = m.group(1).strip()
+                rel = m.group(2).strip()
+                tgt = m.group(3).strip()
+                entity_paths.setdefault(src, []).append(segment.strip())
+                entity_paths.setdefault(tgt, []).append(segment.strip())
+                known_entity_names.add(src)
+                known_entity_names.add(tgt)
+                rel_lookup[rel] = {"name": rel, "description": ""}
 
-    The LLM often emits [Data: NAME1, NAME2] instead of [Data: Entities (NAME1, NAME2)].
-    This detects bare [Data: ...] blocks that contain known entity names and rewrites them.
-    """
-    # Build case-insensitive name map: lowercase -> original
-    name_map = {n.lower(): n for n in entity_names}
+    entity_lookup = {
+        name: {
+            "name": name,
+            "description": " | ".join(dict.fromkeys(path_list)),
+        }
+        for name, path_list in entity_paths.items()
+    }
 
-    def _rewrite(match: re.Match) -> str:
-        inner = match.group(1).strip()
-        # Already in correct format: "Entities (...)" or "Relationships (...)"
-        if re.match(r"^(Entities|Relationships|Sources|Reports)\s*\(", inner, re.IGNORECASE):
-            return match.group(0)
-        # Bare names: "GRAPHRAG, MICROSOFT RESEARCH" — check if they're entity names
-        raw_names = [n.strip() for n in inner.split(",")]
-        matched = [name_map[n.lower()] if n.lower() in name_map else n for n in raw_names if n.strip()]
-        if matched:
-            return f"[Data: Entities ({', '.join(matched)})]"
-        return match.group(0)
+    serialized: dict[str, dict] = {}
+    if entity_lookup:
+        serialized["Entities"] = entity_lookup
+    if rel_lookup:
+        serialized["Relationships"] = rel_lookup
 
-    return re.sub(r"\[Data:\s*([^\]]+)\]", _rewrite, text)
+    return serialized or None, known_entity_names
 
 
 class QueryService:
     """Service for managing query/search operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the query service."""
         self.control_plane = get_control_plane_repository()
         self.serving_repo = get_serving_repository()
@@ -125,10 +115,17 @@ class QueryService:
         dataset: str,
     ) -> pd.DataFrame:
         if self.serving_repo is None:
-            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError(
+                "Cosmos serving repository is not configured"
+            )
 
         def _loader() -> pd.DataFrame:
-            return self.serving_repo.load_dataframe(
+            serving_repo = self.serving_repo
+            if serving_repo is None:
+                raise ServingContextUnavailableError(
+                    "Cosmos serving repository is not configured"
+                )
+            return serving_repo.load_dataframe(
                 collection_id=collection_id,
                 version=version,
                 dataset=dataset,
@@ -136,6 +133,9 @@ class QueryService:
 
         started = time.perf_counter()
         try:
+            # NOTE: azure-cosmos SDK is synchronous; wrapping in asyncio.to_thread()
+            # to avoid blocking the event loop while loading from Cosmos or the LRU
+            # cache (which may invoke the synchronous loader under the cache lock).
             cache_hit, frame = await asyncio.to_thread(
                 self.context_cache.get_or_load_with_status,
                 collection_id=collection_id,
@@ -150,13 +150,9 @@ class QueryService:
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         logger.info(
-            "serving_context_load collection=%s version=%s dataset=%s cache_hit=%s rows=%s load_ms=%.2f",
-            collection_id,
-            version,
-            dataset,
-            cache_hit,
-            len(frame),
-            elapsed_ms,
+            "serving_context_load collection=%s version=%s dataset=%s "
+            "cache_hit=%s rows=%s load_ms=%.2f",
+            collection_id, version, dataset, cache_hit, len(frame), elapsed_ms,
         )
         return frame
 
@@ -164,7 +160,9 @@ class QueryService:
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
         if self.control_plane is None or self.serving_repo is None:
-            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError(
+                "Cosmos serving repository is not configured"
+            )
 
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
@@ -176,32 +174,23 @@ class QueryService:
                 "Collection has not been indexed yet (no active serving version)"
             )
 
-        required = {
-            "global": ["entities", "communities", "community_reports"],
-            "local": [
-                "entities",
-                "communities",
-                "community_reports",
-                "text_units",
-                "relationships",
-            ],
-            "tog": ["entities", "relationships"],
-            "drift": [
-                "entities",
-                "communities",
-                "community_reports",
-                "text_units",
-                "relationships",
-            ],
-        }[method]
+        required = _REQUIRED_DATASETS[method]
+
+        loaded_frames = await asyncio.gather(
+            *[
+                self._load_dataset_frame(
+                    collection_id=collection_id,
+                    version=str(active_version),
+                    dataset=dataset,
+                )
+                for dataset in required
+            ]
+        )
 
         frames: dict[str, pd.DataFrame] = {}
-        for dataset in required:
-            frame = await self._load_dataset_frame(
-                collection_id=collection_id,
-                version=str(active_version),
-                dataset=dataset,
-            )
+        for dataset, frame in zip(required, loaded_frames, strict=False):
+            if dataset == "community_reports":
+                frame = _normalize_community_reports_frame(frame)
             if frame.empty:
                 raise ServingContextNotReadyError(
                     f"Serving context is incomplete for active version {active_version} "
@@ -232,42 +221,27 @@ class QueryService:
         dynamic_community_selection: bool = False,
         response_type: str = "Multiple Paragraphs",
     ) -> SearchResponse:
-        """
-        Perform a global search on a collection.
-
-        Args:
-            collection_id: The collection identifier
-            query: The search query
-            community_level: Community level to search
-            dynamic_community_selection: Whether to use dynamic community selection
-            response_type: Type of response format
-
-        Returns:
-            SearchResponse with results
-        """
-        active_version, frames = await self._load_context_from_serving(collection_id, "global")
-        config = load_graphrag_config(collection_id, version=active_version)
-        entities = frames["entities"]
-        communities = frames["communities"]
-        community_reports = frames["community_reports"]
-
+        """Perform a global search on a collection."""
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "global"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, use_cloud_vectors=True
+        )
         fh = _attach_query_log(collection_id)
         try:
-            logger.info(f"Global search for collection {collection_id}: {query}")
-
-            # Perform search - API returns (response, context_data) tuple
+            logger.info("Global search for collection %s: %s", collection_id, query)
             response_text, context_data = await api.global_search(
                 config=config,
-                entities=entities,
-                communities=communities,
-                community_reports=community_reports,
+                entities=frames["entities"],
+                communities=frames["communities"],
+                community_reports=frames["community_reports"],
                 community_level=community_level,
                 dynamic_community_selection=dynamic_community_selection,
                 response_type=response_type,
                 query=query,
             )
-
-            logger.info(f"Global search completed for collection {collection_id}")
+            logger.info("Global search completed for collection %s", collection_id)
         finally:
             _detach_query_log(fh)
 
@@ -285,46 +259,31 @@ class QueryService:
         community_level: int = 2,
         response_type: str = "Multiple Paragraphs",
     ) -> SearchResponse:
-        """
-        Perform a local search on a collection.
-
-        Args:
-            collection_id: The collection identifier
-            query: The search query
-            community_level: Community level to search
-            response_type: Type of response format
-
-        Returns:
-            SearchResponse with results
-        """
-        active_version, frames = await self._load_context_from_serving(collection_id, "local")
-        config = load_graphrag_config(collection_id, version=active_version)
-        entities = frames["entities"]
-        communities = frames["communities"]
-        community_reports = frames["community_reports"]
-        text_units = frames["text_units"]
-        relationships = frames["relationships"]
-        covariates = frames.get("covariates")
+        """Perform a local search on a collection."""
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "local"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, use_cloud_vectors=True
+        )
+        covariates: pd.DataFrame | None = frames.get("covariates")
 
         fh = _attach_query_log(collection_id)
         try:
-            logger.info(f"Local search for collection {collection_id}: {query}")
-
-            # Perform search - API returns (response, context_data) tuple
+            logger.info("Local search for collection %s: %s", collection_id, query)
             response_text, context_data = await api.local_search(
                 config=config,
-                entities=entities,
-                communities=communities,
-                community_reports=community_reports,
-                text_units=text_units,
-                relationships=relationships,
+                entities=frames["entities"],
+                communities=frames["communities"],
+                community_reports=frames["community_reports"],
+                text_units=frames["text_units"],
+                relationships=frames["relationships"],
                 covariates=covariates,
                 community_level=community_level,
                 response_type=response_type,
                 query=query,
             )
-
-            logger.info(f"Local search completed for collection {collection_id}")
+            logger.info("Local search completed for collection %s", collection_id)
         finally:
             _detach_query_log(fh)
 
@@ -340,79 +299,48 @@ class QueryService:
         collection_id: str,
         query: str,
     ) -> SearchResponse:
-        """
-        Perform a ToG (Tree-of-Graph) search on a collection.
-
-        Args:
-            collection_id: The collection identifier
-            query: The search query
-
-        Returns:
-            SearchResponse with results
-        """
-        active_version, frames = await self._load_context_from_serving(collection_id, "tog")
-        config = load_graphrag_config(collection_id, version=active_version)
+        """Perform a ToG (Think-on-Graph) search on a collection."""
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "tog"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, use_cloud_vectors=True
+        )
         entities = frames["entities"]
         relationships = frames["relationships"]
 
         fh = _attach_query_log(collection_id)
         try:
-            logger.info(f"ToG search for collection {collection_id}: {query}")
+            logger.info("ToG search for collection %s: %s", collection_id, query)
             logger.info(
-                f"Loaded {len(entities)} entities and {len(relationships)} relationships"
+                "Loaded %d entities and %d relationships",
+                len(entities), len(relationships),
             )
-
-            # Debug: Show entity names
-            if len(entities) > 0:
+            if logger.isEnabledFor(logging.DEBUG) and len(entities) > 0:
                 name_column = _preferred_entity_name_column(entities)
-                entity_names = entities[name_column].astype(str).tolist()[:10]
-                logger.info(f"Available entities: {entity_names}")
-            else:
+                entity_names_preview = (
+                    entities[name_column].head(10).astype(str).tolist()
+                )
+                logger.debug("Available entities: %s", entity_names_preview)
+            elif len(entities) == 0:
                 logger.warning("No entities found in serving context")
 
-            # Perform search - API returns (response, context_data) tuple
             response_text, context_data = await api.tog_search(
                 config=config,
                 entities=entities,
                 relationships=relationships,
                 query=query,
             )
-
-            logger.info(f"ToG search completed for collection {collection_id}")
+            logger.info("ToG search completed for collection %s", collection_id)
         finally:
             _detach_query_log(fh)
 
         serialized: dict | None = None
         known_entity_names: set[str] = set()
         if context_data and isinstance(context_data, dict):
-            paths = context_data.get("exploration_paths", [])
-            if paths:
-                entity_paths: dict[str, list[str]] = {}  # entity -> paths it appears in
-                rel_lookup: dict[str, dict] = {}
-                for path in paths:
-                    # Each path: "A --[rel]--> B | B --[rel2]--> C"
-                    for segment in path.split(" | "):
-                        m = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment.strip())
-                        if m:
-                            src, rel, tgt = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
-                            entity_paths.setdefault(src, []).append(segment.strip())
-                            entity_paths.setdefault(tgt, []).append(segment.strip())
-                            known_entity_names.add(src)
-                            known_entity_names.add(tgt)
-                            rel_lookup[rel] = {"name": rel, "description": ""}
-                entity_lookup = {
-                    name: {"name": name, "description": " | ".join(dict.fromkeys(path_list))}
-                    for name, path_list in entity_paths.items()
-                }
-                serialized = {}
-                if entity_lookup:
-                    serialized["Entities"] = entity_lookup
-                if rel_lookup:
-                    serialized["Relationships"] = rel_lookup
+            serialized, known_entity_names = _build_tog_context(context_data)
 
-        # Normalize LLM citations: [Data: NAME1, NAME2] -> [Data: Entities (NAME1, NAME2)]
-        # The LLM often drops the "Entities (...)" wrapper despite prompt instructions
-        if known_entity_names:
+        if known_entity_names and isinstance(response_text, str):
             response_text = _normalize_tog_citations(response_text, known_entity_names)
 
         return SearchResponse(
@@ -429,44 +357,28 @@ class QueryService:
         community_level: int = 2,
         response_type: str = "Multiple Paragraphs",
     ) -> SearchResponse:
-        """
-        Perform a DRIFT search on a collection.
-
-        Args:
-            collection_id: The collection identifier
-            query: The search query
-            community_level: Community level to search
-            response_type: Type of response format
-
-        Returns:
-            SearchResponse with results
-        """
-        active_version, frames = await self._load_context_from_serving(collection_id, "drift")
-        config = load_graphrag_config(collection_id, version=active_version)
-        entities = frames["entities"]
-        communities = frames["communities"]
-        community_reports = frames["community_reports"]
-        text_units = frames["text_units"]
-        relationships = frames["relationships"]
-
+        """Perform a DRIFT search on a collection."""
+        active_version, frames = await self._load_context_from_serving(
+            collection_id, "drift"
+        )
+        config = load_graphrag_config(
+            collection_id, version=active_version, use_cloud_vectors=True
+        )
         fh = _attach_query_log(collection_id)
         try:
-            logger.info(f"DRIFT search for collection {collection_id}: {query}")
-
-            # Perform search - API returns (response, context_data) tuple
+            logger.info("DRIFT search for collection %s: %s", collection_id, query)
             response_text, context_data = await api.drift_search(
                 config=config,
-                entities=entities,
-                communities=communities,
-                community_reports=community_reports,
-                text_units=text_units,
-                relationships=relationships,
+                entities=frames["entities"],
+                communities=frames["communities"],
+                community_reports=frames["community_reports"],
+                text_units=frames["text_units"],
+                relationships=frames["relationships"],
                 community_level=community_level,
                 response_type=response_type,
                 query=query,
             )
-
-            logger.info(f"DRIFT search completed for collection {collection_id}")
+            logger.info("DRIFT search completed for collection %s", collection_id)
         finally:
             _detach_query_log(fh)
 
@@ -477,10 +389,14 @@ class QueryService:
             method=SearchMethod.DRIFT,
         )
 
-    def get_tog_entities_preview(self, collection_id: str, limit: int = 20) -> dict[str, Any]:
+    def get_tog_entities_preview(
+        self, collection_id: str, limit: int = 20
+    ) -> dict[str, Any]:
         """Return ToG entity preview for debugging."""
         if self.control_plane is None or self.serving_repo is None:
-            raise ServingContextUnavailableError("Cosmos serving repository is not configured")
+            raise ServingContextUnavailableError(
+                "Cosmos serving repository is not configured"
+            )
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
             raise FileNotFoundError(f"Collection '{collection_id}' not found")
@@ -489,26 +405,26 @@ class QueryService:
             raise ServingContextNotReadyError(
                 "Collection has not been indexed yet (no active serving version)"
             )
+        serving_repo = self.serving_repo
+        assert serving_repo is not None  # guarded by None-check above
         cache_hit, entities_df = self.context_cache.get_or_load_with_status(
             collection_id=collection_id,
             version=active_version,
             dataset="entities",
-            loader=lambda: self.serving_repo.load_dataframe(
+            loader=lambda: serving_repo.load_dataframe(
                 collection_id=collection_id,
                 version=active_version,
                 dataset="entities",
             ),
         )
         logger.info(
-            "serving_context_preview collection=%s version=%s dataset=entities cache_hit=%s rows=%s",
-            collection_id,
-            active_version,
-            cache_hit,
-            len(entities_df),
+            "serving_context_preview collection=%s version=%s dataset=entities "
+            "cache_hit=%s rows=%s",
+            collection_id, active_version, cache_hit, len(entities_df),
         )
         source = f"cosmos:{active_version}"
 
-        entities_info = []
+        entities_info: list[dict[str, Any]] = []
         for _, row in entities_df.head(limit).iterrows():
             description = str(row.get("description", ""))
             entity_id = row.get("title")
@@ -516,10 +432,13 @@ class QueryService:
                 entity_id = row.get("id")
             if _is_missing_value(entity_id):
                 entity_id = row.get("name")
+            truncated_desc = (
+                description[:100] + "..." if len(description) > 100 else description
+            )
             entities_info.append(
                 {
                     "id": str(entity_id) if not _is_missing_value(entity_id) else "",
-                    "description": description[:100] + "..." if len(description) > 100 else description,
+                    "description": truncated_desc,
                     "type": row.get("type", "unknown"),
                 }
             )

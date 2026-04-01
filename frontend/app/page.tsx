@@ -14,13 +14,11 @@ export default function Dashboard() {
   const [newCollectionName, setNewCollectionName] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
 
-  // Fetch Collections
   const { data, isLoading, error } = useQuery({
     queryKey: ['collections'],
     queryFn: collectionsApi.list,
   });
 
-  // Create Collection Mutation
   const createMutation = useMutation({
     mutationFn: collectionsApi.create,
     onSuccess: () => {
@@ -30,7 +28,6 @@ export default function Dashboard() {
     },
   });
 
-  // Delete Collection Mutation
   const deleteMutation = useMutation({
     mutationFn: collectionsApi.delete,
     onSuccess: () => {

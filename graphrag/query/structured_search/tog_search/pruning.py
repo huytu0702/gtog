@@ -1,13 +1,18 @@
+import os
+import re
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
-from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
-from graphrag.vector_stores.base import BaseVectorStore
+from typing import List, Optional, Tuple
+
 import numpy as np
 import logging
+
+from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
+from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
 from graphrag.prompts.query.tog_relation_scoring_prompt import (
     TOG_RELATION_SCORING_PROMPT,
 )
-from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
+from graphrag.tokenizer.tokenizer import Tokenizer
+from graphrag.vector_stores.base import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +76,12 @@ class LLMPruning(PruningStrategy):
         temperature: float = 0.4,
         relation_scoring_prompt: str | None = None,
         entity_scoring_prompt: str | None = None,
+        tokenizer: Tokenizer | None = None,
     ):
         self.model = model
         self.temperature = temperature
-        
+        self.tokenizer = tokenizer
+
         # Load prompts - if file path is given, read the file content
         self.relation_scoring_prompt = self._load_prompt(
             relation_scoring_prompt, TOG_RELATION_SCORING_PROMPT
@@ -83,10 +90,14 @@ class LLMPruning(PruningStrategy):
             entity_scoring_prompt, TOG_ENTITY_SCORING_PROMPT
         )
 
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens using the tokenizer when available, otherwise estimate."""
+        if self.tokenizer:
+            return self.tokenizer.num_tokens(text)
+        return len(text) // 4
+
     def _load_prompt(self, prompt_or_path: str | None, default_prompt: str) -> str:
         """Load prompt from file if path is given, otherwise use directly."""
-        import os
-        
         if prompt_or_path is None:
             return default_prompt
         
@@ -139,9 +150,8 @@ class LLMPruning(PruningStrategy):
 
         # Update metrics
         metrics.llm_calls = 1
-        # Estimate tokens (rough approximation: 4 chars per token)
-        metrics.prompt_tokens = len(prompt) // 4
-        metrics.output_tokens = len(response) // 4
+        metrics.prompt_tokens = self._count_tokens(prompt)
+        metrics.output_tokens = self._count_tokens(response)
 
         # Parse scores
         scores = self._parse_scores(response, len(relations))
@@ -186,16 +196,13 @@ class LLMPruning(PruningStrategy):
 
         # Update metrics
         metrics.llm_calls = 1
-        # Estimate tokens (rough approximation: 4 chars per token)
-        metrics.prompt_tokens = len(prompt) // 4
-        metrics.output_tokens = len(response) // 4
+        metrics.prompt_tokens = self._count_tokens(prompt)
+        metrics.output_tokens = self._count_tokens(response)
 
         return self._parse_scores(response, len(entities)), metrics
 
     def _parse_scores(self, response: str, expected_count: int) -> List[float]:
         """Parse score list from LLM response."""
-        import re
-
         # Clean response and try to extract list pattern first
         response = response.strip()
 
@@ -382,8 +389,6 @@ class BM25Pruning(PruningStrategy):
 
     def _tokenize(self, text: str) -> List[str]:
         """Simple tokenization."""
-        import re
-
         # Lowercase and split on non-alphanumeric
         return re.findall(r"\w+", text.lower())
 

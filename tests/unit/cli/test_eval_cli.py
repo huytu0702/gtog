@@ -25,8 +25,8 @@ def test_eval_cli_loads_config():
                 root_dir=Path("."),
                 eval_config=Path("eval_config.yaml"),
                 methods=None,
-                imdb_key=None,
                 resume=False,
+                skip_evaluation=False,
                 verbose=False,
             )
 

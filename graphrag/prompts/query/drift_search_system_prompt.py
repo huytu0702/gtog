@@ -141,9 +141,9 @@ This is a unique knowledge graph where edges are freeform text rather than verb 
 
 1. score: How well the intermediate answer addresses the query. A score of 0 indicates a poor, unfocused answer, while a score of 100 indicates a highly focused, relevant answer that addresses the query in its entirety.
 
-2. intermediate_answer: This answer should match the level of detail and length found in the community summaries. The intermediate answer should be exactly 2000 characters long. This must be formatted in markdown and must begin with a header that explains how the following text is related to the query.
+2. intermediate_answer: This answer should match the level of detail found in the community summaries. Write a concise markdown answer of about 120-220 words. It must begin with a short markdown heading that explains how the following text is related to the query.
 
-3. follow_up_queries: A list of follow-up queries that could be asked to further explore the topic. These should be formatted as a list of strings. Generate at least five good follow-up queries.
+3. follow_up_queries: A list of follow-up queries that could be asked to further explore the topic. These must be formatted as a JSON array of strings. Generate at least five focused follow-up queries.
 
 Use this information to help you decide whether or not you need more information about the entities mentioned in the report. You may also use your general knowledge to think of entities which may help enrich your answer.
 
@@ -157,11 +157,15 @@ The top-ranked community summaries:
 
 {community_reports}
 
-Provide the intermediate answer, and all scores in JSON format following:
+Return exactly one valid JSON object. Use double quotes for every key and string value. Do not wrap the JSON in markdown fences. Do not add commentary before or after the JSON.
 
-{{'intermediate_answer': str,
-'score': int,
-'follow_up_queries': List[str]}}
+Use this exact shape:
 
-Begin:
+{{
+  "intermediate_answer": "# Heading\n\nMarkdown answer...",
+  "score": 0,
+  "follow_up_queries": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
+}}
+
+Begin your JSON response:
 """

@@ -2,9 +2,9 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator
 
 from litellm import acompletion
 from litellm.exceptions import RateLimitError
@@ -65,10 +65,12 @@ Include [N] citations."""
                 return response
             except RateLimitError as e:
                 if attempt == max_retries:
-                    logger.error(f"Rate limit exceeded after {max_retries} retries: {e}")
+                    logger.error(
+                        "Rate limit exceeded after %s retries: %s", max_retries, e
+                    )
                     raise
 
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 logger.warning(
                     f"Rate limit hit on web search synthesis (attempt {attempt + 1}/{max_retries + 1}). "
                     f"Retrying in {delay}s..."
@@ -82,7 +84,8 @@ Include [N] citations."""
         Args:
             query: The search query
 
-        Returns:
+        Returns
+        -------
             WebSearchResult with synthesized response and sources
         """
         try:
@@ -129,7 +132,7 @@ Include [N] citations."""
             return WebSearchResult(response=synthesized, sources=sources)
 
         except Exception as e:
-            logger.error(f"Web search error: {e}")
+            logger.error("Web search error: %s", e)
             return WebSearchResult(
                 response=f"Error performing web search: {e}", sources=[]
             )
@@ -141,7 +144,8 @@ Include [N] citations."""
         Args:
             query: The search query
 
-        Yields:
+        Yields
+        ------
             Chunks of the synthesized response
         """
         max_retries = 3
@@ -190,11 +194,13 @@ Include [N] citations."""
 
             except RateLimitError as e:
                 if attempt == max_retries:
-                    logger.error(f"Rate limit exceeded after {max_retries} retries: {e}")
-                    yield f"Error: Rate limit exceeded. Please try again later."
+                    logger.error(
+                        "Rate limit exceeded after %s retries: %s", max_retries, e
+                    )
+                    yield "Error: Rate limit exceeded. Please try again later."
                     return
 
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 logger.warning(
                     f"Rate limit hit on web search streaming (attempt {attempt + 1}/{max_retries + 1}). "
                     f"Retrying in {delay}s..."
@@ -202,7 +208,7 @@ Include [N] citations."""
                 await asyncio.sleep(delay)
 
             except Exception as e:
-                logger.error(f"Web search streaming error: {e}")
+                logger.error("Web search streaming error: %s", e)
                 yield f"Error performing web search: {e}"
                 return
 

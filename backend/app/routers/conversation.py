@@ -14,10 +14,14 @@ from ..errors import (
 from ..models import SessionCreateResponse, SessionDetailResponse
 from ..services import conversation_service
 
-router = APIRouter(prefix="/api/collections/{collection_id}/sessions", tags=["sessions"])
+router = APIRouter(
+    prefix="/api/collections/{collection_id}/sessions", tags=["sessions"]
+)
 
 
-@router.post("", response_model=SessionCreateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=SessionCreateResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_session(collection_id: str):
     """Create a server-side conversation session."""
     try:
@@ -30,7 +34,9 @@ async def create_session(collection_id: str):
     except ConversationSessionNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
     except ConversationStoreUnavailableError as err:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err)
+        )
     except ValueError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
 
@@ -55,4 +61,6 @@ async def get_session(collection_id: str, session_id: str):
     except ConversationSessionMismatchError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
     except ConversationStoreUnavailableError as err:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err)
+        )

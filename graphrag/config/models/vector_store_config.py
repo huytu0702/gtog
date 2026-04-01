@@ -42,6 +42,11 @@ class VectorStoreConfig(BaseModel):
         default=vector_store_defaults.url,
     )
 
+    connection_string: str | None = Field(
+        description="The connection string to use when type == cosmos_db.",
+        default=vector_store_defaults.connection_string,
+    )
+
     def _validate_url(self) -> None:
         """Validate the database URL."""
         if self.type == VectorStoreType.AzureAISearch and (
@@ -97,7 +102,12 @@ class VectorStoreConfig(BaseModel):
                 raise ValueError(msg)
 
         if self.type == VectorStoreType.CosmosDB:
-            for id_field in self.embeddings_schema:
+            for schema in self.embeddings_schema.values():
+                id_field = (
+                    schema.id_field
+                    if isinstance(schema, VectorStoreSchemaConfig)
+                    else "id"
+                )
                 if id_field != "id":
                     msg = "When using CosmosDB, the id_field in embeddings_schema must be 'id'. Please update your settings.yaml and set the id_field to 'id'."
                     raise ValueError(msg)

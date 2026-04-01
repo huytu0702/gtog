@@ -1,6 +1,5 @@
 import React from 'react';
 import Link from 'next/link';
-import { NBButton } from './NBButton';
 
 interface NBLayoutProps {
     children: React.ReactNode;
@@ -22,9 +21,6 @@ export function NBLayout({ children }: NBLayoutProps) {
                         <a href="https://microsoft.github.io/graphrag/" target="_blank" rel="noopener noreferrer" className="font-bold hover:underline decoration-2">
                             Docs
                         </a>
-                        <NBButton size="sm" variant="primary">
-                            Log In
-                        </NBButton>
                     </nav>
                 </div>
             </header>
@@ -37,7 +33,7 @@ export function NBLayout({ children }: NBLayoutProps) {
             {/* Footer */}
             <footer className="border-t-3 border-black bg-white py-8 mt-12">
                 <div className="container mx-auto px-4 text-center font-bold">
-                    <p>&copy; 2025 GraphRAG TOG.</p>
+                    <p>&copy; 2026 GraphRAG TOG.</p>
                 </div>
             </footer>
         </div>

@@ -1,9 +1,11 @@
 """Search endpoints for all GraphRAG search methods."""
 
+import asyncio
 import json
 import logging
-from fastapi import APIRouter, HTTPException, status
-from sse_starlette.sse import EventSourceResponse
+
+from fastapi import APIRouter, HTTPException, Query, status
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
 from ..config import settings
 from ..errors import (
@@ -14,46 +16,59 @@ from ..errors import (
     ServingContextUnavailableError,
 )
 from ..models import (
-    SearchResponse,
-    GlobalSearchRequest,
-    LocalSearchRequest,
-    ToGSearchRequest,
-    DriftSearchRequest,
     AgentSearchRequest,
     AgentSearchResponse,
-    WebSearchRequest,
+    DriftSearchRequest,
+    GlobalSearchRequest,
+    LocalSearchRequest,
+    SearchResponse,
     SummarizeRequest,
     SummarizeResponse,
+    ToGSearchRequest,
+    WebSearchRequest,
 )
 from ..services import (
     conversation_service,
     query_service,
     router_agent,
-    web_search_service,
     summarization_service,
+    web_search_service,
 )
 
 logger = logging.getLogger(__name__)
 
+SSE_HEARTBEAT_INTERVAL_SECONDS = 25
+_SSE_CHUNK_SIZE = 50  # characters per streamed content chunk
+
 router = APIRouter(prefix="/api/collections/{collection_id}/search", tags=["search"])
 
 
-def _map_search_error(err: Exception) -> HTTPException:
-    if isinstance(err, ServingContextUnavailableError):
-        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err))
-    if isinstance(err, ServingContextNotReadyError):
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
-    if isinstance(err, ConversationStoreUnavailableError):
-        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err))
-    if isinstance(err, ConversationSessionNotFoundError):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
-    if isinstance(err, ConversationSessionMismatchError):
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
-    if isinstance(err, FileNotFoundError):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+def _raise_for_unknown(err: Exception) -> None:
+    """Propagate domain errors or convert unknown exceptions to HTTPException.
+
+    Domain-specific errors (ServingContext*, Conversation*, FileNotFoundError)
+    are handled by the global exception handlers registered in main.py; they
+    are re-raised as-is so FastAPI's handler chain picks them up.
+
+    ``ValueError`` → HTTP 400.  All other unknown exceptions → HTTP 500.
+    """
+    _DOMAIN_ERRORS = (
+        ServingContextUnavailableError,
+        ServingContextNotReadyError,
+        ConversationStoreUnavailableError,
+        ConversationSessionNotFoundError,
+        ConversationSessionMismatchError,
+        FileNotFoundError,
+    )
+    if isinstance(err, _DOMAIN_ERRORS):
+        raise err
     if isinstance(err, ValueError):
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)
+        ) from err
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err)
+    ) from err
 
 
 @router.post("/global", response_model=SearchResponse)
@@ -67,11 +82,11 @@ async def global_search(collection_id: str, request: GlobalSearchRequest):
             dynamic_community_selection=request.dynamic_community_selection,
             response_type=request.response_type,
         )
-        logger.info(f"Global search completed for collection {collection_id}")
+        logger.info("Global search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing global search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/local", response_model=SearchResponse)
@@ -84,11 +99,11 @@ async def local_search(collection_id: str, request: LocalSearchRequest):
             community_level=request.community_level,
             response_type=request.response_type,
         )
-        logger.info(f"Local search completed for collection {collection_id}")
+        logger.info("Local search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing local search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/tog", response_model=SearchResponse)
@@ -99,11 +114,11 @@ async def tog_search(collection_id: str, request: ToGSearchRequest):
             collection_id=collection_id,
             query=request.query,
         )
-        logger.info(f"ToG search completed for collection {collection_id}")
+        logger.info("ToG search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing ToG search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.get("/tog/debug")
@@ -131,16 +146,35 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
             community_level=request.community_level,
             response_type=request.response_type,
         )
-        logger.info(f"DRIFT search completed for collection {collection_id}")
+        logger.info("DRIFT search completed for collection %s", collection_id)
         return result
     except Exception as e:
         logger.exception("Error performing DRIFT search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
+
+
+async def _run_graphrag_search(route_decision, collection_id: str, search_query: str):
+    """Dispatch to the appropriate GraphRAG search method based on route decision."""
+    if route_decision.method == "global":
+        return await query_service.global_search(
+            collection_id=collection_id, query=search_query
+        )
+    elif route_decision.method == "tog":
+        return await query_service.tog_search(
+            collection_id=collection_id, query=search_query
+        )
+    elif route_decision.method == "drift":
+        return await query_service.drift_search(
+            collection_id=collection_id, query=search_query
+        )
+    else:
+        return await query_service.local_search(
+            collection_id=collection_id, query=search_query
+        )
 
 
 @router.post("/agent/summarize", response_model=SummarizeResponse)
-async def summarize_conversation(collection_id: str, request: SummarizeRequest):
-    """
+async def summarize_conversation(collection_id: str, request: SummarizeRequest):    """
     Compress conversation history into a summary.
 
     Call this when conversation_history exceeds your threshold (e.g. 6 turns).
@@ -151,11 +185,13 @@ async def summarize_conversation(collection_id: str, request: SummarizeRequest):
             conversation_history=request.conversation_history,
             existing_summary=request.existing_summary,
         )
-        trimmed = summarization_service.get_trimmed_history(request.conversation_history)
+        trimmed = summarization_service.get_trimmed_history(
+            request.conversation_history
+        )
         return SummarizeResponse(summary=summary, trimmed_history=trimmed)
     except Exception as e:
         logger.exception("Error summarizing conversation")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/agent", response_model=AgentSearchResponse)
@@ -173,9 +209,11 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
         session_id = request.session_id
 
         if session_id:
-            conversation_summary, session_history = conversation_service.get_prompt_context(
-                collection_id,
-                session_id,
+            conversation_summary, session_history = (
+                conversation_service.get_prompt_context(
+                    collection_id,
+                    session_id,
+                )
             )
             conversation_history = session_history
         elif not settings.conversation_legacy_payload_enabled:
@@ -190,51 +228,44 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             conversation_summary=conversation_summary,
         )
         logger.info(
-            f"Router decision: {route_decision.method} "
-            f"(confidence: {route_decision.confidence}) "
-            f"rewritten: '{route_decision.rewritten_query}'"
+            "Router decision: %s (confidence: %.2f) rewritten: '%s'",
+            route_decision.method,
+            route_decision.confidence,
+            route_decision.rewritten_query,
         )
 
         search_query = route_decision.rewritten_query or request.query
 
-        if route_decision.method == "web":
-            from ..services import web_search_service
+        if request.web_search_enabled:
+            # Run GraphRAG + web search in parallel; each synthesizes independently
+            graphrag_result, web_result = await asyncio.gather(
+                _run_graphrag_search(route_decision, collection_id, search_query),
+                web_search_service.search(search_query),
+            )
 
-            result = await web_search_service.search(search_query)
             if session_id:
                 await conversation_service.append_exchange(
                     collection_id=collection_id,
                     session_id=session_id,
                     user_query=request.query,
-                    assistant_response=result.response,
+                    assistant_response=graphrag_result.response,
                     rewritten_query=route_decision.rewritten_query,
-                    method_used="web",
+                    method_used=route_decision.method,
                 )
+
             return AgentSearchResponse(
-                method_used="web",
+                method_used=route_decision.method,
                 router_reasoning=route_decision.reasoning,
                 rewritten_query=route_decision.rewritten_query,
-                response=result.response,
-                sources=[s.model_dump() for s in result.sources],
+                response=graphrag_result.response,
+                sources=[],
+                context_data=graphrag_result.context_data,
+                web_response=web_result.response,
+                web_sources=[s.model_dump() for s in web_result.sources],
                 session_id=session_id,
             )
 
-        if route_decision.method == "global":
-            result = await query_service.global_search(
-                collection_id=collection_id, query=search_query
-            )
-        elif route_decision.method == "tog":
-            result = await query_service.tog_search(
-                collection_id=collection_id, query=search_query
-            )
-        elif route_decision.method == "drift":
-            result = await query_service.drift_search(
-                collection_id=collection_id, query=search_query
-            )
-        else:
-            result = await query_service.local_search(
-                collection_id=collection_id, query=search_query
-            )
+        result = await _run_graphrag_search(route_decision, collection_id, search_query)
 
         if session_id:
             await conversation_service.append_exchange(
@@ -258,7 +289,7 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
 
     except Exception as e:
         logger.exception("Error performing agent search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
 @router.post("/web")
@@ -280,16 +311,21 @@ async def web_search(collection_id: str, request: WebSearchRequest):
 
     except Exception as e:
         logger.exception("Error performing web search")
-        raise _map_search_error(e)
+        _raise_for_unknown(e)
 
 
-@router.post("/agent/stream")
-async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
-    """
-    Perform an agent-routed search with SSE streaming.
+def _build_heartbeat_event() -> ServerSentEvent:
+    """Build a heartbeat event for long-lived SSE connections."""
+    return ServerSentEvent(
+        event="heartbeat",
+        data=json.dumps({"message": "keepalive"}),
+    )
 
-    Streams status updates and response content.
-    """
+
+def _build_agent_stream_response(
+    collection_id: str, request: AgentSearchRequest
+) -> EventSourceResponse:
+    """Build an SSE response for an agent-routed search stream."""
 
     async def event_generator():
         try:
@@ -309,9 +345,11 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
             session_id = request.session_id
 
             if session_id:
-                conversation_summary, session_history = conversation_service.get_prompt_context(
-                    collection_id,
-                    session_id,
+                conversation_summary, session_history = (
+                    conversation_service.get_prompt_context(
+                        collection_id,
+                        session_id,
+                    )
                 )
                 conversation_history = session_history
             elif not settings.conversation_legacy_payload_enabled:
@@ -347,41 +385,27 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
             assistant_response = ""
 
             # Execute search
-            if route_decision.method == "web":
-                async for chunk in web_search_service.search_streaming(search_query):
-                    assistant_response += chunk
-                    yield {"event": "content", "data": json.dumps({"delta": chunk})}
-                sources = []
-            else:
-                # For GraphRAG methods, get full response (non-streaming for now)
-                if route_decision.method == "global":
-                    result = await query_service.global_search(
-                        collection_id, search_query
-                    )
-                elif route_decision.method == "tog":
-                    result = await query_service.tog_search(
-                        collection_id, search_query
-                    )
-                elif route_decision.method == "drift":
-                    result = await query_service.drift_search(
-                        collection_id, search_query
-                    )
-                else:
-                    result = await query_service.local_search(
-                        collection_id, search_query
-                    )
-                assistant_response = result.response
+            # For GraphRAG methods, get full response (non-streaming for now)
+            result = await _run_graphrag_search(route_decision, collection_id, search_query)
+            assistant_response = result.response
 
-                # Stream the response in chunks
-                chunk_size = 50
-                for i in range(0, len(result.response), chunk_size):
-                    yield {
-                        "event": "content",
-                        "data": json.dumps({
-                            "delta": result.response[i : i + chunk_size]
-                        }),
-                    }
-                sources = []
+            # Coerce response to str for streaming chunks (response may be
+            # str | dict | list depending on the search method).
+            response_str = (
+                result.response
+                if isinstance(result.response, str)
+                else json.dumps(result.response)
+            )
+
+            # Stream the response in chunks
+            for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
+                yield {
+                    "event": "content",
+                    "data": json.dumps({
+                        "delta": response_str[i : i + _SSE_CHUNK_SIZE]
+                    }),
+                }
+            sources = []
 
             if session_id:
                 await conversation_service.append_exchange(
@@ -409,7 +433,42 @@ async def agent_search_stream(collection_id: str, request: AgentSearchRequest):
             logger.exception("Error in streaming agent search")
             yield {
                 "event": "error",
-                "data": json.dumps({"message": "Internal error while processing stream."}),
+                "data": json.dumps({
+                    "message": "Internal error while processing stream."
+                }),
             }
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        ping=SSE_HEARTBEAT_INTERVAL_SECONDS,
+        ping_message_factory=_build_heartbeat_event,
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/agent/stream")
+async def agent_search_stream_get(
+    collection_id: str,
+    query: str = Query(..., min_length=1, max_length=1000),
+    session_id: str | None = Query(default=None, min_length=1, max_length=128),
+):
+    """
+    Perform an agent-routed search with SSE streaming (EventSource compatible).
+
+    Streaming requests are expected to reach this route through the configured edge.
+    """
+    request = AgentSearchRequest(
+        query=query,
+        stream=True,
+        session_id=session_id,
+    )
+    return _build_agent_stream_response(collection_id, request)
+
+
+@router.post("/agent/stream")
+async def agent_search_stream_post(collection_id: str, request: AgentSearchRequest):
+    """Backward-compatible POST route for clients not yet using EventSource GET."""
+    return _build_agent_stream_response(collection_id, request)

@@ -1,15 +1,37 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+function normalizeBaseUrl(value?: string): string {
+    if (!value) return '';
+    return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+export class ApiStatusError extends Error {
+    status: number;
+
+    constructor(status: number) {
+        super(status === 401 || status === 403 ? 'Authentication required' : `Request failed with status ${status}`);
+        this.name = 'ApiStatusError';
+        this.status = status;
+    }
+}
+
+const API_HOST_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://127.0.0.1:8000';
+const API_BASE_URL = `${API_HOST_BASE_URL}/api`;
 
 export const api = axios.create({
     baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
+    validateStatus: () => true,
 });
 
-// Types based on API Documentation
+api.interceptors.response.use((response) => {
+    if (response.status >= 400) {
+        throw new ApiStatusError(response.status);
+    }
+    return response;
+});
 
 export interface Collection {
     id: string;
@@ -39,7 +61,7 @@ export interface IndexingStatus {
 export interface SearchResult {
     query: string;
     response: string;
-    context_data: any;
+    context_data: Record<string, unknown> | null;
     method: string;
 }
 
@@ -61,6 +83,12 @@ export interface AgentSearchResult {
         url?: string;
         text_unit_id?: string;
     }>;
+    web_response?: string | null;
+    web_sources?: Array<{
+        id: number;
+        title: string;
+        url?: string;
+    }>;
 }
 
 export interface SummarizeResult {
@@ -78,8 +106,6 @@ export interface WebSearchResult {
     }>;
     method: string;
 }
-
-// API Methods
 
 export const collectionsApi = {
     list: async () => {
@@ -163,12 +189,14 @@ export const searchApi = {
         query: string,
         conversationHistory: ConversationTurn[] = [],
         conversationSummary?: string,
+        webSearchEnabled: boolean = false,
     ) => {
         const response = await api.post<AgentSearchResult>(`/collections/${collectionId}/search/agent`, {
             query,
             stream: false,
             conversation_history: conversationHistory,
             conversation_summary: conversationSummary,
+            web_search_enabled: webSearchEnabled,
         });
         return response.data;
     },
@@ -190,22 +218,34 @@ export const searchApi = {
         });
         return response.data;
     },
-    agentStream: (collectionId: string, query: string, onMessage: (data: any) => void) => {
+    agentStream: (
+        collectionId: string,
+        query: string,
+        onMessage: (data: unknown) => void,
+        sessionId?: string,
+    ) => {
+        const params = new URLSearchParams({ query });
+        if (sessionId) {
+            params.set('session_id', sessionId);
+        }
         const eventSource = new EventSource(
-            `${API_BASE_URL}/collections/${collectionId}/search/agent/stream`,
-            { withCredentials: false }
+            `${API_BASE_URL}/collections/${collectionId}/search/agent/stream?${params.toString()}`,
         );
-        
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            onMessage(data);
+
+        const handleEvent = (event: MessageEvent) => {
+            onMessage(JSON.parse(event.data));
         };
-        
+        eventSource.onmessage = handleEvent;
+        eventSource.addEventListener('status', handleEvent as EventListener);
+        eventSource.addEventListener('content', handleEvent as EventListener);
+        eventSource.addEventListener('done', handleEvent as EventListener);
+        eventSource.addEventListener('error', handleEvent as EventListener);
+
         eventSource.onerror = (error) => {
             console.error('SSE error:', error);
             eventSource.close();
         };
-        
+
         return eventSource;
     },
 };

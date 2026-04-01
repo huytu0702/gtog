@@ -5,8 +5,10 @@
 
 import json
 import logging
+import re
 import secrets
 import time
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,11 +20,93 @@ from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.prompts.query.drift_search_system_prompt import (
     DRIFT_PRIMER_PROMPT,
 )
+from graphrag.query.llm.text_utils import try_parse_json_object
 from graphrag.query.structured_search.base import SearchResult
 from graphrag.tokenizer.get_tokenizer import get_tokenizer
 from graphrag.tokenizer.tokenizer import Tokenizer
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_follow_up_queries(value: Any) -> list[str]:
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            loaded = json.loads(stripped)
+        except json.JSONDecodeError:
+            loaded = None
+        if isinstance(loaded, list):
+            value = loaded
+        else:
+            lines = [
+                re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
+                for line in stripped.splitlines()
+            ]
+            return [line for line in lines if line]
+
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    return []
+
+
+def _coerce_score(value: Any) -> int | float:
+    if isinstance(value, bool) or value is None:
+        raise ValueError("DRIFT primer response is missing a numeric score")
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("DRIFT primer response is missing a numeric score")
+        try:
+            numeric = float(stripped)
+        except ValueError as exc:
+            raise ValueError("DRIFT primer response contains an invalid score") from exc
+        return int(numeric) if numeric.is_integer() else numeric
+    raise ValueError("DRIFT primer response contains an invalid score")
+
+
+def _parse_primer_response(
+    raw_response: str,
+    parsed_response: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    candidate = parsed_response or {}
+    if not candidate:
+        cleaned_response = raw_response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[len("```json") :].strip()
+        if cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[len("```") :].strip()
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[: -len("```")].strip()
+
+        try:
+            candidate = json.loads(cleaned_response)
+        except json.JSONDecodeError:
+            _, candidate = try_parse_json_object(raw_response, verbose=False)
+
+    if not isinstance(candidate, dict) or not candidate:
+        raise ValueError("DRIFT primer did not return a JSON object")
+
+    intermediate_answer = str(candidate.get("intermediate_answer") or "").strip()
+    if not intermediate_answer:
+        raise ValueError("DRIFT primer response is missing intermediate_answer")
+
+    follow_up_queries = _coerce_follow_up_queries(candidate.get("follow_up_queries"))
+    if not follow_up_queries:
+        raise ValueError("DRIFT primer response is missing follow_up_queries")
+
+    return {
+        "intermediate_answer": intermediate_answer,
+        "score": _coerce_score(candidate.get("score")),
+        "follow_up_queries": follow_up_queries,
+    }
 
 
 class PrimerQueryProcessor:
@@ -137,10 +221,9 @@ class DRIFTPrimer:
         prompt = DRIFT_PRIMER_PROMPT.format(
             query=query, community_reports=community_reports
         )
-        model_response = await self.chat_model.achat(prompt, json=True)
+        model_response = await self.chat_model.achat(prompt)
         response = model_response.output.content
-
-        parsed_response = json.loads(response)
+        parsed_response = _parse_primer_response(response)
 
         token_ct = {
             "llm_calls": 1,
@@ -196,6 +279,12 @@ class DRIFTPrimer:
         list[pd.DataFrame]: List of report folds.
         """
         primer_folds = self.config.primer_folds or 1  # Ensure at least one fold
-        if primer_folds == 1:
+        if primer_folds == 1 or reports.empty:
             return [reports]
-        return [pd.DataFrame(fold) for fold in np.array_split(reports, primer_folds)]
+
+        row_indexes = np.array_split(
+            np.arange(len(reports)), min(primer_folds, len(reports))
+        )
+        return [
+            reports.iloc[indexes].copy() for indexes in row_indexes if len(indexes) > 0
+        ]

@@ -47,7 +47,11 @@ class SummarizationService:
                 q = turn.rewritten_query or turn.content
                 lines.append(f"User: {q}")
             else:
-                content = turn.content[:200] + "..." if len(turn.content) > 200 else turn.content
+                content = (
+                    turn.content[:200] + "..."
+                    if len(turn.content) > 200
+                    else turn.content
+                )
                 lines.append(f"Assistant: {content}")
         return "\n".join(lines)
 
@@ -79,12 +83,15 @@ class SummarizationService:
             conversation_history: Turns to summarize
             existing_summary: Prior summary to incorporate
 
-        Returns:
+        Returns
+        -------
             New summary string. Falls back to basic concatenation on LLM error.
         """
         existing_summary_block = ""
         if existing_summary:
-            existing_summary_block = f"Previous summary:\n{existing_summary}\n\nNew turns to incorporate:"
+            existing_summary_block = (
+                f"Previous summary:\n{existing_summary}\n\nNew turns to incorporate:"
+            )
 
         conversation_text = self._format_turns(conversation_history)
 
@@ -96,7 +103,7 @@ class SummarizationService:
         try:
             return await self._call_llm(prompt)
         except Exception as e:
-            logger.warning(f"Summarization LLM call failed: {e}. Using fallback.")
+            logger.warning("Summarization LLM call failed: %s. Using fallback.", e)
             # Fallback: join user questions as plain text
             user_questions = [
                 t.rewritten_query or t.content

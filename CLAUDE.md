@@ -3,6 +3,8 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. Always use haiku model for exploring
 use .venv as virtual environment.
 
+**You can access .env in this project and azure CLI, cloudflared CLI**
+
 ## Repository Type
 
 This is a **GraphRAG with ToG Enhancement** repository - a Microsoft Research project that combines knowledge graph-based retrieval-augmented generation with Think-on-Graph deep reasoning capabilities.

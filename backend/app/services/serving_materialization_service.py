@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 import pandas as pd
 
@@ -40,7 +39,10 @@ class ServingMaterializationService:
             )
 
     def _load_frame(self, collection_id: str, file_name: str) -> pd.DataFrame:
-        use_blob = bool(settings.azure_storage_connection_string or settings.azure_storage_account_key)
+        use_blob = bool(
+            settings.azure_storage_connection_string
+            or settings.azure_storage_account_key
+        )
         if use_blob:
             return read_parquet_from_blob(collection_id, f"output/{file_name}")
 
@@ -48,12 +50,19 @@ class ServingMaterializationService:
         return pd.read_parquet(output_dir / file_name)
 
     def _file_exists(self, collection_id: str, file_name: str) -> bool:
-        use_blob = bool(settings.azure_storage_connection_string or settings.azure_storage_account_key)
+        use_blob = bool(
+            settings.azure_storage_connection_string
+            or settings.azure_storage_account_key
+        )
         if use_blob:
             return _blob_file_exists(collection_id, f"output/{file_name}")
-        return (settings.collections_dir / collection_id / "output" / file_name).exists()
+        return (
+            settings.collections_dir / collection_id / "output" / file_name
+        ).exists()
 
-    def materialize_collection_version(self, collection_id: str, version: str) -> dict[str, int]:
+    def materialize_collection_version(
+        self, collection_id: str, version: str
+    ) -> dict[str, int]:
         """Materialize required (and optional) parquet artifacts into Cosmos serving docs."""
         self._ensure_repositories()
         frames: dict[str, pd.DataFrame] = {}
