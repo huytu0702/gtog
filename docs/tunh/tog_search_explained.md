@@ -344,30 +344,43 @@ Câu hỏi vào
   → Còn lại 7 cặp (relation → entity đích) sau pruning relations
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=1 │ STEP C — num_entity_retain=5: Sample trước khi chấm entity
+ DEPTH=1 │ STEP C — Gộp candidate_data từ toàn frontier, rồi sample
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Candidate entities (từ 7 cặp trên):
-  [MICROSOFT, AI_STRATEGY, AZURE, GITHUB, OPENAI, CHATGPT, AWS]
-                             │ = 7 entities
-                             │ > num_entity_retain=5
-                             ▼
-               random.sample(candidates, k=5)
-                             │
-                             ▼
-  ┌──────────────────────────────────────────────────┐
-  │  Sampled 5 để đưa vào LLM:                      │
-  │  1. MICROSOFT   ← được chọn ngẫu nhiên          │
-  │  2. AZURE       ← được chọn                     │
-  │  3. GITHUB      ← được chọn                     │
-  │  4. OPENAI      ← được chọn                     │
-  │  5. CHATGPT     ← được chọn                     │
-  │  ✗ AI_STRATEGY  ← bị loại khỏi sample lần này  │
-  │  ✗ AWS          ← bị loại khỏi sample lần này  │
-  └──────────────────────────────────────────────────┘
+  ⚠️  Tại sao cần step này?
+      Step B xử lý PER-NODE (mỗi node giữ top-3 relations của nó).
+      Sau đó code GỘP tất cả entity đích từ TOÀN frontier thành 1 list:
 
-  ⚠️  Mục đích: Tránh gửi quá nhiều token vào LLM khi node có hàng
-      chục/trăm kết nối. Chỉ gửi tối đa 5 entity để chấm điểm.
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │  SATYA NADELLA  top-3 relations → đích: MICROSOFT, AI_STRATEGY      │
+  │  MICROSOFT      top-3 relations → đích: AZURE, GITHUB, OPENAI       │
+  │  AZURE          top-3 relations → đích: CHATGPT, AWS                │
+  │                                   ─────────────────────────────     │
+  │  candidate_data (gộp lại):        7 entities                        │
+  │                              7 > num_entity_retain=5 → cần sample!  │
+  └──────────────────────────────────────────────────────────────────────┘
+
+  Code thực tế (search.py dòng 327-328):
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │  if len(candidate_data) > self.num_retain_entity:                   │
+  │      candidate_data = random.sample(candidate_data, self.num_retain_entity)│
+  └──────────────────────────────────────────────────────────────────────┘
+
+                             ▼  random.sample(7 entities, k=5)
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │  Sampled 5 để đưa vào LLM score_entities:                           │
+  │  ✅ 1. MICROSOFT   ← được chọn ngẫu nhiên                           │
+  │  ✅ 2. AZURE       ← được chọn                                      │
+  │  ✅ 3. GITHUB      ← được chọn                                      │
+  │  ✅ 4. OPENAI      ← được chọn                                      │
+  │  ✅ 5. CHATGPT     ← được chọn                                      │
+  │  ✗  AI_STRATEGY   ← rớt khỏi sample lần này (random)              │
+  │  ✗  AWS            ← rớt khỏi sample lần này (random)              │
+  └──────────────────────────────────────────────────────────────────────┘
+
+  Mục đích: Giới hạn token budget cho LLM khi gọi score_entities —
+  không phải lọc ngữ nghĩa (đó là việc của Step B), mà là giới hạn
+  kích thước input gửi cho LLM.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  DEPTH=1 │ STEP D — Pruning Entities (LLM chấm entity đích)
@@ -469,17 +482,22 @@ Câu hỏi vào
   → 9 cặp sau pruning
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=2 │ STEP C — num_entity_retain=5: Không cần sample (≤5 đủ)
+ DEPTH=2 │ STEP C — Gộp candidate_data, kiểm tra ngưỡng num_entity_retain
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Candidates từ AZURE: [CLOUD_PLATFORM, CHATGPT, AWS] = 3 entities
-  3 ≤ 5 → KHÔNG cần sample, gửi thẳng cả 3 vào LLM ✅
+  Sau Step B, entity đích từ TOÀN frontier (3 nodes × top-3 relations):
+  ┌───────────────────────────────────────────────────────────────────┐
+  │  MICROSOFT  top-3 → đích: AZURE, GITHUB, OPENAI  (3 entities)    │
+  │  AZURE      top-3 → đích: CLOUD_PLATFORM, CHATGPT, AWS (3)       │
+  │  OPENAI     top-3 → đích: GPT4, SAM_ALTMAN, MICROSOFT (3)        │
+  │                            ─────────────────────────────          │
+  │  candidate_data gộp: 9 entities (có thể trùng → deduplicate)     │
+  │                    9 > num_entity_retain=5 → phải sample!        │
+  └───────────────────────────────────────────────────────────────────┘
 
-  Candidates từ OPENAI: [GPT4, SAM_ALTMAN, MICROSOFT] = 3 entities
-  3 ≤ 5 → KHÔNG cần sample ✅
-
-  Candidates từ MICROSOFT: [AZURE, GITHUB, OPENAI] = 3 entities
-  3 ≤ 5 → KHÔNG cần sample ✅
+  random.sample(9 entities, k=5):
+  ✅ CLOUD_PLATFORM, GPT4, CHATGPT, AZURE, OPENAI  ← được chọn
+  ✗  GITHUB, SAM_ALTMAN, AWS, MICROSOFT            ← rớt sample
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  DEPTH=2 │ STEP D+E — Score Entities & Combined Score & Beam Search
