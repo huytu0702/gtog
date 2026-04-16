@@ -228,163 +228,383 @@ Câu hỏi vào
 ### Giả sử Knowledge Graph có:
 
 ```
-[SATYA NADELLA] --[CEO_OF]--> [MICROSOFT]
-[MICROSOFT]     --[DEVELOPS]--> [AZURE]
-[MICROSOFT]     --[ACQUIRES]--> [GITHUB]
-[MICROSOFT]     --[PARTNERS_WITH]--> [OPENAI]
-[AZURE]         --[IS_A]--> [CLOUD_PLATFORM]
+[SATYA NADELLA] ──[CEO_OF]──────► [MICROSOFT]
+[SATYA NADELLA] ──[BORN_IN]─────► [INDIA]
+[SATYA NADELLA] ──[LEADS]───────► [AI_STRATEGY]
+[MICROSOFT]     ──[DEVELOPS]────► [AZURE]
+[MICROSOFT]     ──[ACQUIRES]────► [GITHUB]
+[MICROSOFT]     ──[INVESTS_IN]──► [OPENAI]
+[MICROSOFT]     ──[FOUNDED_BY]──► [BILL_GATES]
+[AZURE]         ──[POWERS]──────► [CHATGPT]
+[AZURE]         ──[COMPETES]────► [AWS]
+[OPENAI]        ──[BUILDS]──────► [GPT4]
+[GITHUB]        ──[HOSTS]───────► [COPILOT]
+```
+
+> **Config:** `width=3`, `depth=3`, `num_entity_retain=5`
+
+---
+
+### ASCII Flow — Chi tiết với width=3, depth=3, num_entity_retain=5
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║  QUERY: "Satya Nadella là CEO của công ty nào và công ty đó làm gì?"   ║
+║  CONFIG: width=3 │ depth=3 │ num_entity_retain=5                       ║
+╚═════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ BƯỚC 1 │ ENTITY LINKING  — Tìm 3 cửa vào (width=3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Query ──embed──► vector [0.12, -0.34, ...]
+                      │
+                      ▼  cosine_similarity với TẤT CẢ entity
+  ┌──────────────────────────────────────────────────────────────┐
+  │  Entity          │ Sim Score │ Rank │ Kết quả               │
+  ├──────────────────┼───────────┼──────┼───────────────────────┤
+  │  SATYA NADELLA   │   0.92    │  #1  │ ✅ CHỌN (top-1)       │
+  │  MICROSOFT       │   0.85    │  #2  │ ✅ CHỌN (top-2)       │
+  │  AZURE           │   0.71    │  #3  │ ✅ CHỌN (top-3)       │
+  │  OPENAI          │   0.64    │  #4  │ ❌ BỎ  (vượt width=3) │
+  │  BILL GATES      │   0.51    │  #5  │ ❌ BỎ                 │
+  │  ...             │   ...     │ ...  │ ❌ BỎ                 │
+  └──────────────────────────────────────────────────────────────┘
+
+  Starting frontier (depth=0):
+  ┌──────────────────┬────────────┬────────┐
+  │ Node             │ Score      │ Parent │
+  ├──────────────────┼────────────┼────────┤
+  │ SATYA NADELLA    │ 1.0        │ ROOT   │
+  │ MICROSOFT        │ 1.0        │ ROOT   │
+  │ AZURE            │ 1.0        │ ROOT   │
+  └──────────────────┴────────────┴────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ BƯỚC 2 │ EARLY TERMINATION CHECK — Depth=0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Frontier: [SATYA NADELLA, MICROSOFT, AZURE]
+
+  LLM: "Chỉ với 3 entity trên, đủ trả lời câu hỏi chưa?"
+  → "Chưa — biết tên nhưng chưa rõ Microsoft làm gì cụ thể"
+  → should_terminate = False → Tiếp tục vòng lặp depth=1
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    ╔══════════════════╗                                 │
+│                    ║  DEPTH = 1 / 3   ║                                 │
+│                    ╚══════════════════╝                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=1 │ STEP A — Lấy TẤT CẢ quan hệ từ 3 frontier nodes
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [SATYA NADELLA] → 3 relations:            [MICROSOFT] → 4 relations:
+  ┌──────────────────────────────┐           ┌──────────────────────────────┐
+  │ CEO_OF      → MICROSOFT      │           │ DEVELOPS    → AZURE          │
+  │ BORN_IN     → INDIA          │           │ ACQUIRES    → GITHUB         │
+  │ LEADS       → AI_STRATEGY    │           │ INVESTS_IN  → OPENAI         │
+  └──────────────────────────────┘           │ FOUNDED_BY  → BILL_GATES     │
+                                             └──────────────────────────────┘
+  [AZURE] → 2 relations:
+  ┌──────────────────────────────┐
+  │ POWERS      → CHATGPT        │
+  │ COMPETES    → AWS            │
+  └──────────────────────────────┘
+
+  Tổng: 9 quan hệ từ 3 nodes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=1 │ STEP B — Pruning Relations (LLM chấm, giữ top-3 per node)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌─ Từ SATYA NADELLA ─────────────────────────────────────────────────┐
+  │  LLM prompt: "Query=..., Entity=SATYA NADELLA, score các quan hệ:" │
+  │  Quan hệ        → Entity đích    │ LLM score │ Kết quả             │
+  │  CEO_OF         → MICROSOFT      │     9     │ ✅ GIỮ (top-1)      │
+  │  LEADS          → AI_STRATEGY    │     6     │ ✅ GIỮ (top-2)      │
+  │  BORN_IN        → INDIA          │     1     │ ❌ LOẠI (score thấp)│
+  └────────────────────────────────────────────────────────────────────┘
+
+  ┌─ Từ MICROSOFT ─────────────────────────────────────────────────────┐
+  │  LLM score:                                                        │
+  │  DEVELOPS    → AZURE          │  8  │ ✅ GIỮ (top-1)              │
+  │  ACQUIRES    → GITHUB         │  7  │ ✅ GIỮ (top-2)              │
+  │  INVESTS_IN  → OPENAI         │  7  │ ✅ GIỮ (top-3)              │
+  │  FOUNDED_BY  → BILL_GATES     │  2  │ ❌ LOẠI (vượt width=3)      │
+  └────────────────────────────────────────────────────────────────────┘
+
+  ┌─ Từ AZURE ─────────────────────────────────────────────────────────┐
+  │  LLM score:                                                        │
+  │  POWERS      → CHATGPT        │  7  │ ✅ GIỮ (top-1)              │
+  │  COMPETES    → AWS            │  4  │ ✅ GIỮ (top-2, width cho phép)│
+  └────────────────────────────────────────────────────────────────────┘
+
+  → Còn lại 7 cặp (relation → entity đích) sau pruning relations
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=1 │ STEP C — num_entity_retain=5: Sample trước khi chấm entity
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Candidate entities (từ 7 cặp trên):
+  [MICROSOFT, AI_STRATEGY, AZURE, GITHUB, OPENAI, CHATGPT, AWS]
+                             │ = 7 entities
+                             │ > num_entity_retain=5
+                             ▼
+               random.sample(candidates, k=5)
+                             │
+                             ▼
+  ┌──────────────────────────────────────────────────┐
+  │  Sampled 5 để đưa vào LLM:                      │
+  │  1. MICROSOFT   ← được chọn ngẫu nhiên          │
+  │  2. AZURE       ← được chọn                     │
+  │  3. GITHUB      ← được chọn                     │
+  │  4. OPENAI      ← được chọn                     │
+  │  5. CHATGPT     ← được chọn                     │
+  │  ✗ AI_STRATEGY  ← bị loại khỏi sample lần này  │
+  │  ✗ AWS          ← bị loại khỏi sample lần này  │
+  └──────────────────────────────────────────────────┘
+
+  ⚠️  Mục đích: Tránh gửi quá nhiều token vào LLM khi node có hàng
+      chục/trăm kết nối. Chỉ gửi tối đa 5 entity để chấm điểm.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=1 │ STEP D — Pruning Entities (LLM chấm entity đích)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  LLM prompt:
+  "Query: Satya Nadella CEO của ai, và công ty đó làm gì?
+   Current paths:
+     • ROOT → SATYA NADELLA → (CEO_OF) → ???
+     • ROOT → MICROSOFT     → (DEVELOPS) → ???
+     • ROOT → AZURE         → (POWERS) → ???
+   Entity candidates: 1.MICROSOFT 2.AZURE 3.GITHUB 4.OPENAI 5.CHATGPT
+   Chấm 1-10 xem entity nào giúp trả lời câu hỏi nhất:"
+
+  LLM trả về: [10, 8, 6, 7, 5]
+  ┌────────────┬────────────┬─────────┐
+  │ Entity     │ Rel Score  │ Ent Score│
+  ├────────────┼────────────┼─────────┤
+  │ MICROSOFT  │ 9 (CEO_OF) │   10    │
+  │ OPENAI     │ 7 (INVEST) │    7    │
+  │ AZURE      │ 8 (DEVELO) │    8    │
+  │ GITHUB     │ 7 (ACQUIR) │    6    │
+  │ CHATGPT    │ 7 (POWERS) │    5    │
+  └────────────┴────────────┴─────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=1 │ STEP E — Combined Score & Beam Search (giữ top-3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Công thức:
+  combined_score = parent.score × rel_score × (entity_score / 10.0)
+
+  ┌────────────────────────────────────────────────────────────────────┐
+  │ Node mới              │ parent │ rel │ ent │ Combined              │
+  ├───────────────────────┼────────┼─────┼─────┼───────────────────────┤
+  │ NADELLA→MICROSOFT     │  1.0   │  9  │ 10  │ 1.0×9×(10/10) = 9.00 │
+  │ MICROSOFT→AZURE       │  1.0   │  8  │  8  │ 1.0×8×(8/10)  = 6.40 │
+  │ MICROSOFT→OPENAI      │  1.0   │  7  │  7  │ 1.0×7×(7/10)  = 4.90 │
+  │ MICROSOFT→GITHUB      │  1.0   │  7  │  6  │ 1.0×7×(6/10)  = 4.20 │
+  │ AZURE→CHATGPT         │  1.0   │  7  │  5  │ 1.0×7×(5/10)  = 3.50 │
+  └───────────────────────┴────────┴─────┴─────┴───────────────────────┘
+
+  Beam Search — Sắp xếp và giữ top-3 (width=3):
+  ✅ #1  NADELLA→MICROSOFT   score=9.00  ← GIỮ
+  ✅ #2  MICROSOFT→AZURE     score=6.40  ← GIỮ
+  ✅ #3  MICROSOFT→OPENAI    score=4.90  ← GIỮ
+  ❌ #4  MICROSOFT→GITHUB    score=4.20  ← BỎ (vượt width=3)
+  ❌ #5  AZURE→CHATGPT       score=3.50  ← BỎ
+
+  Frontier sau depth=1:
+  ┌─────────────────────┬───────┬──────────────────────────────┐
+  │ Node                │ Score │ Path                         │
+  ├─────────────────────┼───────┼──────────────────────────────┤
+  │ MICROSOFT           │  9.00 │ ROOT→NADELLA→MICROSOFT       │
+  │ AZURE               │  6.40 │ ROOT→MICROSOFT→AZURE         │
+  │ OPENAI              │  4.90 │ ROOT→MICROSOFT→OPENAI        │
+  └─────────────────────┴───────┴──────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=1 │ EARLY TERMINATION CHECK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  LLM: "Path hiện có: NADELLA→MICROSOFT, MICROSOFT→AZURE, MICROSOFT→OPENAI
+        Đủ trả lời 'Nadella là CEO của ai và công ty đó làm gì?' chưa?"
+  → "Biết Nadella là CEO Microsoft, Microsoft có Azure, nhưng
+     chưa rõ Azure/OpenAI đang làm GÌ cụ thể"
+  → should_terminate = False → Tiếp tục depth=2
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    ╔══════════════════╗                                 │
+│                    ║  DEPTH = 2 / 3   ║                                 │
+│                    ╚══════════════════╝                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=2 │ STEP A — Lấy relations từ 3 frontier nodes
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [MICROSOFT]  → DEVELOPS→AZURE, ACQUIRES→GITHUB, INVESTS_IN→OPENAI,
+                 FOUNDED_BY→BILL_GATES   (4 relations)
+
+  [AZURE]      → POWERS→CHATGPT, COMPETES→AWS, IS_A→CLOUD_PLATFORM
+                 (3 relations)
+
+  [OPENAI]     → BUILDS→GPT4, PARTNERED_BY→MICROSOFT, LED_BY→SAM_ALTMAN
+                 (3 relations)
+
+  Tổng: 10 quan hệ
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=2 │ STEP B — Pruning Relations (top-3 per node)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Từ MICROSOFT:    DEVELOPS(8)✅  ACQUIRES(7)✅  INVESTS_IN(7)✅
+                   FOUNDED_BY(2)❌
+  Từ AZURE:        IS_A(9)✅      POWERS(7)✅    COMPETES(4)✅
+  Từ OPENAI:       BUILDS(9)✅    LED_BY(5)✅    PARTNERED_BY(3)✅
+
+  → 9 cặp sau pruning
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=2 │ STEP C — num_entity_retain=5: Không cần sample (≤5 đủ)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Candidates từ AZURE: [CLOUD_PLATFORM, CHATGPT, AWS] = 3 entities
+  3 ≤ 5 → KHÔNG cần sample, gửi thẳng cả 3 vào LLM ✅
+
+  Candidates từ OPENAI: [GPT4, SAM_ALTMAN, MICROSOFT] = 3 entities
+  3 ≤ 5 → KHÔNG cần sample ✅
+
+  Candidates từ MICROSOFT: [AZURE, GITHUB, OPENAI] = 3 entities
+  3 ≤ 5 → KHÔNG cần sample ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=2 │ STEP D+E — Score Entities & Combined Score & Beam Search
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │ Node mới           │ parent_score│ rel│ ent │ Combined               │
+  ├────────────────────┼─────────────┼────┼─────┼────────────────────────┤
+  │ AZURE→CLOUD_PLATFORM│   6.40     │  9 │  9  │ 6.40×9×(9/10) = 51.84 │
+  │ OPENAI→GPT4        │   4.90     │  9 │  9  │ 4.90×9×(9/10) = 39.69 │
+  │ AZURE→CHATGPT      │   6.40     │  7 │  8  │ 6.40×7×(8/10) = 35.84 │
+  │ MICROSOFT→AZURE    │   9.00     │  8 │  7  │ 9.00×8×(7/10) = 50.40 │
+  │ OPENAI→SAM_ALTMAN  │   4.90     │  5 │  6  │ 4.90×5×(6/10) = 14.70 │
+  │ AZURE→AWS          │   6.40     │  4 │  4  │ 6.40×4×(4/10) = 10.24 │
+  └────────────────────┴─────────────┴────┴─────┴────────────────────────┘
+
+  Beam Search — Giữ top-3 (width=3):
+  ✅ #1  AZURE→CLOUD_PLATFORM   score=51.84  ← GIỮ
+  ✅ #2  MICROSOFT→AZURE        score=50.40  ← GIỮ
+  ✅ #3  OPENAI→GPT4            score=39.69  ← GIỮ
+  ❌ #4  AZURE→CHATGPT          score=35.84  ← BỎ
+  ❌ ...                                     ← BỎ
+
+  Frontier sau depth=2:
+  ┌──────────────────────┬────────┬────────────────────────────────────┐
+  │ Node                 │ Score  │ Path                               │
+  ├──────────────────────┼────────┼────────────────────────────────────┤
+  │ CLOUD_PLATFORM       │ 51.84  │ NADELLA→MICROSOFT→AZURE→CLOUD_PLT  │
+  │ AZURE (2nd path)     │ 50.40  │ MICROSOFT→AZURE (từ MICROSOFT)     │
+  │ GPT4                 │ 39.69  │ MICROSOFT→OPENAI→GPT4              │
+  └──────────────────────┴────────┴────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPTH=2 │ EARLY TERMINATION CHECK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  LLM nhận top paths:
+  • NADELLA → MICROSOFT → AZURE → CLOUD_PLATFORM
+  • NADELLA → MICROSOFT → OPENAI → GPT4
+
+  LLM: "Giờ đã biết: Nadella là CEO Microsoft. Microsoft phát triển
+        Azure (nền tảng CLOUD). Đầu tư OpenAI, xây GPT4.
+        Câu hỏi hỏi 'công ty đó làm gì?' → ĐÃ ĐỦ!"
+  → should_terminate = True ✅
+  → Dừng sớm! Không cần chạy depth=3
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    ╔══════════════════╗                                 │
+│                    ║  DEPTH = 3 / 3   ║  ← BỎ QUA (đã terminate)      │
+│                    ╚══════════════════╝                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ BƯỚC CUỐI │ GENERATE FINAL ANSWER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Reasoning paths thu thập được:
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ Path 1: SATYA NADELLA ──[CEO_OF]──► MICROSOFT                      │
+  │                                         └──[DEVELOPS]──► AZURE     │
+  │                                                   └──[IS_A]──► CLOUD│
+  │                                                                     │
+  │ Path 2: MICROSOFT ──[INVESTS_IN]──► OPENAI ──[BUILDS]──► GPT4      │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  + Text Units: Đoạn văn gốc trong corpus về Microsoft, Azure, OpenAI
+
+  LLM sinh câu trả lời cuối:
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ "Satya Nadella là CEO của Microsoft. Microsoft là công ty công nghệ │
+  │  lớn với các mảng kinh doanh chính: Azure (nền tảng điện toán đám  │
+  │  mây), GitHub (nền tảng lưu trữ mã nguồn), và đầu tư vào OpenAI   │
+  │  — tổ chức xây dựng GPT-4 và ChatGPT."                            │
+  │                                                                     │
+  │  [Nguồn: path NADELLA→MICROSOFT→AZURE→CLOUD_PLATFORM (score 51.8)] │
+  └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### ASCII Flow — Chạy với width=2, depth=2
+## 🌳 Cây tìm kiếm đầy đủ (width=3, depth=3)
 
 ```
-═══════════════════════════════════════════════════════════════════════
- QUERY: "Satya Nadella là CEO của công ty nào và công ty đó làm gì?"
-═══════════════════════════════════════════════════════════════════════
+                              [QUERY]
+                                 │
+            ┌────────────────────┼────────────────────┐
+            │                   │                    │
+      [SATYA NADELLA]       [MICROSOFT]           [AZURE]
+        score=1.0             score=1.0            score=1.0
+   (Entity Linking #1)   (Entity Linking #2)  (Entity Linking #3)
+            │                   │                    │
+       ┌────┴─────┐         ┌───┼───┐            ┌───┴───┐
+       │          │         │   │   │            │       │
+  [MICROSOFT] [AI_STRAT] [AZURE][GITHUB][OPENAI][CHATGPT][AWS]
+    rel=9       rel=6      rel=8  rel=7   rel=7   rel=7   rel=4
+    ent=10      ent=7      ent=8  ent=6   ent=7   ent=5   ent=4
+   =9.00✅    =4.20❌    =6.40✅ =4.20❌ =4.90✅ =3.50❌ =2.80❌
 
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 1: Entity Linking (Tìm cửa vào)                               │
-│                                                                     │
-│  Query Embedding ──► So sánh với 500 entities trong graph          │
-│                                                                     │
-│  Score cao nhất:                                                    │
-│  ✅ "SATYA NADELLA"   score=0.92  ← CHỌN (top-1)                  │
-│  ✅ "MICROSOFT"       score=0.85  ← CHỌN (top-2, width=2)         │
-│  ❌ "AZURE"           score=0.71  ← BỎ (vượt width)               │
-│                                                                     │
-│  Starting nodes: [SATYA NADELLA, MICROSOFT]                        │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 2: Early Termination Check (Depth=0)                          │
-│                                                                     │
-│  LLM: "Chỉ với SATYA NADELLA + MICROSOFT, đủ trả lời chưa?"       │
-│  → "Chưa đủ, chưa biết Microsoft làm gì"                          │
-│  → Tiếp tục đào sâu...                                             │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 3a: Expand Depth=1 — Lấy relations từ các starting nodes      │
-│                                                                     │
-│  Từ [SATYA NADELLA]:                                               │
-│  ├── CEO_OF        → MICROSOFT        (outgoing)                   │
-│  └── BORN_IN       → INDIA            (outgoing)                   │
-│                                                                     │
-│  Từ [MICROSOFT]:                                                   │
-│  ├── DEVELOPS      → AZURE            (outgoing)                   │
-│  ├── ACQUIRES      → GITHUB           (outgoing)                   │
-│  └── PARTNERS_WITH → OPENAI           (outgoing)                   │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 3b: Pruning Relations (LLM chấm điểm)                        │
-│                                                                     │
-│  Prompt → LLM: "Câu hỏi: Satya Nadella CEO của ai và làm gì?      │
-│  Từ SATYA NADELLA có các quan hệ: 1.CEO_OF 2.BORN_IN              │
-│  Chấm 1-10 cho từng quan hệ:"                                      │
-│                                                                     │
-│  LLM trả về: [9, 1]                                                │
-│  ✅ CEO_OF   → score=9.0  ← GIỮ LẠI                               │
-│  ❌ BORN_IN  → score=1.0  ← LOẠI (không liên quan)                │
-│                                                                     │
-│  Từ MICROSOFT: [8, 7, 6]                                           │
-│  ✅ DEVELOPS → AZURE   score=8.0                                   │
-│  ✅ ACQUIRES → GITHUB  score=7.0                                   │
-│  ❌ PARTNERS → OPENAI  score=6.0  ← (vượt width=2 → loại)         │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 3c: Pruning Entities (LLM chấm điểm entity đích)              │
-│                                                                     │
-│  Candidates: [MICROSOFT(9), AZURE(8), GITHUB(7)]                   │
-│  Nếu > num_retain_entity=5 → random sample, rồi chấm điểm         │
-│                                                                     │
-│  Prompt → LLM: "Path hiện tại: SATYA NADELLA --CEO_OF--> ...      │
-│  Entity candidates: 1.MICROSOFT 2.AZURE 3.GITHUB                   │
-│  Chấm 1-10:"                                                       │
-│  LLM: [10, 8, 6]                                                   │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 3d: Tính Combined Score & Beam Search                         │
-│                                                                     │
-│  combined_score = parent.score × rel_score × (entity_score / 10)   │
-│                                                                     │
-│  Node A: SATYA NADELLA→MICROSOFT                                   │
-│    score = 1.0 × 9.0 × (10/10) = 9.0                              │
-│                                                                     │
-│  Node B: MICROSOFT→AZURE                                           │
-│    score = 1.0 × 8.0 × (8/10)  = 6.4                              │
-│                                                                     │
-│  Node C: MICROSOFT→GITHUB                                          │
-│    score = 1.0 × 7.0 × (6/10)  = 4.2                              │
-│                                                                     │
-│  Beam Search: Giữ top-2 (width=2):                                 │
-│  ✅ Node A: SATYA NADELLA→MICROSOFT  score=9.0  ← GIỮ             │
-│  ✅ Node B: MICROSOFT→AZURE          score=6.4  ← GIỮ             │
-│  ❌ Node C: MICROSOFT→GITHUB         score=4.2  ← BỎ              │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 3e: Early Termination Check (Depth=1)                         │
-│                                                                     │
-│  Frontier: [MICROSOFT(từ Nadella), AZURE(từ Microsoft)]            │
-│                                                                     │
-│  LLM: "Với info này, đủ trả lời câu hỏi chưa?"                    │
-│  → "Đủ rồi! SATYA NADELLA là CEO của MICROSOFT.                    │
-│       MICROSOFT phát triển AZURE (cloud platform)."                │
-│  → should_terminate = True ✅                                       │
-│  → Kết thúc sớm! Không cần đào đến depth=2                        │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ BƯỚC 4: Generate Final Answer                                      │
-│                                                                     │
-│  Reasoning paths:                                                   │
-│  • SATYA NADELLA --[CEO_OF]--> MICROSOFT                           │
-│  • MICROSOFT --[DEVELOPS]--> AZURE (cloud platform)               │
-│                                                                     │
-│  + Text Units: Đoạn văn gốc trong corpus về Microsoft & Nadella    │
-│                                                                     │
-│  LLM sinh câu trả lời:                                             │
-│  "Satya Nadella là CEO của Microsoft. Microsoft là công ty         │
-│   công nghệ phát triển các sản phẩm như Azure (nền tảng           │
-│   điện toán đám mây), GitHub, và hợp tác với OpenAI..."           │
-└─────────────────────────────────────────────────────────────────────┘
-```
+  ┌─────────────────────────────────────────────────────────────┐
+  │ BEAM SEARCH depth=1: Giữ TOP-3 toàn cục                    │
+  │   ✅ MICROSOFT  9.00  (path: NADELLA→MICROSOFT)             │
+  │   ✅ AZURE      6.40  (path: MICROSOFT→AZURE)               │
+  │   ✅ OPENAI     4.90  (path: MICROSOFT→OPENAI)              │
+  └─────────────────────────────────────────────────────────────┘
+            │                   │                    │
+       ┌────┴──┐          ┌─────┼────┐          ┌───┴────┐
+       │       │          │     │    │          │        │
+  [AZURE] [GITHUB]  [CLOUD_PLT][CHATGPT][AWS] [GPT4] [SAM_ALTMAN]
+    r=8    r=7       r=9   r=7   r=4    r=9     r=5
+    e=7    e=6       e=9   e=8   e=4    e=9     e=6
+  =50.4  =37.8    =51.8  =35.8 =10.2  =39.7  =14.7
 
----
+  ┌─────────────────────────────────────────────────────────────┐
+  │ BEAM SEARCH depth=2: Giữ TOP-3 toàn cục                    │
+  │   ✅ CLOUD_PLT  51.84  (NADELLA→MSFT→AZURE→CLOUD_PLATFORM)  │
+  │   ✅ AZURE      50.40  (NADELLA→MSFT→AZURE — 2nd path)      │
+  │   ✅ GPT4       39.69  (MSFT→OPENAI→GPT4)                   │
+  └─────────────────────────────────────────────────────────────┘
+            │
+    [EARLY TERMINATION ✅]
+    Đủ thông tin → Dừng, không chạy depth=3
 
-## 🌳 Cây tìm kiếm đầy đủ (Beam Search Tree)
-
-```
-                    [QUERY]
-                       │
-         ┌─────────────┴──────────────┐
-         │                            │
-    [SATYA NADELLA]              [MICROSOFT]
-      score=1.0                   score=1.0
-         │                            │
-    ┌────┴────┐                 ┌─────┼─────┐
-    │         │                 │     │     │
-[MICROSOFT] [INDIA]         [AZURE][GITHUB][OPENAI]
-  9.0×1.0    1.0×1.0         8.0    7.0    6.0
-  =9.0  ✅   =1.0  ❌        ✅     ✅     ❌
-
-         BEAM WIDTH=2: Chỉ giữ top-2
-         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-         ✅ SATYA→MICROSOFT   (9.0)
-         ✅ MICROSOFT→AZURE   (6.4)
-         ❌ MICROSOFT→GITHUB  (4.2)  ← bị loại
+  ╔═════════════════════════════════════════════════════════════╗
+  ║  FINAL ANSWER tổng hợp từ 3 winning paths                  ║
+  ╚═════════════════════════════════════════════════════════════╝
 ```
 
 ---
