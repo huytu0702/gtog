@@ -6,7 +6,7 @@
 from pathlib import Path
 
 from graphrag.callbacks.query_callbacks import QueryCallbacks
-from graphrag.config.embeddings import entity_description_embedding
+from graphrag.config.embeddings import entity_description_embedding, relationship_description_embedding
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.data_model.community import Community
 from graphrag.data_model.community_report import CommunityReport
@@ -338,13 +338,23 @@ def get_tog_search_engine(
     entity_text_embeddings: BaseVectorStore | None = None,
 ) -> ToGSearch:
     """Create a ToG search engine based on data + configuration."""
+    # Build vector store args using correct pattern
+    vector_store_args = {
+        index: store.model_dump() for index, store in config.vector_store.items()
+    }
+
     # Create entity embedding store if not provided
     if entity_text_embeddings is None:
-        vector_store_args = config.vector_store.model_dump()
         entity_text_embeddings = get_embedding_store(
             config_args=vector_store_args,
             embedding_name=entity_description_embedding,
         )
+
+    # Load relationship embeddings store (pre-computed during indexing)
+    relationship_text_embeddings = get_embedding_store(
+        config_args=vector_store_args,
+        embedding_name=relationship_description_embedding,
+    )
 
     chat_model_settings = config.get_language_model_config(
         config.tog_search.chat_model_id
@@ -392,6 +402,7 @@ def get_tog_search_engine(
         pruning_strategy = SemanticPruning(
             embedding_model=embedding_model,
             entity_embedding_store=entity_text_embeddings,
+            relationship_embedding_store=relationship_text_embeddings,
         )
     elif config.tog_search.prune_strategy == "bm25":
         pruning_strategy = BM25Pruning()

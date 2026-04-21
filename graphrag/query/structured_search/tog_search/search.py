@@ -1,7 +1,10 @@
+import asyncio
 import random
 import time
 from dataclasses import dataclass
 from typing import AsyncGenerator, List, Optional, Tuple, Union
+
+import numpy as np
 from graphrag.callbacks.query_callbacks import QueryCallbacks
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.data_model.entity import Entity
@@ -261,6 +264,13 @@ class ToGSearch:
             return
         yield ("", [], early_term_metrics, "")
 
+        # Pre-compute query embedding once for the entire search session
+        query_embedding: np.ndarray | None = None
+        if isinstance(self.pruning_strategy, SemanticPruning) and self.embedding_model:
+            query_embedding = np.array(
+                await self.embedding_model.aembed(text=effective_query)
+            )
+
         # Exploration loop
         while state.current_depth < state.max_depth:
             # Get current frontier
@@ -271,110 +281,24 @@ class ToGSearch:
 
             # Prepare for next depth
             next_depth = state.current_depth + 1
-            next_level_nodes = []
 
-            # Explore each node in current frontier
-            for node in current_nodes:
-                # Get relations for current entity
-                relations = self.explorer.get_relations(node.entity_id)
+            # Parallelize per-node processing
+            tasks = [
+                self._process_node(query, node, query_embedding)
+                for node in current_nodes
+            ]
+            task_results = await asyncio.gather(*tasks)
 
-                if not relations:
-                    continue  # No relations to explore from this node
+            # Collect all pruning metrics and next-level nodes
+            next_level_nodes: list = []
+            all_node_metrics: list = []
+            for new_nodes, metrics_list in task_results:
+                next_level_nodes.extend(new_nodes)
+                all_node_metrics.extend(metrics_list)
 
-                # Score relations
-                (
-                    scored_relations,
-                    pruning_metrics,
-                ) = await self.pruning_strategy.score_relations(
-                    query, node.entity_name, relations
-                )
-
-                # Yield pruning metrics
-                yield ("", [], pruning_metrics, "")
-
-                # Keep top relations based on scores (capped by beam width)
-                scored_relations.sort(key=lambda x: x[4], reverse=True)  # Sort by score
-                top_relations = scored_relations[: self.width]
-
-                # Build entity candidates for a second-stage prune (closer to original ToG)
-                # so we do not rely on relation scores alone when many candidates exist.
-                candidate_data = []
-                for rel_desc, target_id, direction, weight, rel_score in top_relations:
-                    target_info = self.explorer.get_full_entity_info(target_id)
-                    rel_info = self.explorer.get_full_relation_info(
-                        node.entity_id, target_id, rel_desc
-                    )
-                    if target_info:
-                        _, target_name, target_full_desc = target_info
-                        rel_full_desc = rel_info[1] if rel_info else rel_desc
-                        candidate_data.append(
-                            (
-                                rel_desc,
-                                target_id,
-                                direction,
-                                weight,
-                                rel_score,
-                                target_name,
-                                target_full_desc,
-                                rel_full_desc,
-                            )
-                        )
-
-                if not candidate_data:
-                    continue
-
-                # Sample entity candidates if too many (matches original ToG paper semantics)
-                if len(candidate_data) > self.num_retain_entity:
-                    candidate_data = random.sample(candidate_data, self.num_retain_entity)
-
-                entity_candidates = [
-                    (target_id, target_name, target_full_desc)
-                    for (
-                        _rel_desc,
-                        target_id,
-                        _direction,
-                        _weight,
-                        _rel_score,
-                        target_name,
-                        target_full_desc,
-                        _rel_full_desc,
-                    ) in candidate_data
-                ]
-                current_path = self._node_to_path_string(node)
-
-                entity_scores, entity_metrics = await self.pruning_strategy.score_entities(
-                    query=query,
-                    current_path=current_path,
-                    entities=entity_candidates,
-                )
-                yield ("", [], entity_metrics, "")
-
-                # Create new exploration nodes with combined score.
-                for idx, (
-                    rel_desc,
-                    target_id,
-                    _direction,
-                    _weight,
-                    rel_score,
-                    target_name,
-                    target_full_desc,
-                    rel_full_desc,
-                ) in enumerate(candidate_data):
-                    entity_score = entity_scores[idx] if idx < len(entity_scores) else 5.0
-                    hop_score = rel_score * (max(entity_score, 0.0) / 10.0)
-                    combined_score = node.score * hop_score
-                    new_node = ExplorationNode(
-                            entity_id=target_id,
-                            entity_name=target_name,
-                            entity_description=target_full_desc,
-                            depth=next_depth,
-                            score=combined_score,
-                            parent=node,
-                            relation_from_parent=rel_desc,
-                            relation_full_description=rel_full_desc,
-                            entity_full_description=target_full_desc,
-                        )
-                    next_level_nodes.append(new_node)
+            # Yield all collected metrics
+            for m in all_node_metrics:
+                yield ("", [], m, "")
 
             # Add next level nodes to state
             state.nodes_by_depth[next_depth] = next_level_nodes
@@ -459,6 +383,87 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
                 None,
                 "",
             )
+
+    async def _process_node(
+        self,
+        query: str,
+        node: ExplorationNode,
+        query_embedding: Optional[np.ndarray] = None,
+    ) -> Tuple[List[ExplorationNode], List[PruningMetrics]]:
+        """Process a single frontier node: score relations, score entities, build new nodes."""
+        next_depth = node.depth + 1
+        metrics_list: List[PruningMetrics] = []
+
+        relations = self.explorer.get_relations(node.entity_id)
+        if not relations:
+            return [], []
+
+        # Score relations
+        scored_relations, pruning_metrics = await self.pruning_strategy.score_relations(
+            query, node.entity_name, relations, query_embedding=query_embedding
+        )
+        metrics_list.append(pruning_metrics)
+
+        # Keep top relations based on scores (capped by beam width)
+        scored_relations.sort(key=lambda x: x[4], reverse=True)
+        top_relations = scored_relations[: self.width]
+
+        # Build entity candidates
+        candidate_data = []
+        for rel_desc, target_id, direction, weight, rel_score in top_relations:
+            target_info = self.explorer.get_full_entity_info(target_id)
+            rel_info = self.explorer.get_full_relation_info(node.entity_id, target_id, rel_desc)
+            if target_info:
+                _, target_name, target_full_desc = target_info
+                rel_full_desc = rel_info[1] if rel_info else rel_desc
+                candidate_data.append(
+                    (rel_desc, target_id, direction, weight, rel_score,
+                     target_name, target_full_desc, rel_full_desc)
+                )
+
+        if not candidate_data:
+            return [], metrics_list
+
+        # Sample if too many candidates
+        if len(candidate_data) > self.num_retain_entity:
+            candidate_data = random.sample(candidate_data, self.num_retain_entity)
+
+        entity_candidates = [
+            (target_id, target_name, target_full_desc)
+            for (_, target_id, _, _, _, target_name, target_full_desc, _) in candidate_data
+        ]
+        current_path = self._node_to_path_string(node)
+
+        entity_scores, entity_metrics = await self.pruning_strategy.score_entities(
+            query=query,
+            current_path=current_path,
+            entities=entity_candidates,
+            query_embedding=query_embedding,
+        )
+        metrics_list.append(entity_metrics)
+
+        # Create new exploration nodes
+        new_nodes: List[ExplorationNode] = []
+        for idx, (
+            rel_desc, target_id, _direction, _weight, rel_score,
+            target_name, target_full_desc, rel_full_desc,
+        ) in enumerate(candidate_data):
+            entity_score = entity_scores[idx] if idx < len(entity_scores) else 5.0
+            hop_score = rel_score * (max(entity_score, 0.0) / 10.0)
+            combined_score = node.score * hop_score
+            new_nodes.append(ExplorationNode(
+                entity_id=target_id,
+                entity_name=target_name,
+                entity_description=target_full_desc,
+                depth=next_depth,
+                score=combined_score,
+                parent=node,
+                relation_from_parent=rel_desc,
+                relation_full_description=rel_full_desc,
+                entity_full_description=target_full_desc,
+            ))
+
+        return new_nodes, metrics_list
 
     def _node_to_path_string(self, node: ExplorationNode) -> str:
         """Build a readable chain string from root to current node."""
