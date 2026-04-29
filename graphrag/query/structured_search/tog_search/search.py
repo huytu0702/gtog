@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 import time
 from dataclasses import dataclass
@@ -18,6 +19,8 @@ from .exploration import GraphExplorer
 from .pruning import PruningStrategy, LLMPruning, SemanticPruning, PruningMetrics
 from .reasoning import ToGReasoning, ReasoningMetrics
 from graphrag.query.context_builder.conversation_history import ConversationHistory
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -176,6 +179,15 @@ class ToGSearch:
         Tuple[str, List[str], Union[PruningMetrics, ReasoningMetrics, None], str], None
     ]:
         """Perform ToG search with streaming output."""
+        logger.info(
+            "[ToG][start] width=%d depth=%d pruning=%s reasoning=%s query_len=%d",
+            self.width,
+            self.depth,
+            type(self.pruning_strategy).__name__,
+            type(self.reasoning_module).__name__,
+            len(query),
+        )
+
         # Enrich query for entity linking with previous user questions
         effective_query = query
         if conversation_history:
@@ -196,13 +208,18 @@ class ToGSearch:
 
         # Find initial entities using semantic similarity (like ToG paper)
         if self.embedding_model:
+            logger.info("[ToG][entity_linking] semantic_start top_k=%d", self.width)
             starting_entities = await self.explorer.find_starting_entities_semantic(
                 effective_query, top_k=self.width
             )
         else:
+            logger.info("[ToG][entity_linking] lexical_start top_k=%d", self.width)
             starting_entities = self.explorer.find_starting_entities(
                 effective_query, top_k=self.width
             )
+
+        logger.info("[ToG][entity_linking] found=%d", len(starting_entities))
+        logger.debug("[ToG][entity_linking] ids=%s", starting_entities)
 
         if not starting_entities:
             available_entities = list(self.explorer.entities.keys())[:10]
@@ -244,6 +261,8 @@ class ToGSearch:
 
         # Check depth-0: can starting entities alone answer the query?
         frontier_nodes = state.get_current_frontier()
+        logger.info("[ToG][depth=0] frontier=%d", len(frontier_nodes))
+        logger.debug("[ToG][depth=0] entities=%s", [n.entity_name for n in frontier_nodes])
         frontier_text_units = self.explorer.get_text_units_for_nodes(frontier_nodes)
         (
             should_terminate,
@@ -257,6 +276,10 @@ class ToGSearch:
             reasoning_paths = self.reasoning_module.get_reasoning_paths(
                 state.get_current_frontier()
             )
+            logger.info(
+                "[ToG][early_terminate][depth=0] triggered paths=%d",
+                len(reasoning_paths),
+            )
             early_context_text = self.reasoning_module.format_paths(
                 state.get_current_frontier(), text_units=frontier_text_units
             )
@@ -267,6 +290,7 @@ class ToGSearch:
         # Pre-compute query embedding once for the entire search session
         query_embedding: np.ndarray | None = None
         if isinstance(self.pruning_strategy, SemanticPruning) and self.embedding_model:
+            logger.info("[ToG][embedding] precompute query embedding")
             query_embedding = np.array(
                 await self.embedding_model.aembed(text=effective_query)
             )
@@ -276,7 +300,19 @@ class ToGSearch:
             # Get current frontier
             current_nodes = state.get_current_frontier()
 
+            logger.info(
+                "[ToG][explore][depth=%d] frontier=%d",
+                state.current_depth,
+                len(current_nodes),
+            )
+            logger.debug(
+                "[ToG][explore][depth=%d] nodes=%s",
+                state.current_depth,
+                [n.entity_name for n in current_nodes],
+            )
+
             if not current_nodes:
+                logger.info("[ToG][explore] stop: empty frontier at depth=%d", state.current_depth)
                 break  # No more nodes to explore
 
             # Prepare for next depth
@@ -296,6 +332,14 @@ class ToGSearch:
                 next_level_nodes.extend(new_nodes)
                 all_node_metrics.extend(metrics_list)
 
+            logger.info(
+                "[ToG][expand][depth=%d->%d] candidates=%d metrics=%d",
+                state.current_depth,
+                next_depth,
+                len(next_level_nodes),
+                len(all_node_metrics),
+            )
+
             # Yield all collected metrics
             for m in all_node_metrics:
                 yield ("", [], m, "")
@@ -306,6 +350,17 @@ class ToGSearch:
             # Prune to beam width
             state.current_depth = next_depth
             state.prune_current_frontier()
+            pruned_frontier = state.get_current_frontier()
+            logger.info(
+                "[ToG][prune][depth=%d] kept=%d",
+                state.current_depth,
+                len(pruned_frontier),
+            )
+            logger.debug(
+                "[ToG][prune][depth=%d] top_nodes=%s",
+                state.current_depth,
+                [n.entity_name for n in pruned_frontier],
+            )
 
             # Debug: show exploration steps AFTER pruning (only kept paths)
             # Check for early termination
@@ -324,6 +379,11 @@ class ToGSearch:
                 reasoning_paths = self.reasoning_module.get_reasoning_paths(
                     state.get_current_frontier()
                 )
+                logger.info(
+                    "[ToG][early_terminate][depth=%d] triggered paths=%d",
+                    state.current_depth,
+                    len(reasoning_paths),
+                )
                 # Generate context_text for early termination
                 early_context_text = self.reasoning_module.format_paths(
                     state.get_current_frontier(), text_units=frontier_text_units
@@ -339,6 +399,7 @@ class ToGSearch:
             all_paths.extend(depth_nodes)
 
         if not all_paths:
+            logger.info("[ToG][finish] no_paths_generated")
             yield (
                 "No exploration paths were generated. The knowledge graph may not contain relevant information for this query.",
                 [],
@@ -350,6 +411,12 @@ class ToGSearch:
         # Generate rich context text with entity and relation descriptions
         all_text_units = self.explorer.get_text_units_for_nodes(all_paths)
         context_text = self.reasoning_module.format_paths(all_paths, text_units=all_text_units)
+
+        logger.info(
+            "[ToG][reasoning] total_paths=%d text_units=%d",
+            len(all_paths),
+            len(all_text_units),
+        )
 
         # Use reasoning module to generate final answer
         try:
@@ -363,10 +430,16 @@ class ToGSearch:
                 text_units=all_text_units,
             )
 
+            logger.info(
+                "[ToG][finish] success reasoning_paths=%d answer_chars=%d",
+                len(reasoning_paths),
+                len(answer),
+            )
             # Yield answer metrics with context_text
             yield ("", reasoning_paths, answer_metrics, context_text)
             yield (answer, reasoning_paths, None, context_text)
         except Exception as e:
+            logger.exception("[ToG][finish] reasoning_failed: %s", e)
             # Fallback response if reasoning fails
             paths_summary = "\n".join([
                 f"- {node.entity_name}: {node.entity_description[:100]}..."
@@ -396,7 +469,15 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
 
         relations = self.explorer.get_relations(node.entity_id)
         if not relations:
+            logger.debug("[ToG][node=%s][depth=%d] no_relations", node.entity_name, node.depth)
             return [], []
+
+        logger.debug(
+            "[ToG][node=%s][depth=%d] relations=%d",
+            node.entity_name,
+            node.depth,
+            len(relations),
+        )
 
         # Score relations
         scored_relations, pruning_metrics = await self.pruning_strategy.score_relations(
@@ -404,13 +485,12 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         )
         metrics_list.append(pruning_metrics)
 
-        # Keep top relations based on scores (capped by beam width)
+        # Keep relation candidates ordered by relevance before entity retention.
         scored_relations.sort(key=lambda x: x[4], reverse=True)
-        top_relations = scored_relations[: self.width]
 
         # Build entity candidates
         candidate_data = []
-        for rel_desc, target_id, direction, weight, rel_score in top_relations:
+        for rel_desc, target_id, direction, weight, rel_score in scored_relations:
             target_info = self.explorer.get_full_entity_info(target_id)
             rel_info = self.explorer.get_full_relation_info(node.entity_id, target_id, rel_desc)
             if target_info:
@@ -424,8 +504,22 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         if not candidate_data:
             return [], metrics_list
 
-        # Sample if too many candidates
+        logger.debug(
+            "[ToG][node=%s][depth=%d] scored_relations=%d candidate_entities=%d",
+            node.entity_name,
+            node.depth,
+            len(scored_relations),
+            len(candidate_data),
+        )
+
         if len(candidate_data) > self.num_retain_entity:
+            logger.debug(
+                "[ToG][node=%s][depth=%d] sample_candidates %d->%d",
+                node.entity_name,
+                node.depth,
+                len(candidate_data),
+                self.num_retain_entity,
+            )
             candidate_data = random.sample(candidate_data, self.num_retain_entity)
 
         entity_candidates = [

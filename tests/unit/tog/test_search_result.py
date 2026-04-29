@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from graphrag.query.structured_search.tog_search.search import ToGSearch
 from graphrag.query.structured_search.base import SearchResult
 from graphrag.query.structured_search.tog_search.pruning import PruningMetrics
@@ -79,12 +79,12 @@ async def test_tog_search_returns_search_result():
 
     assert isinstance(result, SearchResult)
     assert result.response == "The answer is 42."
-    assert result.llm_calls == 4
-    assert result.prompt_tokens == 410
-    assert result.output_tokens == 145
-    assert result.llm_calls_categories == {"exploration": 2, "reasoning": 2}
-    assert result.prompt_tokens_categories == {"exploration": 160, "reasoning": 250}
-    assert result.output_tokens_categories == {"exploration": 35, "reasoning": 110}
+    assert result.llm_calls == 5
+    assert result.prompt_tokens == 460
+    assert result.output_tokens == 155
+    assert result.llm_calls_categories == {"exploration": 2, "reasoning": 3}
+    assert result.prompt_tokens_categories == {"exploration": 160, "reasoning": 300}
+    assert result.output_tokens_categories == {"exploration": 35, "reasoning": 120}
     assert result.completion_time >= 0  # May be very small or zero in fast mock tests
     mock_pruning.score_entities.assert_awaited_once()
 
@@ -204,3 +204,157 @@ async def test_tog_search_uses_entity_scores_for_branch_selection():
     depth_one_nodes = [n for n in all_paths if n.depth == 1]
     assert len(depth_one_nodes) == 1
     assert depth_one_nodes[0].entity_id == "e3"
+
+
+@pytest.mark.asyncio
+async def test_num_retain_entity_caps_candidates_before_entity_scoring():
+    mock_model = MagicMock()
+    mock_tokenizer = MagicMock()
+
+    mock_pruning = MagicMock()
+    mock_pruning.score_relations = AsyncMock(return_value=(
+        [
+            ("rel_a", "e2", "OUTGOING", 1.0, 9.0),
+            ("rel_b", "e3", "OUTGOING", 1.0, 8.0),
+            ("rel_c", "e4", "OUTGOING", 1.0, 7.0),
+        ],
+        PruningMetrics(llm_calls=1, prompt_tokens=40, output_tokens=10),
+    ))
+    mock_pruning.score_entities = AsyncMock(return_value=(
+        [7.0, 6.0],
+        PruningMetrics(llm_calls=1, prompt_tokens=30, output_tokens=8),
+    ))
+
+    mock_reasoning = MagicMock()
+    mock_reasoning.check_early_termination = AsyncMock(return_value=(
+        False, None, ReasoningMetrics()
+    ))
+    mock_reasoning.generate_answer = AsyncMock(return_value=(
+        "answer", ["path"], ReasoningMetrics(llm_calls=1, prompt_tokens=20, output_tokens=5)
+    ))
+
+    root = MagicMock()
+    root.id = "e1"
+    root.title = "Root"
+    root.description = "Root description"
+
+    search = ToGSearch(
+        model=mock_model,
+        entities=[root],
+        relationships=[],
+        tokenizer=mock_tokenizer,
+        pruning_strategy=mock_pruning,
+        reasoning_module=mock_reasoning,
+        width=1,
+        depth=1,
+        num_retain_entity=2,
+    )
+
+    search.explorer.find_starting_entities = MagicMock(return_value=["e1"])
+    search.explorer.get_relations = MagicMock(return_value=[
+        ("rel_a", "e2", "OUTGOING", 1.0),
+        ("rel_b", "e3", "OUTGOING", 1.0),
+        ("rel_c", "e4", "OUTGOING", 1.0),
+    ])
+
+    def _get_info(entity_id):
+        entity_info = {
+            "e1": ("e1", "Root", "Root description"),
+            "e2": ("e2", "Entity2", "Desc2"),
+            "e3": ("e3", "Entity3", "Desc3"),
+            "e4": ("e4", "Entity4", "Desc4"),
+        }
+        return entity_info.get(entity_id)
+
+    search.explorer.get_full_entity_info = MagicMock(side_effect=_get_info)
+    search.explorer.get_full_relation_info = MagicMock(side_effect=lambda s, t, r: ("id", r, s, t, 1.0))
+
+    with patch(
+        "graphrag.query.structured_search.tog_search.search.random.sample",
+        side_effect=lambda population, k: population[:k],
+    ) as sample_mock:
+        await search.search(query="test query")
+
+    sample_mock.assert_called_once()
+    sampled_population, sampled_size = sample_mock.call_args.args
+    assert [candidate[1] for candidate in sampled_population] == ["e2", "e3", "e4"]
+    assert sampled_size == 2
+
+    scored_entities = mock_pruning.score_entities.await_args.kwargs["entities"]
+    assert scored_entities == [
+        ("e2", "Entity2", "Desc2"),
+        ("e3", "Entity3", "Desc3"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_num_retain_entity_samples_after_filtering_missing_entities():
+    mock_pruning = MagicMock()
+    mock_pruning.score_relations = AsyncMock(return_value=(
+        [
+            ("rel_a", "missing", "OUTGOING", 1.0, 9.0),
+            ("rel_b", "e2", "OUTGOING", 1.0, 8.0),
+            ("rel_c", "e3", "OUTGOING", 1.0, 7.0),
+            ("rel_d", "e4", "OUTGOING", 1.0, 6.0),
+        ],
+        PruningMetrics(),
+    ))
+    mock_pruning.score_entities = AsyncMock(return_value=(
+        [7.0, 6.0],
+        PruningMetrics(),
+    ))
+
+    mock_reasoning = MagicMock()
+    mock_reasoning.check_early_termination = AsyncMock(return_value=(False, None, ReasoningMetrics()))
+    mock_reasoning.generate_answer = AsyncMock(return_value=("answer", ["path"], ReasoningMetrics()))
+
+    root = MagicMock()
+    root.id = "e1"
+    root.title = "Root"
+    root.description = "Root description"
+
+    search = ToGSearch(
+        model=MagicMock(),
+        entities=[root],
+        relationships=[],
+        tokenizer=MagicMock(),
+        pruning_strategy=mock_pruning,
+        reasoning_module=mock_reasoning,
+        width=1,
+        depth=1,
+        num_retain_entity=2,
+    )
+
+    search.explorer.find_starting_entities = MagicMock(return_value=["e1"])
+    search.explorer.get_relations = MagicMock(return_value=[
+        ("rel_a", "missing", "OUTGOING", 1.0),
+        ("rel_b", "e2", "OUTGOING", 1.0),
+        ("rel_c", "e3", "OUTGOING", 1.0),
+        ("rel_d", "e4", "OUTGOING", 1.0),
+    ])
+
+    def _get_info(entity_id):
+        entity_info = {
+            "e1": ("e1", "Root", "Root description"),
+            "e2": ("e2", "Entity2", "Desc2"),
+            "e3": ("e3", "Entity3", "Desc3"),
+            "e4": ("e4", "Entity4", "Desc4"),
+        }
+        return entity_info.get(entity_id)
+
+    search.explorer.get_full_entity_info = MagicMock(side_effect=_get_info)
+    search.explorer.get_full_relation_info = MagicMock(side_effect=lambda s, t, r: ("id", r, s, t, 1.0))
+
+    with patch(
+        "graphrag.query.structured_search.tog_search.search.random.sample",
+        side_effect=lambda population, k: population[:k],
+    ) as sample_mock:
+        await search.search(query="test query")
+
+    sampled_population, sampled_size = sample_mock.call_args.args
+    assert [candidate[1] for candidate in sampled_population] == ["e2", "e3", "e4"]
+    assert sampled_size == 2
+    assert mock_pruning.score_entities.await_args.kwargs["entities"] == [
+        ("e2", "Entity2", "Desc2"),
+        ("e3", "Entity3", "Desc3"),
+    ]
