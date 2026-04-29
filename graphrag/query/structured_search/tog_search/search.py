@@ -1,3 +1,5 @@
+"""ToG search engine implementation."""
+
 import asyncio
 import inspect
 import logging
@@ -24,6 +26,8 @@ from .reasoning import ReasoningMetrics, ToGReasoning
 from .state import ExplorationNode, ToGSearchState
 
 logger = logging.getLogger(__name__)
+
+ENTITY_CANDIDATE_SAMPLE_THRESHOLD = 20
 
 
 @dataclass
@@ -89,6 +93,7 @@ class ToGSearch:
         num_retain_entity: int = 5,
         callbacks: list[QueryCallbacks] | None = None,
         debug: bool = False,
+        debug_force_max_depth: bool = False,
     ):
         self.model = model
         self.embedding_model = embedding_model
@@ -107,6 +112,7 @@ class ToGSearch:
         self.num_retain_entity = num_retain_entity
         self.callbacks = callbacks or []
         self._debug = debug
+        self._debug_force_max_depth = debug_force_max_depth
 
     async def search(
         self,
@@ -250,7 +256,7 @@ class ToGSearch:
         for entity_id in starting_entities:
             entity_info = self.explorer.get_full_entity_info(entity_id)
             if entity_info:
-                entity_id_full, name, full_description = entity_info
+                _entity_id_full, name, full_description = entity_info
                 initial_node = ExplorationNode(
                     entity_id=entity_id,
                     entity_name=name,
@@ -263,6 +269,8 @@ class ToGSearch:
                     entity_full_description=full_description,
                 )
                 state.add_node(initial_node)
+
+        force_max_depth = self._debug and self._debug_force_max_depth
 
         # Check depth-0: can starting entities alone answer the query?
         frontier_nodes = state.get_current_frontier()
@@ -285,15 +293,20 @@ class ToGSearch:
             reasoning_paths = self.reasoning_module.get_reasoning_paths(
                 state.get_current_frontier()
             )
+            if not force_max_depth:
+                logger.info(
+                    "[ToG][early_terminate][depth=0] triggered paths=%d",
+                    len(reasoning_paths),
+                )
+                early_context_text = self.reasoning_module.format_paths(
+                    state.get_current_frontier(), text_units=frontier_text_units
+                )
+                yield (answer, reasoning_paths, early_term_metrics, early_context_text)
+                return
             logger.info(
-                "[ToG][early_terminate][depth=0] triggered paths=%d",
+                "[ToG][early_terminate][depth=0] ignored_by_debug_force_max_depth paths=%d",
                 len(reasoning_paths),
             )
-            early_context_text = self.reasoning_module.format_paths(
-                state.get_current_frontier(), text_units=frontier_text_units
-            )
-            yield (answer, reasoning_paths, early_term_metrics, early_context_text)
-            return
         yield ("", [], early_term_metrics, "")
 
         # Pre-compute query embedding once for the entire search session
@@ -393,17 +406,27 @@ class ToGSearch:
                 reasoning_paths = self.reasoning_module.get_reasoning_paths(
                     state.get_current_frontier()
                 )
+                if not force_max_depth:
+                    logger.info(
+                        "[ToG][early_terminate][depth=%d] triggered paths=%d",
+                        state.current_depth,
+                        len(reasoning_paths),
+                    )
+                    early_context_text = self.reasoning_module.format_paths(
+                        state.get_current_frontier(), text_units=frontier_text_units
+                    )
+                    yield (
+                        answer,
+                        reasoning_paths,
+                        early_term_metrics,
+                        early_context_text,
+                    )
+                    return
                 logger.info(
-                    "[ToG][early_terminate][depth=%d] triggered paths=%d",
+                    "[ToG][early_terminate][depth=%d] ignored_by_debug_force_max_depth paths=%d",
                     state.current_depth,
                     len(reasoning_paths),
                 )
-                # Generate context_text for early termination
-                early_context_text = self.reasoning_module.format_paths(
-                    state.get_current_frontier(), text_units=frontier_text_units
-                )
-                yield (answer, reasoning_paths, early_term_metrics, early_context_text)
-                return
             # Yield early termination metrics (non-terminating case)
             yield ("", [], early_term_metrics, "")
 
@@ -456,7 +479,7 @@ class ToGSearch:
             yield ("", reasoning_paths, answer_metrics, context_text)
             yield (answer, reasoning_paths, None, context_text)
         except Exception as e:
-            logger.exception("[ToG][finish] reasoning_failed: %s", e)
+            logger.exception("[ToG][finish] reasoning_failed")
             # Fallback response if reasoning fails
             paths_summary = "\n".join([
                 f"- {node.entity_name}: {node.entity_description[:100]}..."
@@ -520,7 +543,8 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         current_entity_id = (
             current_entity_info[0] if current_entity_info else node.entity_id
         )
-        candidate_data = []
+        candidate_groups: dict[tuple[str, str], list[tuple]] = {}
+        relation_group_order: list[tuple[str, str]] = []
         for rel_desc, target_id, direction, weight, rel_score in scored_relations:
             target_info = self.explorer.get_full_entity_info(target_id)
             rel_info = self.explorer.get_full_relation_info(
@@ -529,7 +553,11 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             if target_info:
                 target_entity_id, target_name, target_full_desc = target_info
                 rel_full_desc = rel_info[1] if rel_info else rel_desc
-                candidate_data.append((
+                group_key = (rel_desc, direction)
+                if group_key not in candidate_groups:
+                    candidate_groups[group_key] = []
+                    relation_group_order.append(group_key)
+                candidate_groups[group_key].append((
                     rel_desc,
                     target_id,
                     target_entity_id,
@@ -541,26 +569,39 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
                     rel_full_desc,
                 ))
 
-        if not candidate_data:
+        if not candidate_groups:
             return [], metrics_list
 
+        candidate_data = []
+        for rel_desc, direction in relation_group_order:
+            group_candidates = candidate_groups[rel_desc, direction]
+            if (
+                len(group_candidates) >= ENTITY_CANDIDATE_SAMPLE_THRESHOLD
+                and len(group_candidates) > self.num_retain_entity
+            ):
+                logger.debug(
+                    "[ToG][node=%s][depth=%d] sample_relation_candidates %s:%s %d->%d",
+                    node.entity_name,
+                    node.depth,
+                    rel_desc,
+                    direction,
+                    len(group_candidates),
+                    self.num_retain_entity,
+                )
+                candidate_data.extend(
+                    random.sample(group_candidates, self.num_retain_entity)
+                )
+            else:
+                candidate_data.extend(group_candidates)
+
         logger.debug(
-            "[ToG][node=%s][depth=%d] scored_relations=%d candidate_entities=%d",
+            "[ToG][node=%s][depth=%d] scored_relations=%d candidate_entities=%d relation_groups=%d",
             node.entity_name,
             node.depth,
             len(scored_relations),
             len(candidate_data),
+            len(candidate_groups),
         )
-
-        if len(candidate_data) >= 10 and len(candidate_data) > self.num_retain_entity:
-            logger.debug(
-                "[ToG][node=%s][depth=%d] sample_candidates %d->%d",
-                node.entity_name,
-                node.depth,
-                len(candidate_data),
-                self.num_retain_entity,
-            )
-            candidate_data = random.sample(candidate_data, self.num_retain_entity)
 
         entity_candidates = [
             (target_entity_id, target_name, target_full_desc)
@@ -636,7 +677,10 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         current_path: str,
     ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         score_relations = self.pruning_strategy.score_relations
-        parameters = inspect.signature(score_relations).parameters
+        try:
+            parameters = inspect.signature(score_relations).parameters
+        except (TypeError, ValueError):
+            parameters = {}
         accepts_kwargs = any(
             parameter.kind == inspect.Parameter.VAR_KEYWORD
             for parameter in parameters.values()

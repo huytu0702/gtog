@@ -6,7 +6,10 @@
 from pathlib import Path
 
 from graphrag.callbacks.query_callbacks import QueryCallbacks
-from graphrag.config.embeddings import entity_description_embedding, relationship_description_embedding
+from graphrag.config.embeddings import (
+    entity_description_embedding,
+    relationship_description_embedding,
+)
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.data_model.community import Community
 from graphrag.data_model.community_report import CommunityReport
@@ -435,4 +438,5 @@ def get_tog_search_engine(
         num_retain_entity=config.tog_search.num_retain_entity,
         callbacks=callbacks,
         debug=True,  # Enable debug by default to show exploration paths
+        debug_force_max_depth=config.tog_search.debug_force_max_depth,
     )

@@ -43,9 +43,9 @@ graphrag index --root ./my-graphrag-project --config settings.yaml
 graphrag update --root ./my-graphrag-project
 
 # Query the knowledge graph
-graphrag query --root ./my-graphrag-project --method global "your query"
-graphrag query --root ./my-graphrag-project --method local "your query"
-graphrag query --root ./my-graphrag-project --method tog "your query"
+graphrag query --root ./my-graphrag-project --method global --query "your query"
+graphrag query --root ./my-graphrag-project --method local --query "your query"
+graphrag query --root ./my-graphrag-project --method tog --query "your query"
 
 # Generate optimized prompts
 graphrag prompt-tune --root ./my-graphrag-project --config settings.yaml
