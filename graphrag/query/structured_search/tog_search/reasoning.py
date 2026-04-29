@@ -1,6 +1,5 @@
-import os
+import pathlib
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from graphrag.data_model.text_unit import TextUnit
 from graphrag.language_model.protocol.base import ChatModel
@@ -44,10 +43,10 @@ class ToGReasoning:
     async def generate_answer(
         self,
         query: str,
-        exploration_paths: List[ExplorationNode],
+        exploration_paths: list[ExplorationNode],
         conversation_history_context: str = "",
-        text_units: List[TextUnit] | None = None,
-    ) -> Tuple[str, List[str], ReasoningMetrics]:
+        text_units: list[TextUnit] | None = None,
+    ) -> tuple[str, list[str], ReasoningMetrics]:
         """
         Generate final answer from exploration paths.
         Returns: (answer, reasoning_paths, metrics)
@@ -63,19 +62,31 @@ class ToGReasoning:
             if hasattr(
                 self.reasoning_prompt, "endswith"
             ) and self.reasoning_prompt.endswith(".txt"):
-                if os.path.exists(self.reasoning_prompt):
-                    with open(self.reasoning_prompt, "r", encoding="utf-8") as f:
+                if pathlib.Path(self.reasoning_prompt).exists():
+                    with pathlib.Path(self.reasoning_prompt).open(
+                        "r", encoding="utf-8"
+                    ) as f:
                         prompt_template = f.read()
                 else:
                     prompt_template = TOG_REASONING_PROMPT
             else:
                 prompt_template = self.reasoning_prompt
 
-            history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
-            prompt = history_prefix + prompt_template.format(query=query, exploration_paths=paths_text)
-        except KeyError as e:
+            history_prefix = (
+                f"{conversation_history_context}\n\n"
+                if conversation_history_context.strip()
+                else ""
+            )
+            prompt = history_prefix + prompt_template.format(
+                query=query, exploration_paths=paths_text
+            )
+        except KeyError:
             # Fallback if prompt has different placeholders
-            history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
+            history_prefix = (
+                f"{conversation_history_context}\n\n"
+                if conversation_history_context.strip()
+                else ""
+            )
             prompt = f"""{history_prefix}You are an expert at synthesizing information from knowledge graph exploration to answer questions.
 
 Question: {query}
@@ -114,7 +125,7 @@ Structure your response as:
 
         except Exception as e:
             # Fallback response if LLM call fails
-            answer = f"Error generating answer: {str(e)}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
+            answer = f"Error generating answer: {e!s}\n\nBased on the exploration paths, I found {len(exploration_paths)} potential paths to explore."
 
         metrics.llm_calls = 1
         metrics.output_tokens = self._count_tokens(answer)
@@ -124,15 +135,17 @@ Structure your response as:
 
         return answer, reasoning_paths, metrics
 
-    def _format_paths(self, nodes: List[ExplorationNode], text_units: List[TextUnit] | None = None) -> str:
+    def _format_paths(
+        self, nodes: list[ExplorationNode], text_units: list[TextUnit] | None = None
+    ) -> str:
         """Format exploration paths with chunk, entity, and relationship context."""
         if not nodes:
             return "No exploration paths available."
 
         # Collect unique entities and relationships with full descriptions
         seen_entities = {}  # entity_name -> full_description
-        relationships = []  # List of (source, relation_desc, target, source_full_desc, target_full_desc)
-        relation_details = {}  # (source, target, relation_desc) -> full_relation_desc
+        relationships = []
+        relation_details = {}
 
         for node in nodes:
             # Collect entity info from the entire path
@@ -153,6 +166,7 @@ Structure your response as:
                         current.parent.entity_name,
                         current.relation_from_parent or "related_to",
                         current.entity_name,
+                        current.relation_direction_from_parent,
                         current.parent.entity_full_description
                         or current.parent.entity_description
                         or "",
@@ -160,13 +174,15 @@ Structure your response as:
                         or current.entity_description
                         or "",
                     )
-                    if rel_info[:3] not in [(r[0], r[1], r[2]) for r in relationships]:
+                    if rel_info[:4] not in [
+                        (r[0], r[1], r[2], r[3]) for r in relationships
+                    ]:
                         relationships.append(rel_info)
-                        # Store full relationship description
                         rel_key = (
                             current.parent.entity_name,
                             current.entity_name,
                             current.relation_from_parent,
+                            current.relation_direction_from_parent,
                         )
                         rel_full_desc = (
                             current.relation_full_description
@@ -199,10 +215,20 @@ Structure your response as:
 
         # Section 2: Relationships (merged with descriptions)
         output_parts.append("\n\n=== RELATIONSHIPS ===")
-        for source, relation, target, source_desc, target_desc in relationships:
-            output_parts.append(f"\n- {source} --[{relation}]--> {target}")
+        for (
+            source,
+            relation,
+            target,
+            direction,
+            _source_desc,
+            _target_desc,
+        ) in relationships:
+            if direction == "incoming":
+                output_parts.append(f"\n- {source} <--[{relation}]-- {target}")
+            else:
+                output_parts.append(f"\n- {source} --[{relation}]--> {target}")
             # Add relationship description inline only if it provides additional information
-            rel_key = (source, target, relation)
+            rel_key = (source, target, relation, direction)
             if rel_key in relation_details:
                 full_desc = relation_details[rel_key]
                 # Only show description if it's different from relation label and provides more detail
@@ -215,17 +241,17 @@ Structure your response as:
 
         return "\n".join(output_parts)
 
-    def _extract_triplets(self, node: ExplorationNode) -> List[tuple]:
+    def _extract_triplets(self, node: ExplorationNode) -> list[tuple]:
         """Extract knowledge triplets from a path with descriptions."""
         triplets = []
         current = node
 
         while current.parent is not None:
-            # Create enriched triplet: (parent_entity, relation, current_entity, parent_desc, current_desc)
             triplet = (
                 current.parent.entity_name,
                 current.relation_from_parent or "related_to",
                 current.entity_name,
+                current.relation_direction_from_parent,
                 current.parent.entity_description or "",
                 current.entity_description or "",
             )
@@ -241,38 +267,48 @@ Structure your response as:
         if not triplets:
             return node.entity_name
 
-        # Format as chain of triplets (triplets now have 5 elements, use first 3)
         parts = []
         for triplet in triplets:
-            source, relation, target = triplet[0], triplet[1], triplet[2]
-            parts.append(f"{source} --[{relation}]--> {target}")
+            source, relation, target, direction = triplet[:4]
+            if direction == "incoming":
+                parts.append(f"{source} <--[{relation}]-- {target}")
+            else:
+                parts.append(f"{source} --[{relation}]--> {target}")
 
         return " | ".join(parts)
 
-    def get_reasoning_paths(self, nodes: List[ExplorationNode]) -> List[str]:
+    def get_reasoning_paths(self, nodes: list[ExplorationNode]) -> list[str]:
         """Return path strings for a set of exploration nodes."""
         return [self._path_to_string(node) for node in nodes]
 
-    def format_paths(self, nodes: List[ExplorationNode], text_units: List[TextUnit] | None = None) -> str:
+    def format_paths(
+        self, nodes: list[ExplorationNode], text_units: list[TextUnit] | None = None
+    ) -> str:
         """Public alias for _format_paths (backward compatible)."""
         return self._format_paths(nodes, text_units=text_units)
 
     async def check_early_termination(
         self,
         query: str,
-        current_nodes: List[ExplorationNode],
+        current_nodes: list[ExplorationNode],
         conversation_history_context: str = "",
-        text_units: List[TextUnit] | None = None,
-    ) -> Tuple[bool, str | None, ReasoningMetrics]:
+        text_units: list[TextUnit] | None = None,
+    ) -> tuple[bool, str | None, ReasoningMetrics]:
         """
         Check if exploration can terminate early with an answer.
         Returns: (should_terminate, answer_or_none, metrics)
         """
         metrics = ReasoningMetrics()
 
-        paths_text = self._format_paths(current_nodes[:3], text_units=text_units or [])  # Check top 3 paths
+        paths_text = self._format_paths(
+            current_nodes[:3], text_units=text_units or []
+        )  # Check top 3 paths
 
-        history_prefix = f"{conversation_history_context}\n\n" if conversation_history_context.strip() else ""
+        history_prefix = (
+            f"{conversation_history_context}\n\n"
+            if conversation_history_context.strip()
+            else ""
+        )
         prompt = f"""{history_prefix}Question: {query}
 
 Current exploration paths:

@@ -1,24 +1,27 @@
 import asyncio
+import inspect
 import logging
 import random
 import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import AsyncGenerator, List, Optional, Tuple, Union
 
 import numpy as np
+
 from graphrag.callbacks.query_callbacks import QueryCallbacks
-from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.data_model.entity import Entity
 from graphrag.data_model.relationship import Relationship
 from graphrag.data_model.text_unit import TextUnit
+from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
+from graphrag.query.context_builder.conversation_history import ConversationHistory
+from graphrag.query.structured_search.base import SearchResult
 from graphrag.tokenizer.tokenizer import Tokenizer
 from graphrag.vector_stores.base import BaseVectorStore
-from graphrag.query.structured_search.base import SearchResult
-from .state import ToGSearchState, ExplorationNode
+
 from .exploration import GraphExplorer
-from .pruning import PruningStrategy, LLMPruning, SemanticPruning, PruningMetrics
-from .reasoning import ToGReasoning, ReasoningMetrics
-from graphrag.query.context_builder.conversation_history import ConversationHistory
+from .pruning import PruningMetrics, PruningStrategy, SemanticPruning
+from .reasoning import ReasoningMetrics, ToGReasoning
+from .state import ExplorationNode, ToGSearchState
 
 logger = logging.getLogger(__name__)
 
@@ -73,18 +76,18 @@ class ToGSearch:
     def __init__(
         self,
         model: ChatModel,
-        entities: List[Entity],
-        relationships: List[Relationship],
+        entities: list[Entity],
+        relationships: list[Relationship],
         tokenizer: Tokenizer,
         pruning_strategy: PruningStrategy,
         reasoning_module: ToGReasoning,
-        text_units: List[TextUnit] | None = None,
-        embedding_model: Optional[EmbeddingModel] = None,
-        entity_text_embeddings: Optional[BaseVectorStore] = None,
+        text_units: list[TextUnit] | None = None,
+        embedding_model: EmbeddingModel | None = None,
+        entity_text_embeddings: BaseVectorStore | None = None,
         width: int = 3,
         depth: int = 3,
         num_retain_entity: int = 5,
-        callbacks: List[QueryCallbacks] | None = None,
+        callbacks: list[QueryCallbacks] | None = None,
         debug: bool = False,
     ):
         self.model = model
@@ -114,8 +117,8 @@ class ToGSearch:
         start_time = time.time()
         metrics = ToGMetrics()
 
-        response_chunks: List[str] = []
-        context_paths: List[str] = []
+        response_chunks: list[str] = []
+        context_paths: list[str] = []
         context_text = ""
 
         async for (
@@ -167,7 +170,9 @@ class ToGSearch:
         conversation_history: ConversationHistory | None = None,
     ) -> AsyncGenerator[str, None]:
         """Perform ToG search with streaming output (backward compatible)."""
-        async for chunk, _, _, _ in self._stream_search_with_metrics(query, conversation_history):
+        async for chunk, _, _, _ in self._stream_search_with_metrics(
+            query, conversation_history
+        ):
             if chunk:  # Only yield non-empty chunks
                 yield chunk
 
@@ -176,7 +181,7 @@ class ToGSearch:
         query: str,
         conversation_history: ConversationHistory | None = None,
     ) -> AsyncGenerator[
-        Tuple[str, List[str], Union[PruningMetrics, ReasoningMetrics, None], str], None
+        tuple[str, list[str], PruningMetrics | ReasoningMetrics | None, str], None
     ]:
         """Perform ToG search with streaming output."""
         logger.info(
@@ -262,14 +267,18 @@ class ToGSearch:
         # Check depth-0: can starting entities alone answer the query?
         frontier_nodes = state.get_current_frontier()
         logger.info("[ToG][depth=0] frontier=%d", len(frontier_nodes))
-        logger.debug("[ToG][depth=0] entities=%s", [n.entity_name for n in frontier_nodes])
+        logger.debug(
+            "[ToG][depth=0] entities=%s", [n.entity_name for n in frontier_nodes]
+        )
         frontier_text_units = self.explorer.get_text_units_for_nodes(frontier_nodes)
         (
             should_terminate,
             answer,
             early_term_metrics,
         ) = await self.reasoning_module.check_early_termination(
-            query, frontier_nodes, conversation_history_context=history_context,
+            query,
+            frontier_nodes,
+            conversation_history_context=history_context,
             text_units=frontier_text_units,
         )
         if should_terminate and answer:
@@ -312,7 +321,10 @@ class ToGSearch:
             )
 
             if not current_nodes:
-                logger.info("[ToG][explore] stop: empty frontier at depth=%d", state.current_depth)
+                logger.info(
+                    "[ToG][explore] stop: empty frontier at depth=%d",
+                    state.current_depth,
+                )
                 break  # No more nodes to explore
 
             # Prepare for next depth
@@ -371,7 +383,9 @@ class ToGSearch:
                 answer,
                 early_term_metrics,
             ) = await self.reasoning_module.check_early_termination(
-                query, frontier_nodes, conversation_history_context=history_context,
+                query,
+                frontier_nodes,
+                conversation_history_context=history_context,
                 text_units=frontier_text_units,
             )
 
@@ -410,7 +424,9 @@ class ToGSearch:
 
         # Generate rich context text with entity and relation descriptions
         all_text_units = self.explorer.get_text_units_for_nodes(all_paths)
-        context_text = self.reasoning_module.format_paths(all_paths, text_units=all_text_units)
+        context_text = self.reasoning_module.format_paths(
+            all_paths, text_units=all_text_units
+        )
 
         logger.info(
             "[ToG][reasoning] total_paths=%d text_units=%d",
@@ -425,7 +441,8 @@ class ToGSearch:
                 reasoning_paths,
                 answer_metrics,
             ) = await self.reasoning_module.generate_answer(
-                query, all_paths,
+                query,
+                all_paths,
                 conversation_history_context=history_context,
                 text_units=all_text_units,
             )
@@ -446,7 +463,7 @@ class ToGSearch:
                 for node in all_paths[:5]
             ])
             yield (
-                f"""Error during reasoning: {str(e)}
+                f"""Error during reasoning: {e!s}
 
 However, I found these relevant entities during exploration:
 {paths_summary}
@@ -461,15 +478,17 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         self,
         query: str,
         node: ExplorationNode,
-        query_embedding: Optional[np.ndarray] = None,
-    ) -> Tuple[List[ExplorationNode], List[PruningMetrics]]:
+        query_embedding: np.ndarray | None = None,
+    ) -> tuple[list[ExplorationNode], list[PruningMetrics]]:
         """Process a single frontier node: score relations, score entities, build new nodes."""
         next_depth = node.depth + 1
-        metrics_list: List[PruningMetrics] = []
+        metrics_list: list[PruningMetrics] = []
 
         relations = self.explorer.get_relations(node.entity_id)
         if not relations:
-            logger.debug("[ToG][node=%s][depth=%d] no_relations", node.entity_name, node.depth)
+            logger.debug(
+                "[ToG][node=%s][depth=%d] no_relations", node.entity_name, node.depth
+            )
             return [], []
 
         logger.debug(
@@ -479,9 +498,17 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             len(relations),
         )
 
+        current_path = self._node_to_path_string(node)
+        relation_history = node.get_relation_history_text()
+
         # Score relations
-        scored_relations, pruning_metrics = await self.pruning_strategy.score_relations(
-            query, node.entity_name, relations, query_embedding=query_embedding
+        scored_relations, pruning_metrics = await self._score_relations(
+            query=query,
+            node=node,
+            relations=relations,
+            query_embedding=query_embedding,
+            relation_history=relation_history,
+            current_path=current_path,
         )
         metrics_list.append(pruning_metrics)
 
@@ -489,17 +516,30 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         scored_relations.sort(key=lambda x: x[4], reverse=True)
 
         # Build entity candidates
+        current_entity_info = self.explorer.get_full_entity_info(node.entity_id)
+        current_entity_id = (
+            current_entity_info[0] if current_entity_info else node.entity_id
+        )
         candidate_data = []
         for rel_desc, target_id, direction, weight, rel_score in scored_relations:
             target_info = self.explorer.get_full_entity_info(target_id)
-            rel_info = self.explorer.get_full_relation_info(node.entity_id, target_id, rel_desc)
+            rel_info = self.explorer.get_full_relation_info(
+                node.entity_id, target_id, rel_desc
+            )
             if target_info:
-                _, target_name, target_full_desc = target_info
+                target_entity_id, target_name, target_full_desc = target_info
                 rel_full_desc = rel_info[1] if rel_info else rel_desc
-                candidate_data.append(
-                    (rel_desc, target_id, direction, weight, rel_score,
-                     target_name, target_full_desc, rel_full_desc)
-                )
+                candidate_data.append((
+                    rel_desc,
+                    target_id,
+                    target_entity_id,
+                    direction,
+                    weight,
+                    rel_score,
+                    target_name,
+                    target_full_desc,
+                    rel_full_desc,
+                ))
 
         if not candidate_data:
             return [], metrics_list
@@ -523,10 +563,19 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             candidate_data = random.sample(candidate_data, self.num_retain_entity)
 
         entity_candidates = [
-            (target_id, target_name, target_full_desc)
-            for (_, target_id, _, _, _, target_name, target_full_desc, _) in candidate_data
+            (target_entity_id, target_name, target_full_desc)
+            for (
+                _,
+                _,
+                target_entity_id,
+                _,
+                _,
+                _,
+                target_name,
+                target_full_desc,
+                _,
+            ) in candidate_data
         ]
-        current_path = self._node_to_path_string(node)
 
         entity_scores, entity_metrics = await self.pruning_strategy.score_entities(
             query=query,
@@ -537,37 +586,89 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         metrics_list.append(entity_metrics)
 
         # Create new exploration nodes
-        new_nodes: List[ExplorationNode] = []
+        new_nodes: list[ExplorationNode] = []
         for idx, (
-            rel_desc, target_id, _direction, _weight, rel_score,
-            target_name, target_full_desc, rel_full_desc,
+            rel_desc,
+            target_id,
+            target_entity_id,
+            direction,
+            _weight,
+            rel_score,
+            target_name,
+            target_full_desc,
+            rel_full_desc,
         ) in enumerate(candidate_data):
             entity_score = entity_scores[idx] if idx < len(entity_scores) else 5.0
             hop_score = rel_score * (max(entity_score, 0.0) / 10.0)
             combined_score = node.score * hop_score
-            new_nodes.append(ExplorationNode(
-                entity_id=target_id,
-                entity_name=target_name,
-                entity_description=target_full_desc,
-                depth=next_depth,
-                score=combined_score,
-                parent=node,
-                relation_from_parent=rel_desc,
-                relation_full_description=rel_full_desc,
-                entity_full_description=target_full_desc,
-            ))
+            relation_source_id = (
+                target_entity_id if direction == "incoming" else current_entity_id
+            )
+            relation_target_id = (
+                current_entity_id if direction == "incoming" else target_entity_id
+            )
+            new_nodes.append(
+                ExplorationNode(
+                    entity_id=target_id,
+                    entity_name=target_name,
+                    entity_description=target_full_desc,
+                    depth=next_depth,
+                    score=combined_score,
+                    parent=node,
+                    relation_from_parent=rel_desc,
+                    relation_full_description=rel_full_desc,
+                    entity_full_description=target_full_desc,
+                    relation_direction_from_parent=direction,
+                    relation_source_id=relation_source_id,
+                    relation_target_id=relation_target_id,
+                )
+            )
 
         return new_nodes, metrics_list
 
+    async def _score_relations(
+        self,
+        query: str,
+        node: ExplorationNode,
+        relations: list[tuple[str, str, str, float]],
+        query_embedding: np.ndarray | None,
+        relation_history: str,
+        current_path: str,
+    ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
+        score_relations = self.pruning_strategy.score_relations
+        parameters = inspect.signature(score_relations).parameters
+        accepts_kwargs = any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        context_kwargs = {}
+        if accepts_kwargs or "relation_history" in parameters:
+            context_kwargs["relation_history"] = relation_history
+        if accepts_kwargs or "current_path" in parameters:
+            context_kwargs["current_path"] = current_path
+
+        return await score_relations(
+            query,
+            node.entity_name,
+            relations,
+            query_embedding=query_embedding,
+            **context_kwargs,
+        )
+
     def _node_to_path_string(self, node: ExplorationNode) -> str:
         """Build a readable chain string from root to current node."""
-        chain: List[str] = []
+        chain: list[str] = []
         current = node
         while current.parent is not None:
             relation = current.relation_from_parent or "related_to"
-            chain.append(
-                f"{current.parent.entity_name} --[{relation}]--> {current.entity_name}"
-            )
+            if current.relation_direction_from_parent == "incoming":
+                chain.append(
+                    f"{current.parent.entity_name} <--[{relation}]-- {current.entity_name}"
+                )
+            else:
+                chain.append(
+                    f"{current.parent.entity_name} --[{relation}]--> {current.entity_name}"
+                )
             current = current.parent
 
         if not chain:
