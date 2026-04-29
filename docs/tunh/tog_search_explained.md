@@ -81,8 +81,8 @@ self.incoming = {}   # B → [A, E]       (ai kết nối đến B)
 ```python
 async def find_starting_entities_semantic(query, top_k=3):
     # Chuyển câu hỏi thành vector số (embedding)
-    # So sánh với vector của TẤT CẢ entity trong graph
-    # Lấy top-K entity giống nhau nhất
+    # Tính dot product với vector của TẤT CẢ entity trong graph
+    # Lấy top-K entity có score cao nhất
     # → Đây là "cửa vào" của hành trình
 ```
 *(Nếu không có embedding model → dùng keyword matching làm fallback)*
@@ -161,7 +161,7 @@ def _compute_bm25_scores(query, documents):
 
 ```python
 async def check_early_termination(query, frontier_nodes, ...):
-    # Hỏi LLM: "Với thông tin hiện có, mày đủ trả lời chưa?"
+    # Hỏi LLM: "Với top 3 path hiện tại, đã đủ trả lời chưa?"
     # Nếu đủ → trả về (True, answer)
     # Nếu chưa → (False, None) → tiếp tục đào sâu hơn
 ```
@@ -186,9 +186,9 @@ class ToGSearch:
         self.explorer = GraphExplorer(entities, relationships, ...)
         self.pruning_strategy = pruning_strategy  # LLM / Semantic / BM25
         self.reasoning_module = reasoning_module
-        self.width = width    # Giữ tối đa 3 đường tốt nhất
+        self.width = width    # Giữ tối đa W relation-groups mỗi node, rồi giữ top-W node toàn cục
         self.depth = depth    # Đi tối đa 3 bước
-        self.num_retain_entity = num_retain_entity  # Chấm điểm tối đa 5 entity
+        self.num_retain_entity = num_retain_entity  # Chỉ sample khi 1 relation-group quá lớn
 ```
 
 **Tham số quan trọng:**
@@ -207,16 +207,17 @@ Câu hỏi vào
     ↓
 [1] Tìm Entity đầu vào (Entity Linking)
     ↓
-[2] Kiểm tra: Entities đầu vào đã đủ trả lời chưa? (Depth-0 check)
+[2] Kiểm tra: top frontier hiện tại đã đủ trả lời chưa? (Depth-0 check)
     ↓ (Chưa đủ)
 [3] VÒNG LẶP (tối đa depth lần):
-    a. Lấy tất cả quan hệ từ các node hiện tại
+    a. Với từng frontier node, lấy tất cả quan hệ
     b. Chấm điểm quan hệ (Pruning Relations)
-    c. Giữ top-W quan hệ tốt nhất
-    d. Chấm điểm entity đích (Pruning Entities)
-    e. Tính score tổng hợp → tạo node mới
-    f. Giữ top-W node tốt nhất (Beam Search)
-    g. Kiểm tra: Đủ trả lời chưa? (Early Termination)
+    c. Với từng node, giữ tối đa W relation-groups tốt nhất
+    d. Nếu 1 relation-group quá lớn (>=20 và > num_retain_entity), sample ngẫu nhiên trong group đó
+    e. Chấm điểm entity đích cho candidate của từng node
+    f. Tính score tổng hợp → tạo node mới
+    g. Gộp node mới từ toàn frontier và giữ top-W node tốt nhất (Beam Search toàn cục)
+    h. Kiểm tra: Đủ trả lời chưa? (Early Termination trên top 3 path hiện tại)
     ↓ (Hết vòng lặp)
 [4] Tổng hợp tất cả paths → Sinh câu trả lời cuối
 ```
@@ -259,7 +260,7 @@ Câu hỏi vào
 
   Query ──embed──► vector [0.12, -0.34, ...]
                       │
-                      ▼  cosine_similarity với TẤT CẢ entity
+                      ▼  dot product với TẤT CẢ entity
   ┌──────────────────────────────────────────────────────────────┐
   │  Entity          │ Sim Score │ Rank │ Kết quả               │
   ├──────────────────┼───────────┼──────┼───────────────────────┤
@@ -316,7 +317,7 @@ Câu hỏi vào
   Tổng: 9 quan hệ từ 3 nodes
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=1 │ STEP B — Pruning Relations (LLM chấm, giữ top-3 per node)
+ DEPTH=1 │ STEP B — Pruning Relations (LLM chấm, giữ top-3 relation-groups per node)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ┌─ Từ SATYA NADELLA ─────────────────────────────────────────────────┐
@@ -344,55 +345,48 @@ Câu hỏi vào
   → Còn lại 7 cặp (relation → entity đích) sau pruning relations
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=1 │ STEP C — Gộp candidate_data từ toàn frontier, rồi sample
+ DEPTH=1 │ STEP C — Build candidate_data theo từng node, chỉ sample group quá lớn
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ⚠️  Tại sao cần step này?
-      Step B xử lý PER-NODE (mỗi node giữ top-3 relations của nó).
-      Sau đó code GỘP tất cả entity đích từ TOÀN frontier thành 1 list:
+  ⚠️  Code hiện tại KHÔNG sample trên toàn frontier.
+      Nó làm theo từng node như sau:
+      1. Chọn top-3 relation-groups của node hiện tại
+      2. Gom entity đích của các group đó vào candidate_data
+      3. Chỉ nếu MỘT group có quá nhiều entity (>=20 và > num_entity_retain)
+         thì mới random sample trong group đó
 
+  Với ví dụ này:
   ┌──────────────────────────────────────────────────────────────────────┐
-  │  SATYA NADELLA  top-3 relations → đích: MICROSOFT, AI_STRATEGY      │
-  │  MICROSOFT      top-3 relations → đích: AZURE, GITHUB, OPENAI       │
-  │  AZURE          top-3 relations → đích: CHATGPT, AWS                │
-  │                                   ─────────────────────────────     │
-  │  candidate_data (gộp lại):        7 entities                        │
-  │                              7 > num_entity_retain=5 → cần sample!  │
+  │  SATYA NADELLA  top groups → đích: MICROSOFT, AI_STRATEGY           │
+  │  MICROSOFT      top groups → đích: AZURE, GITHUB, OPENAI            │
+  │  AZURE          top groups → đích: CHATGPT, AWS                     │
+  │                                                                      │
+  │  Mỗi group đều nhỏ hơn ngưỡng 20 nên KHÔNG sample.                  │
+  │  Tất cả candidate vẫn được đưa vào bước score_entities.             │
   └──────────────────────────────────────────────────────────────────────┘
 
-  Code thực tế (search.py dòng 327-328):
+  Pseudocode gần với implementation hơn:
   ┌──────────────────────────────────────────────────────────────────────┐
-  │  if len(candidate_data) > self.num_retain_entity:                   │
-  │      candidate_data = random.sample(candidate_data, self.num_retain_entity)│
+  │  for each selected_relation_group:                                   │
+  │      if len(group) >= 20 and len(group) > num_retain_entity:         │
+  │          keep random.sample(group, num_retain_entity)                │
+  │      else:                                                           │
+  │          keep all candidates in that group                           │
   └──────────────────────────────────────────────────────────────────────┘
 
-                             ▼  random.sample(7 entities, k=5)
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │  Sampled 5 để đưa vào LLM score_entities:                           │
-  │  ✅ 1. MICROSOFT   ← được chọn ngẫu nhiên                           │
-  │  ✅ 2. AZURE       ← được chọn                                      │
-  │  ✅ 3. GITHUB      ← được chọn                                      │
-  │  ✅ 4. OPENAI      ← được chọn                                      │
-  │  ✅ 5. CHATGPT     ← được chọn                                      │
-  │  ✗  AI_STRATEGY   ← rớt khỏi sample lần này (random)              │
-  │  ✗  AWS            ← rớt khỏi sample lần này (random)              │
-  └──────────────────────────────────────────────────────────────────────┘
-
-  Mục đích: Giới hạn token budget cho LLM khi gọi score_entities —
-  không phải lọc ngữ nghĩa (đó là việc của Step B), mà là giới hạn
-  kích thước input gửi cho LLM.
+  Mục đích: tránh để MỘT relation-group quá lớn làm phình prompt,
+  thay vì cắt cứng toàn bộ candidate_data của cả frontier.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=1 │ STEP D — Pruning Entities (LLM chấm entity đích)
+ DEPTH=1 │ STEP D — Pruning Entities (LLM chấm entity đích theo từng node)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  LLM prompt:
+  LLM prompt thực tế được gọi per-node, không phải 1 prompt gộp toàn frontier.
+  Ví dụ với node MICROSOFT:
   "Query: Satya Nadella CEO của ai, và công ty đó làm gì?
-   Current paths:
-     • ROOT → SATYA NADELLA → (CEO_OF) → ???
-     • ROOT → MICROSOFT     → (DEVELOPS) → ???
-     • ROOT → AZURE         → (POWERS) → ???
-   Entity candidates: 1.MICROSOFT 2.AZURE 3.GITHUB 4.OPENAI 5.CHATGPT
+   Current path:
+     • ROOT → MICROSOFT
+   Entity candidates: 1.AZURE 2.GITHUB 3.OPENAI
    Chấm 1-10 xem entity nào giúp trả lời câu hỏi nhất:"
 
   LLM trả về: [10, 8, 6, 7, 5]
@@ -443,7 +437,8 @@ Câu hỏi vào
  DEPTH=1 │ EARLY TERMINATION CHECK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  LLM: "Path hiện có: NADELLA→MICROSOFT, MICROSOFT→AZURE, MICROSOFT→OPENAI
+  LLM chỉ nhìn top 3 path hiện tại:
+  "Path hiện có: NADELLA→MICROSOFT, MICROSOFT→AZURE, MICROSOFT→OPENAI
         Đủ trả lời 'Nadella là CEO của ai và công ty đó làm gì?' chưa?"
   → "Biết Nadella là CEO Microsoft, Microsoft có Azure, nhưng
      chưa rõ Azure/OpenAI đang làm GÌ cụ thể"
@@ -471,7 +466,7 @@ Câu hỏi vào
   Tổng: 10 quan hệ
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=2 │ STEP B — Pruning Relations (top-3 per node)
+ DEPTH=2 │ STEP B — Pruning Relations (top-3 relation-groups per node)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Từ MICROSOFT:    DEVELOPS(8)✅  ACQUIRES(7)✅  INVESTS_IN(7)✅
@@ -482,22 +477,15 @@ Câu hỏi vào
   → 9 cặp sau pruning
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- DEPTH=2 │ STEP C — Gộp candidate_data, kiểm tra ngưỡng num_entity_retain
+ DEPTH=2 │ STEP C — Candidate retention tiếp tục chạy per-node / per-group
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Sau Step B, entity đích từ TOÀN frontier (3 nodes × top-3 relations):
-  ┌───────────────────────────────────────────────────────────────────┐
-  │  MICROSOFT  top-3 → đích: AZURE, GITHUB, OPENAI  (3 entities)    │
-  │  AZURE      top-3 → đích: CLOUD_PLATFORM, CHATGPT, AWS (3)       │
-  │  OPENAI     top-3 → đích: GPT4, SAM_ALTMAN, MICROSOFT (3)        │
-  │                            ─────────────────────────────          │
-  │  candidate_data gộp: 9 entities (có thể trùng → deduplicate)     │
-  │                    9 > num_entity_retain=5 → phải sample!        │
-  └───────────────────────────────────────────────────────────────────┘
+  Sau Step B, mỗi frontier node tự giữ candidate của riêng nó.
+  Nếu các group vẫn nhỏ, toàn bộ candidate được giữ lại để score_entities.
 
-  random.sample(9 entities, k=5):
-  ✅ CLOUD_PLATFORM, GPT4, CHATGPT, AZURE, OPENAI  ← được chọn
-  ✗  GITHUB, SAM_ALTMAN, AWS, MICROSOFT            ← rớt sample
+  Chỉ khi xuất hiện 1 relation-group rất lớn (ví dụ một entity có hàng chục
+  hàng trăm neighbor cùng chung 1 rel_desc + direction), code mới sample
+  riêng group đó xuống còn num_entity_retain.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  DEPTH=2 │ STEP D+E — Score Entities & Combined Score & Beam Search
@@ -705,7 +693,7 @@ Mỗi lần gọi, `ToGMetrics` đếm:
 | **3 pruning strategy** (LLM, Semantic, BM25) | Linh hoạt: LLM chính xác nhất, Semantic nhanh hơn, BM25 dùng offline |
 | **Beam Search** thay vì BFS/DFS | Kiểm soát được chi phí (token LLM) — không "đi lạc" ra vô hạn |
 | **Early termination** sau mỗi depth | Không tốn LLM call thừa khi đã có đủ thông tin |
-| **num_retain_entity + random sample** | Tránh bottleneck khi node có quá nhiều quan hệ |
+| **num_retain_entity + random sample** | Chỉ cắt bớt khi một relation-group riêng lẻ quá lớn, để giảm prompt size mà không làm mất hết candidate của các group nhỏ |
 | **Streaming generator** (AsyncGenerator) | UI nhận được response từng phần, không cần chờ toàn bộ xong |
 | **Tách exploration / pruning / reasoning** | SRP: mỗi class 1 việc, dễ test, dễ thay thế từng phần |
 | **Metric tracking tách biệt** | Phân tích rõ: tốn token ở bước nào (exploration vs reasoning) |
