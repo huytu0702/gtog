@@ -512,7 +512,7 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             len(candidate_data),
         )
 
-        if len(candidate_data) > self.num_retain_entity:
+        if len(candidate_data) >= 10 and len(candidate_data) > self.num_retain_entity:
             logger.debug(
                 "[ToG][node=%s][depth=%d] sample_candidates %d->%d",
                 node.entity_name,
