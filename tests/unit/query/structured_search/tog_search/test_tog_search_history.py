@@ -127,6 +127,7 @@ async def test_process_node_preserves_relation_metadata_and_passes_history():
     engine = ToGSearch.__new__(ToGSearch)
     engine.explorer = explorer
     engine.pruning_strategy = cast(Any, pruning)  # noqa: TC006
+    engine.width = 1
     engine.num_retain_entity = 5
 
     new_nodes, metrics = await engine._process_node("query", node)  # noqa: SLF001
@@ -168,6 +169,7 @@ async def test_process_node_supports_legacy_relation_scorer_signature():
     engine = ToGSearch.__new__(ToGSearch)
     engine.explorer = explorer
     engine.pruning_strategy = cast(Any, _LegacyPruning())  # noqa: TC006
+    engine.width = 1
     engine.num_retain_entity = 5
 
     new_nodes, _metrics = await engine._process_node("query", node)  # noqa: SLF001
@@ -211,6 +213,7 @@ async def test_process_node_keeps_all_candidates_when_total_is_large_but_each_re
     engine = ToGSearch.__new__(ToGSearch)
     engine.explorer = explorer
     engine.pruning_strategy = cast(Any, pruning)  # noqa: TC006
+    engine.width = 3
     engine.num_retain_entity = 5
 
     with pytest.MonkeyPatch.context() as mp:
