@@ -544,8 +544,20 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             current_entity_info[0] if current_entity_info else node.entity_id
         )
         candidate_groups: dict[tuple[str, str], list[tuple]] = {}
-        relation_group_order: list[tuple[str, str]] = []
+        selected_relation_groups: list[tuple[str, str]] = []
+        for rel_desc, _target_id, direction, _weight, _rel_score in scored_relations:
+            group_key = (rel_desc, direction)
+            if group_key not in candidate_groups:
+                candidate_groups[group_key] = []
+            if group_key not in selected_relation_groups:
+                selected_relation_groups.append(group_key)
+                if len(selected_relation_groups) == self.width:
+                    break
+
         for rel_desc, target_id, direction, weight, rel_score in scored_relations:
+            group_key = (rel_desc, direction)
+            if group_key not in selected_relation_groups:
+                continue
             target_info = self.explorer.get_full_entity_info(target_id)
             rel_info = self.explorer.get_full_relation_info(
                 node.entity_id, target_id, rel_desc
@@ -553,10 +565,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             if target_info:
                 target_entity_id, target_name, target_full_desc = target_info
                 rel_full_desc = rel_info[1] if rel_info else rel_desc
-                group_key = (rel_desc, direction)
-                if group_key not in candidate_groups:
-                    candidate_groups[group_key] = []
-                    relation_group_order.append(group_key)
                 candidate_groups[group_key].append((
                     rel_desc,
                     target_id,
@@ -569,11 +577,8 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
                     rel_full_desc,
                 ))
 
-        if not candidate_groups:
-            return [], metrics_list
-
         candidate_data = []
-        for rel_desc, direction in relation_group_order:
+        for rel_desc, direction in selected_relation_groups:
             group_candidates = candidate_groups[rel_desc, direction]
             if (
                 len(group_candidates) >= ENTITY_CANDIDATE_SAMPLE_THRESHOLD
@@ -594,13 +599,16 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             else:
                 candidate_data.extend(group_candidates)
 
+        if not candidate_data:
+            return [], metrics_list
+
         logger.debug(
             "[ToG][node=%s][depth=%d] scored_relations=%d candidate_entities=%d relation_groups=%d",
             node.entity_name,
             node.depth,
             len(scored_relations),
             len(candidate_data),
-            len(candidate_groups),
+            len(selected_relation_groups),
         )
 
         entity_candidates = [

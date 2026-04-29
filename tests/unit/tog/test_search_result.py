@@ -139,8 +139,8 @@ async def test_tog_stream_search_backward_compatible():
 
 
 @pytest.mark.asyncio
-async def test_tog_search_uses_entity_scores_for_branch_selection():
-    """Entity scoring should influence which branch survives beam pruning."""
+async def test_tog_search_applies_width_first_relation_gating_before_entity_scoring():
+    """Width-first relation gating should happen before entity scoring."""
     mock_model = MagicMock()
     mock_tokenizer = MagicMock()
 
@@ -154,10 +154,10 @@ async def test_tog_search_uses_entity_scores_for_branch_selection():
             PruningMetrics(llm_calls=1, prompt_tokens=40, output_tokens=10),
         )
     )
-    # Force e3 branch to be preferred even with equal relation scores.
+    # If both candidates reached entity scoring, e3 would win.
     mock_pruning.score_entities = AsyncMock(
         return_value=(
-            [1.0, 10.0],
+            [1.0],
             PruningMetrics(llm_calls=1, prompt_tokens=30, output_tokens=8),
         )
     )
@@ -227,10 +227,81 @@ async def test_tog_search_uses_entity_scores_for_branch_selection():
 
     await search.search(query="test query")
 
+    scored_entities = mock_pruning.score_entities.await_args.kwargs["entities"]
+    assert scored_entities == [("e2", "Entity2", "Desc2")]
+
     all_paths = mock_reasoning.generate_answer.await_args.args[1]
     depth_one_nodes = [n for n in all_paths if n.depth == 1]
     assert len(depth_one_nodes) == 1
-    assert depth_one_nodes[0].entity_id == "e3"
+    assert depth_one_nodes[0].entity_id == "e2"
+
+
+@pytest.mark.asyncio
+async def test_width_first_relation_gating_does_not_backfill_after_missing_entities():
+    mock_pruning = MagicMock()
+    mock_pruning.score_relations = AsyncMock(
+        return_value=(
+            [
+                ("rel_a", "missing", "OUTGOING", 1.0, 9.0),
+                ("rel_b", "e3", "OUTGOING", 1.0, 8.0),
+            ],
+            PruningMetrics(),
+        )
+    )
+    mock_pruning.score_entities = AsyncMock(return_value=([7.0], PruningMetrics()))
+
+    mock_reasoning = MagicMock()
+    mock_reasoning.check_early_termination = AsyncMock(
+        return_value=(False, None, ReasoningMetrics())
+    )
+    mock_reasoning.generate_answer = AsyncMock(
+        return_value=("answer", ["path"], ReasoningMetrics())
+    )
+
+    root = MagicMock()
+    root.id = "e1"
+    root.title = "Root"
+    root.description = "Root description"
+
+    search = ToGSearch(
+        model=MagicMock(),
+        entities=[root],
+        relationships=[],
+        tokenizer=MagicMock(),
+        pruning_strategy=mock_pruning,
+        reasoning_module=mock_reasoning,
+        width=1,
+        depth=1,
+        num_retain_entity=5,
+    )
+
+    search.explorer.find_starting_entities = MagicMock(return_value=["e1"])
+    search.explorer.get_relations = MagicMock(
+        return_value=[
+            ("rel_a", "missing", "OUTGOING", 1.0),
+            ("rel_b", "e3", "OUTGOING", 1.0),
+        ]
+    )
+
+    def _get_info(entity_id):
+        if entity_id == "e1":
+            return ("e1", "Root", "Root description")
+        if entity_id == "missing":
+            return None
+        if entity_id == "e3":
+            return ("e3", "Entity3", "Desc3")
+        return None
+
+    search.explorer.get_full_entity_info = MagicMock(side_effect=_get_info)
+    search.explorer.get_full_relation_info = MagicMock(
+        side_effect=lambda s, t, r: ("id", r, s, t, 1.0)
+    )
+
+    await search.search(query="test query")
+
+    mock_pruning.score_entities.assert_not_awaited()
+    all_paths = mock_reasoning.generate_answer.await_args.args[1]
+    assert [n for n in all_paths if n.depth == 1] == []
 
 
 @pytest.mark.asyncio
@@ -287,7 +358,7 @@ async def test_num_retain_entity_does_not_sample_across_multiple_small_relation_
         tokenizer=mock_tokenizer,
         pruning_strategy=mock_pruning,
         reasoning_module=mock_reasoning,
-        width=1,
+        width=50,
         depth=1,
         num_retain_entity=5,
     )
@@ -369,7 +440,7 @@ async def test_num_retain_entity_samples_each_large_relation_group_independently
         tokenizer=MagicMock(),
         pruning_strategy=mock_pruning,
         reasoning_module=mock_reasoning,
-        width=1,
+        width=50,
         depth=1,
         num_retain_entity=5,
     )
@@ -450,7 +521,7 @@ async def test_num_retain_entity_samples_after_filtering_missing_entities_within
         tokenizer=MagicMock(),
         pruning_strategy=mock_pruning,
         reasoning_module=mock_reasoning,
-        width=1,
+        width=50,
         depth=1,
         num_retain_entity=5,
     )
