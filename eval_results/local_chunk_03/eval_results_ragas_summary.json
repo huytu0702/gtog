@@ -18,11 +18,11 @@
       "success_count": 50,
       "fail_count": 0,
       "skip_count": 0,
-      "context_precision": 1.0,
-      "context_recall": 0.66,
-      "faithfulness": 0.833193,
-      "answer_relevancy": 0.924689,
-      "answer_correctness_custom": 0.74
+      "context_precision": 0.9999999998999988,
+      "context_recall": 0.7988,
+      "faithfulness": 0.8411929406484782,
+      "answer_relevancy": 0.924688886577266,
+      "answer_correctness_custom": 0.82
     }
   }
 }

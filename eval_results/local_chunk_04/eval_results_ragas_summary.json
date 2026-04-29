@@ -18,10 +18,10 @@
       "success_count": 50,
       "fail_count": 0,
       "skip_count": 0,
-      "context_precision": 0.94,
-      "context_recall": 0.68,
-      "faithfulness": 0.802706,
-      "answer_relevancy": 0.894534,
+      "context_precision": 0.9599999999039989,
+      "context_recall": 0.8388,
+      "faithfulness": 0.8027063818443143,
+      "answer_relevancy": 0.8945338041043611,
       "answer_correctness_custom": 0.86
     }
   }

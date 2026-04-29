@@ -67,7 +67,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "textblob>=0.18.0.post0",
     "spacy>=3.8.4",
-    "litellm>=1.77.1",
+    "litellm==1.77.1",
     "tavily-python>=0.7.21",
 ]
 

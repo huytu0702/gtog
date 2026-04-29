@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "timestamp": "2026-03-19T10:57:39.818224+00:00",
+    "timestamp": "2026-03-25T09:11:30.963423+00:00",
     "input_file": "F:\\KL\\gtog-eval\\eval_results\\tog_chunk_04\\eval_results_simple.json",
     "model": "gpt-5.2",
     "base_url": "http://127.0.0.1:8317/v1",
@@ -18,11 +18,11 @@
       "success_count": 50,
       "fail_count": 0,
       "skip_count": 0,
-      "context_precision": 0.9,
-      "context_recall": 0.56,
-      "faithfulness": 0.780387,
-      "answer_relevancy": 0.881747,
-      "answer_correctness_custom": 0.86
+      "context_precision": 0.9999999997019988,
+      "context_recall": 0.98,
+      "faithfulness": 0.8371674420024418,
+      "answer_relevancy": 0.9118693647477056,
+      "answer_correctness_custom": 0.96
     }
   }
 }
