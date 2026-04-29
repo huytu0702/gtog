@@ -566,7 +566,14 @@ Câu hỏi vào
 
 ---
 
-## 🌳 Cây tìm kiếm đầy đủ (width=3, depth=3)
+## 🌳 Cây tìm kiếm sau pruning + beam search (width=3, depth=3)
+
+> **Lưu ý:** Đây không phải "cây thô đầy đủ" của tất cả neighbor trong graph.
+> Nó là cây **sau khi code đã**:
+> 1. score relations,
+> 2. giữ top-`width` relation-groups cho từng frontier node,
+> 3. chỉ sample khi một relation-group riêng lẻ quá lớn,
+> 4. rồi mới beam-prune top-`width` node toàn cục ở mỗi depth.
 
 ```
                               [QUERY]
@@ -585,7 +592,7 @@ Câu hỏi vào
    =9.00✅    =4.20❌    =6.40✅ =4.20❌ =4.90✅ =3.50❌ =2.80❌
 
   ┌─────────────────────────────────────────────────────────────┐
-  │ BEAM SEARCH depth=1: Giữ TOP-3 toàn cục                    │
+  │ GLOBAL BEAM depth=1: Giữ TOP-3 toàn cục                    │
   │   ✅ MICROSOFT  9.00  (path: NADELLA→MICROSOFT)             │
   │   ✅ AZURE      6.40  (path: MICROSOFT→AZURE)               │
   │   ✅ OPENAI     4.90  (path: MICROSOFT→OPENAI)              │
@@ -599,7 +606,7 @@ Câu hỏi vào
   =50.4  =37.8    =51.8  =35.8 =10.2  =39.7  =14.7
 
   ┌─────────────────────────────────────────────────────────────┐
-  │ BEAM SEARCH depth=2: Giữ TOP-3 toàn cục                    │
+  │ GLOBAL BEAM depth=2: Giữ TOP-3 toàn cục                    │
   │   ✅ CLOUD_PLT  51.84  (NADELLA→MSFT→AZURE→CLOUD_PLATFORM)  │
   │   ✅ AZURE      50.40  (NADELLA→MSFT→AZURE — 2nd path)      │
   │   ✅ GPT4       39.69  (MSFT→OPENAI→GPT4)                   │
@@ -609,9 +616,14 @@ Câu hỏi vào
     Đủ thông tin → Dừng, không chạy depth=3
 
   ╔═════════════════════════════════════════════════════════════╗
-  ║  FINAL ANSWER tổng hợp từ 3 winning paths                  ║
+  ║  Với ví dụ terminate sớm này: final answer dùng top paths  ║
+  ║  hiện tại (code check top 3 path hiện tại để quyết định)   ║
   ╚═════════════════════════════════════════════════════════════╝
 ```
+
+> Nếu **không** early terminate, code ở `search.py` sẽ gom `all_paths` từ
+> `state.nodes_by_depth` ở **mọi depth đã giữ lại**, rồi mới gọi reasoning để sinh
+> answer cuối. Tức là lúc đó final answer **không chỉ** dựa trên 3 winning paths cuối.
 
 ---
 
