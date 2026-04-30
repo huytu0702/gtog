@@ -29,7 +29,7 @@
 
 ## Cloud Architecture
 
-![Cloud Architecture](docs/cloud_architecture.png)
+![Cloud Architecture](./docs/img/cloud_architecture.png) 
 
 | Component | Technology |
 |-----------|-----------|

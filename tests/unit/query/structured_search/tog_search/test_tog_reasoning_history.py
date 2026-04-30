@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from graphrag.query.structured_search.tog_search.reasoning import ToGReasoning
 from graphrag.query.structured_search.tog_search.state import ExplorationNode
 
@@ -32,7 +32,9 @@ async def test_generate_answer_includes_history_context():
     nodes = [_make_node("Entity A")]
     history_ctx = "-----Conversation History-----\nuser|Who is Entity A?"
 
-    await reasoning.generate_answer("Tell me more", nodes, conversation_history_context=history_ctx)
+    await reasoning.generate_answer(
+        "Tell me more", nodes, conversation_history_context=history_ctx
+    )
 
     assert len(captured_prompt) == 1
     assert history_ctx in captured_prompt[0]
@@ -75,9 +77,74 @@ async def test_check_early_termination_includes_history():
     nodes = [_make_node("Entity A")]
     history_ctx = "-----Conversation History-----\nuser|Previous question"
 
-    should_terminate, answer, _ = await reasoning.check_early_termination(
+    should_terminate, _answer, _ = await reasoning.check_early_termination(
         "Follow-up?", nodes, conversation_history_context=history_ctx
     )
 
     assert history_ctx in captured_prompt[0]
     assert should_terminate is False
+
+
+def test_reasoning_path_formats_incoming_and_outgoing_edges():
+    root = _make_node("Root")
+    outgoing = ExplorationNode(
+        entity_id="child",
+        entity_name="Child",
+        entity_description="child desc",
+        depth=1,
+        score=1.0,
+        parent=root,
+        relation_from_parent="rel_out",
+        relation_direction_from_parent="outgoing",
+    )
+    incoming = ExplorationNode(
+        entity_id="leaf",
+        entity_name="Leaf",
+        entity_description="leaf desc",
+        depth=2,
+        score=1.0,
+        parent=outgoing,
+        relation_from_parent="rel_in",
+        relation_direction_from_parent="incoming",
+    )
+
+    reasoning = ToGReasoning(model=MagicMock())
+
+    assert reasoning.get_reasoning_paths([incoming]) == [
+        "Root --[rel_out]--> Child | Child <--[rel_in]-- Leaf"
+    ]
+
+
+def test_reasoning_path_keeps_legacy_fallback_when_direction_missing():
+    root = _make_node("Root")
+    child = ExplorationNode(
+        entity_id="child",
+        entity_name="Child",
+        entity_description="child desc",
+        depth=1,
+        score=1.0,
+        parent=root,
+        relation_from_parent="rel",
+    )
+
+    reasoning = ToGReasoning(model=MagicMock())
+
+    assert reasoning.get_reasoning_paths([child]) == ["Root --[rel]--> Child"]
+
+
+def test_format_paths_renders_incoming_relationships():
+    root = _make_node("Root")
+    child = ExplorationNode(
+        entity_id="child",
+        entity_name="Child",
+        entity_description="child desc",
+        depth=1,
+        score=1.0,
+        parent=root,
+        relation_from_parent="rel",
+        relation_direction_from_parent="incoming",
+    )
+
+    reasoning = ToGReasoning(model=MagicMock())
+
+    assert "Root <--[rel]-- Child" in reasoning.format_paths([child])

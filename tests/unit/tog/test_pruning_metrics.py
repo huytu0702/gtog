@@ -5,23 +5,13 @@ from graphrag.query.structured_search.tog_search.pruning import (
     LLMPruning, SemanticPruning, BM25Pruning, PruningMetrics
 )
 
-class AsyncIteratorMock:
-    def __init__(self, items):
-        self.items = iter(items)
-    def __aiter__(self):
-        return self
-    async def __anext__(self):
-        try:
-            return next(self.items)
-        except StopIteration:
-            raise StopAsyncIteration
-
 @pytest.mark.asyncio
 async def test_llm_pruning_returns_metrics():
     """LLMPruning.score_relations should return metrics dict."""
     mock_model = MagicMock()
-    # The achat_stream method should return an async iterator directly (not a coroutine)
-    mock_model.achat_stream = MagicMock(return_value=AsyncIteratorMock(["[8, 7, 5]"]))
+    mock_response = MagicMock()
+    mock_response.output.content = "[8, 7, 5]"
+    mock_model.achat = AsyncMock(return_value=mock_response)
 
     pruning = LLMPruning(model=mock_model)
     relations = [
@@ -36,10 +26,13 @@ async def test_llm_pruning_returns_metrics():
         relations=relations,
     )
 
+    assert len(scored) == 3
+    assert [relation[4] for relation in scored] == [8.0, 7.0, 5.0]
     assert isinstance(metrics, PruningMetrics)
     assert metrics.llm_calls == 1
     assert metrics.prompt_tokens > 0
     assert metrics.output_tokens > 0
+    mock_model.achat.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test_semantic_pruning_returns_metrics():
@@ -63,6 +56,7 @@ async def test_semantic_pruning_returns_metrics():
         relations=relations,
     )
 
+    assert len(scored) == 2
     assert isinstance(metrics, PruningMetrics)
     assert metrics.llm_calls == 0  # SemanticPruning uses embeddings, not LLM
 

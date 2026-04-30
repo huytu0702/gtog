@@ -1,10 +1,9 @@
-import os
+import logging
+import pathlib
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
 
 import numpy as np
-import logging
 
 from graphrag.language_model.protocol.base import ChatModel, EmbeddingModel
 from graphrag.prompts.query.tog_entity_scoring_prompt import TOG_ENTITY_SCORING_PROMPT
@@ -45,8 +44,9 @@ class PruningStrategy:
         self,
         query: str,
         entity_name: str,
-        relations: List[Tuple[str, str, str, float]],
-    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
+        relations: list[tuple[str, str, str, float]],
+        query_embedding: np.ndarray | None = None,
+    ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """
         Score relations for relevance to query.
         Returns: Tuple of (List of (relation, target_id, direction, weight, relevance_score), PruningMetrics)
@@ -57,8 +57,9 @@ class PruningStrategy:
         self,
         query: str,
         current_path: str,
-        entities: List[Tuple[str, str, str]],
-    ) -> Tuple[List[float], PruningMetrics]:
+        entities: list[tuple[str, str, str]],
+        query_embedding: np.ndarray | None = None,
+    ) -> tuple[list[float], PruningMetrics]:
         """
         Score entities for relevance.
         entities: List of (entity_id, entity_name, entity_description)
@@ -100,21 +101,25 @@ class LLMPruning(PruningStrategy):
         """Load prompt from file if path is given, otherwise use directly."""
         if prompt_or_path is None:
             return default_prompt
-        
+
         # Check if it's a file path (ends with .txt or .md)
-        if prompt_or_path.endswith(('.txt', '.md')):
-            if os.path.exists(prompt_or_path):
+        if prompt_or_path.endswith((".txt", ".md")):
+            if pathlib.Path(prompt_or_path).exists():
                 try:
-                    with open(prompt_or_path, 'r', encoding='utf-8') as f:
-                        logger.debug(f"Loaded prompt from file: {prompt_or_path}")
+                    with pathlib.Path(prompt_or_path).open(encoding="utf-8") as f:
+                        logger.debug("Loaded prompt from file: %s", prompt_or_path)
                         return f.read()
                 except Exception as e:
-                    logger.warning(f"Failed to read prompt file {prompt_or_path}: {e}")
+                    logger.warning(
+                        "Failed to read prompt file %s: %s", prompt_or_path, e
+                    )
                     return default_prompt
             else:
-                logger.warning(f"Prompt file not found: {prompt_or_path}, using default")
+                logger.warning(
+                    "Prompt file not found: %s, using default", prompt_or_path
+                )
                 return default_prompt
-        
+
         # Otherwise, use the string directly as prompt
         return prompt_or_path
 
@@ -122,13 +127,19 @@ class LLMPruning(PruningStrategy):
         self,
         query: str,
         entity_name: str,
-        relations: List[Tuple[str, str, str, float]],
-    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
+        relations: list[tuple[str, str, str, float]],
+        query_embedding: np.ndarray | None = None,
+        relation_history: str | None = None,
+        current_path: str | None = None,
+    ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using LLM."""
         metrics = PruningMetrics()
 
         if not relations:
             return [], metrics
+
+        relation_history = relation_history or "None"
+        current_path = current_path or entity_name
 
         # Build relations text
         relations_text = "\n".join([
@@ -137,16 +148,19 @@ class LLMPruning(PruningStrategy):
         ])
 
         prompt = self.relation_scoring_prompt.format(
-            query=query, entity_name=entity_name, relations=relations_text
+            query=query,
+            entity_name=entity_name,
+            relations=relations_text,
+            relation_history=relation_history,
+            current_path=current_path,
         )
 
-        response = ""
-        async for chunk in self.model.achat_stream(
+        response_obj = await self.model.achat(
             prompt=prompt,
             history=[],
             model_parameters={"temperature": self.temperature},
-        ):
-            response += chunk
+        )
+        response = response_obj.output.content
 
         # Update metrics
         metrics.llm_calls = 1
@@ -160,7 +174,7 @@ class LLMPruning(PruningStrategy):
         scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
-                relations, scores
+                relations, scores, strict=False
             )
         ]
         return scored_relations, metrics
@@ -169,8 +183,9 @@ class LLMPruning(PruningStrategy):
         self,
         query: str,
         current_path: str,
-        entities: List[Tuple[str, str, str]],
-    ) -> Tuple[List[float], PruningMetrics]:
+        entities: list[tuple[str, str, str]],
+        query_embedding: np.ndarray | None = None,
+    ) -> tuple[list[float], PruningMetrics]:
         """Score entities using LLM."""
         metrics = PruningMetrics()
 
@@ -186,13 +201,12 @@ class LLMPruning(PruningStrategy):
             query=query, current_path=current_path, candidate_entities=entities_text
         )
 
-        response = ""
-        async for chunk in self.model.achat_stream(
+        response_obj = await self.model.achat(
             prompt=prompt,
             history=[],
             model_parameters={"temperature": self.temperature},
-        ):
-            response += chunk
+        )
+        response = response_obj.output.content
 
         # Update metrics
         metrics.llm_calls = 1
@@ -201,7 +215,7 @@ class LLMPruning(PruningStrategy):
 
         return self._parse_scores(response, len(entities)), metrics
 
-    def _parse_scores(self, response: str, expected_count: int) -> List[float]:
+    def _parse_scores(self, response: str, expected_count: int) -> list[float]:
         """Parse score list from LLM response."""
         # Clean response and try to extract list pattern first
         response = response.strip()
@@ -240,37 +254,51 @@ class SemanticPruning(PruningStrategy):
     def __init__(
         self,
         embedding_model: EmbeddingModel,
-        entity_embedding_store: Optional[BaseVectorStore] = None,
+        entity_embedding_store: BaseVectorStore | None = None,
+        relationship_embedding_store: BaseVectorStore | None = None,
     ):
         self.embedding_model = embedding_model
         self.entity_embedding_store = entity_embedding_store
-        self._entity_embeddings: Optional[np.ndarray] = None
-        self._entity_texts: Optional[List[str]] = None
+        self.relationship_embedding_store = relationship_embedding_store
+        self._entity_embeddings: np.ndarray | None = None
+        self._entity_texts: list[str] | None = None
 
     async def score_relations(
         self,
         query: str,
         entity_name: str,
-        relations: List[Tuple[str, str, str, float]],
-    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
+        relations: list[tuple[str, str, str, float]],
+        query_embedding: np.ndarray | None = None,
+        relation_history: str | None = None,
+        current_path: str | None = None,
+    ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using embedding similarity."""
         metrics = PruningMetrics()
 
         if not relations:
             return [], metrics
 
-        # Embed query
-        query_emb = np.array(await self.embedding_model.aembed(text=query))
+        # Use pre-computed query embedding or compute once
+        if query_embedding is not None:
+            query_emb = query_embedding
+        else:
+            query_emb = np.array(await self.embedding_model.aembed(text=query))
+            metrics.embedding_calls += 1
+            metrics.embedding_tokens += len(query) // 4
 
-        # Embed relation descriptions
         relation_texts = [rel_desc for rel_desc, _, _, _ in relations]
-        relation_embeddings = await self.embedding_model.aembed_batch(
-            text_list=relation_texts
-        )
 
-        # Update metrics for embedding calls
-        metrics.embedding_calls = 2  # One for query, one batch for relations
-        metrics.embedding_tokens = len(query) // 4 + sum(len(t) // 4 for t in relation_texts)
+        # Try pre-computed relation embeddings first
+        if self.relationship_embedding_store:
+            relation_embeddings = await self._load_relation_embeddings(
+                relations, relation_texts, metrics
+            )
+        else:
+            relation_embeddings = await self.embedding_model.aembed_batch(
+                text_list=relation_texts
+            )
+            metrics.embedding_calls += 1
+            metrics.embedding_tokens += sum(len(t) // 4 for t in relation_texts)
 
         # Compute cosine similarities
         scores = []
@@ -286,7 +314,7 @@ class SemanticPruning(PruningStrategy):
         scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
-                relations, scores
+                relations, scores, strict=False
             )
         ]
         return scored_relations, metrics
@@ -295,8 +323,9 @@ class SemanticPruning(PruningStrategy):
         self,
         query: str,
         current_path: str,
-        entities: List[Tuple[str, str, str]],
-    ) -> Tuple[List[float], PruningMetrics]:
+        entities: list[tuple[str, str, str]],
+        query_embedding: np.ndarray | None = None,
+    ) -> tuple[list[float], PruningMetrics]:
         """Score entities using embedding similarity."""
         metrics = PruningMetrics()
 
@@ -306,15 +335,17 @@ class SemanticPruning(PruningStrategy):
         # Load entity embeddings (pre-computed or computed)
         await self._load_entity_embeddings(entities)
 
-        # Embed query
-        query_emb = np.array(await self.embedding_model.aembed(text=query))
-
-        # Update metrics for embedding call
-        metrics.embedding_calls = 1
-        metrics.embedding_tokens = len(query) // 4
+        # Use pre-computed query embedding or compute once
+        if query_embedding is not None:
+            query_emb = query_embedding
+        else:
+            query_emb = np.array(await self.embedding_model.aembed(text=query))
+            metrics.embedding_calls = 1
+            metrics.embedding_tokens = len(query) // 4
 
         # Compute similarities using pre-computed embeddings
         scores = []
+        assert self._entity_embeddings is not None
         for i, ent_emb in enumerate(self._entity_embeddings):
             similarity = np.dot(query_emb, ent_emb) / (
                 np.linalg.norm(query_emb) * np.linalg.norm(ent_emb)
@@ -324,8 +355,40 @@ class SemanticPruning(PruningStrategy):
 
         return scores, metrics
 
+    async def _load_relation_embeddings(
+        self,
+        relations: list[tuple[str, str, str, float]],
+        relation_texts: list[str],
+        metrics: PruningMetrics,
+    ) -> list[list[float]]:
+        """Load pre-computed embeddings for relations, fallback to computing missing ones."""
+        embeddings: list[list[float] | None] = [None for _ in relations]
+        missing_indices: list[int] = []
+        missing_texts: list[str] = []
+
+        for i, (rel_desc, target_id, direction, weight) in enumerate(relations):
+            # Use target_id as lookup key (relationship id)
+            assert self.relationship_embedding_store is not None
+            doc = self.relationship_embedding_store.search_by_id(target_id)
+            if doc and doc.vector:
+                embeddings[i] = doc.vector
+            else:
+                missing_indices.append(i)
+                missing_texts.append(relation_texts[i])
+
+        if missing_texts:
+            batch_embeddings = await self.embedding_model.aembed_batch(
+                text_list=missing_texts
+            )
+            metrics.embedding_calls += 1
+            metrics.embedding_tokens += sum(len(t) // 4 for t in missing_texts)
+            for idx, emb in zip(missing_indices, batch_embeddings, strict=False):
+                embeddings[idx] = emb
+
+        return embeddings  # type: ignore[return-value]
+
     async def _load_entity_embeddings(
-        self, entities: List[Tuple[str, str, str]]
+        self, entities: list[tuple[str, str, str]]
     ) -> None:
         """Load pre-computed embeddings for entities."""
         if self._entity_embeddings is not None:
@@ -334,10 +397,10 @@ class SemanticPruning(PruningStrategy):
         # Priority 1: Use pre-computed embeddings from vector store
         if self.entity_embedding_store:
             try:
-                embeddings: List[Optional[List[float]]] = [None for _ in entities]
+                embeddings: list[list[float] | None] = [None for _ in entities]
                 self._entity_texts = [f"{name}: {desc}" for _, name, desc in entities]
-                missing_indices: List[int] = []
-                missing_texts: List[str] = []
+                missing_indices: list[int] = []
+                missing_texts: list[str] = []
 
                 for i, (entity_id, _name, _desc) in enumerate(entities):
                     # Try to get pre-computed embedding from vector store
@@ -352,7 +415,9 @@ class SemanticPruning(PruningStrategy):
                     batch_embeddings = await self.embedding_model.aembed_batch(
                         text_list=missing_texts
                     )
-                    for idx, emb in zip(missing_indices, batch_embeddings):
+                    for idx, emb in zip(
+                        missing_indices, batch_embeddings, strict=False
+                    ):
                         embeddings[idx] = emb
 
                 self._entity_embeddings = np.array(embeddings)
@@ -362,13 +427,16 @@ class SemanticPruning(PruningStrategy):
                 return
             except Exception as e:
                 logger.warning(
-                    f"Failed to load pre-computed embeddings: {e}, falling back to computing"
+                    "Failed to load pre-computed embeddings: %s, falling back to computing",
+                    e,
                 )
 
         # Priority 2: Compute all embeddings
         entity_texts = [f"{name}: {desc}" for _, name, desc in entities]
-        embeddings = await self.embedding_model.aembed_batch(text_list=entity_texts)
-        self._entity_embeddings = np.array(embeddings)
+        computed: list[list[float]] = await self.embedding_model.aembed_batch(
+            text_list=entity_texts
+        )
+        self._entity_embeddings = np.array(computed)
         self._entity_texts = entity_texts
         logger.debug(f"Computed embeddings for {len(self._entity_texts)} entities")
 
@@ -387,12 +455,12 @@ class BM25Pruning(PruningStrategy):
         self.k1 = k1
         self.b = b
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Simple tokenization."""
         # Lowercase and split on non-alphanumeric
         return re.findall(r"\w+", text.lower())
 
-    def _compute_bm25_scores(self, query: str, documents: List[str]) -> List[float]:
+    def _compute_bm25_scores(self, query: str, documents: list[str]) -> list[float]:
         """Compute BM25 scores for documents given a query."""
         if not documents:
             return []
@@ -446,8 +514,11 @@ class BM25Pruning(PruningStrategy):
         self,
         query: str,
         entity_name: str,
-        relations: List[Tuple[str, str, str, float]],
-    ) -> Tuple[List[Tuple[str, str, str, float, float]], PruningMetrics]:
+        relations: list[tuple[str, str, str, float]],
+        query_embedding: np.ndarray | None = None,
+        relation_history: str | None = None,
+        current_path: str | None = None,
+    ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using BM25."""
         metrics = PruningMetrics()
 
@@ -472,7 +543,7 @@ class BM25Pruning(PruningStrategy):
         scored_relations = [
             (rel_desc, target_id, direction, weight, score)
             for (rel_desc, target_id, direction, weight), score in zip(
-                relations, normalized_scores
+                relations, normalized_scores, strict=False
             )
         ]
         return scored_relations, metrics
@@ -481,8 +552,9 @@ class BM25Pruning(PruningStrategy):
         self,
         query: str,
         current_path: str,
-        entities: List[Tuple[str, str, str]],
-    ) -> Tuple[List[float], PruningMetrics]:
+        entities: list[tuple[str, str, str]],
+        query_embedding: np.ndarray | None = None,
+    ) -> tuple[list[float], PruningMetrics]:
         """Score entities using BM25."""
         metrics = PruningMetrics()
 
