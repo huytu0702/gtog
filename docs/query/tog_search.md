@@ -1,120 +1,149 @@
-# ToG (Think-on-Graph) Search Algorithm
+# ToG (Think-on-Graph) Search 🧠
 
-## Overview
+## Deep Reasoning over Knowledge Graphs
 
-ToG (Think-on-Graph) is a sophisticated search algorithm that performs deep reasoning through iterative graph traversal. Unlike traditional search methods that provide single-pass results, ToG explores multiple paths through the knowledge graph, scores and prunes them using LLM guidance, and generates evidence-based answers with transparent reasoning chains.
+Baseline RAG and even standard graph search methods struggle with queries that require multi-hop reasoning — tracing chains of relationships across the knowledge graph to reach a well-supported conclusion. Queries such as "How does character A influence the outcome through intermediary events?" cannot be answered by a single vector lookup or a shallow entity retrieval.
 
-## Algorithm Flow
+ToG (Think-on-Graph) solves this by performing iterative beam-search exploration guided by an LLM or embedding model at every hop. The algorithm expands promising paths, prunes unlikely ones, checks for early answers, and finally synthesizes a structured response from the discovered evidence — giving every answer an auditable reasoning chain.
 
-```mermaid
-flowchart TD
-    A[User Query] --> B[Find Starting Entities]
-    B --> C[Initialize Search State]
-    C --> D{Current Depth < Max Depth?}
-    D -->|Yes| E[Get Current Frontier]
-    E --> F[For Each Node in Frontier]
-    F --> G[Get Relations for Entity]
-    G --> H[Score Relations using LLM]
-    H --> I[Keep Top-K Relations]
-    I --> J[Create New Exploration Nodes]
-    J --> K[Add to Next Level]
-    K --> L{More Nodes in Frontier?}
-    L -->|Yes| F
-    L -->|No| M[Prune to Beam Width]
-    M --> N[Check Early Termination]
-    N --> O{Can Answer Confidently?}
-    O -->|Yes| P[Generate Early Answer]
-    O -->|No| Q[Increment Depth]
-    Q --> D
-    D -->|No| R[Collect All Exploration Paths]
-    R --> S[Generate Final Answer]
-    S --> T[Return Answer with Reasoning]
-    P --> T
-```
-
-## Detailed Components
-
-### 1. Initialization Phase
+## Methodology
 
 ```mermaid
+---
+title: ToG Search Dataflow
+---
+%%{ init: { 'flowchart': { 'curve': 'step' } } }%%
 flowchart LR
-    A[Query Input] --> B[Entity Matching]
-    B --> C[Keyword Scoring]
-    C --> D[Select Top-K Entities]
-    D --> E[Create Root Nodes]
-    E --> F[Initialize Search State]
+
+    uq[User Query] --- .1
+    ch1[Conversation History] --- .1
+
+    subgraph EL[Entity Linking]
+        direction TB
+        el1[Semantic<br/>Embedding]~~~el2[Keyword<br/>Fallback]
+    end
+
+    .1 --Starting Entities--> EL --> init[Initialize<br/>Search State]
+
+    subgraph LOOP[Exploration Loop · depth 0 → max_depth]
+        direction TB
+        fr[Current Frontier] --> rel[Get Relations<br/>Bidirectional]
+        rel --> ps[Score Relations<br/>& Entities]
+        ps --> np[Build Next-level<br/>Candidates]
+        np --> prune[Prune to<br/>Beam Width]
+        prune --> et{Early<br/>Termination?}
+        et --No--> fr
+    end
+
+    init --> LOOP
+
+    et --YES: answer--> res[Response]
+    LOOP --max depth reached--> rea[Reasoning<br/>Module]
+    rea --generate_answer--> res
+
+     classDef green fill:#26B653,stroke:#333,stroke-width:2px,color:#fff;
+     classDef turquoise fill:#19CCD3,stroke:#333,stroke-width:2px,color:#fff;
+     classDef rose fill:#DD8694,stroke:#333,stroke-width:2px,color:#fff;
+     classDef orange fill:#F19914,stroke:#333,stroke-width:2px,color:#fff;
+     classDef purple fill:#B356CD,stroke:#333,stroke-width:2px,color:#fff;
+     classDef invisible fill:#fff,stroke:#fff,stroke-width:0px,color:#fff, width:0px;
+     class uq,ch1 turquoise;
+     class el1,el2,fr,rel,ps,np,prune rose;
+     class init,et orange;
+     class rea purple;
+     class res green;
+     class .1 invisible;
 ```
 
-**Process:**
-- **Entity Matching**: Finds entities relevant to the query using keyword matching and token overlap
-- **Scoring**: Ranks entities based on query relevance (title matches get higher scores)
-- **Selection**: Keeps top-K entities (default: 3) as starting points
-- **State Initialization**: Creates `ToGSearchState` with beam width and max depth parameters
+Given a user query and, optionally, conversation history, ToG search:
 
-### 2. Exploration Phase
+1. **Links entities** — finds the top-`width` starting entities using semantic embedding similarity (dot-product against pre-computed entity embeddings in the vector store) or keyword scoring as a fallback.
+2. **Checks depth-0 early termination** — before any traversal begins, the reasoning module is asked whether the starting entities alone can answer the query.
+3. **Explores iteratively** — for each node in the current frontier, outgoing and incoming relations are retrieved bidirectionally, then scored by the pruning strategy. Entity candidates reachable via the top-scored relations are scored in a second stage and combined into a per-hop score (`rel_score × entity_score × parent_score`).
+4. **Prunes to beam width** — after each depth step, all new nodes are sorted by score and only the top `beam_width` survive.
+5. **Checks early termination** — after every depth step, the LLM is asked (with the current frontier as context) whether it can already answer confidently. If yes, the answer is streamed immediately.
+6. **Generates the final answer** — once `max_depth` is reached, all nodes across every depth are passed to `ToGReasoning.generate_answer`, which formats a rich context (source chunks → entity descriptions → relationship descriptions) and synthesises a structured response.
 
-```mermaid
-flowchart TD
-    A[Current Node] --> B[Get All Relations]
-    B --> C[Bidirectional Traversal]
-    C --> D[Format Relations for LLM]
-    D --> E[LLM Scoring]
-    E --> F[Parse Scores]
-    F --> G[Sort by Relevance]
-    G --> H[Select Top-N Relations]
-    H --> I[Create Child Nodes]
-    I --> J[Set Parent References]
-    J --> K[Add to Next Level]
-```
-
-**Relation Scoring Process:**
-1. **Collect Relations**: Gets both incoming and outgoing relations for current entity
-2. **Format for LLM**: Creates structured prompt with relation descriptions and weights
-3. **LLM Evaluation**: Asks LLM to score relations 1-10 based on query relevance
-4. **Score Parsing**: Extracts numerical scores from LLM response
-5. **Selection**: Keeps top-N relations (default: 5) for exploration
-
-### 3. Pruning Strategy
+## Module Architecture
 
 ```mermaid
-flowchart TD
-    A[All Nodes at Current Depth] --> B[Sort by Score]
-    B --> C[Apply Beam Width Limit]
-    C --> D[Keep Top-K Nodes]
-    D --> E[Discard Low-Scoring Paths]
-    E --> F[Maintain Diversity]
-```
-
-**Beam Search Pruning:**
-- Sorts all nodes at current depth by their relevance scores
-- Keeps only beam width number of nodes (default: 3)
-- Ensures exploration focuses on most promising paths
-- Maintains diversity in selected paths
-
-### 4. Reasoning Phase
-
-```mermaid
+---
+title: ToG Module Dependency
+---
+%%{ init: { 'flowchart': { 'curve': 'step' } } }%%
 flowchart LR
-    A[All Exploration Paths] --> B[Format Path Information]
-    B --> C[Generate Reasoning Prompt]
-    C --> D[LLM Synthesis]
-    D --> E[Structured Answer Generation]
-    E --> F[Extract Reasoning Chains]
-    F --> G[Final Response]
+
+    search[search.py<br/>ToGSearch] --> explorer[exploration.py<br/>GraphExplorer]
+    search --> pruning[pruning.py<br/>PruningStrategy]
+    search --> reasoning[reasoning.py<br/>ToGReasoning]
+    search --> state[state.py<br/>ToGSearchState]
+
+    pruning --> llmp[LLMPruning]
+    pruning --> semp[SemanticPruning]
+    pruning --> bm25p[BM25Pruning]
+
+     classDef turquoise fill:#19CCD3,stroke:#333,stroke-width:2px,color:#fff;
+     classDef rose fill:#DD8694,stroke:#333,stroke-width:2px,color:#fff;
+     classDef orange fill:#F19914,stroke:#333,stroke-width:2px,color:#fff;
+     class search turquoise;
+     class explorer,pruning,reasoning,state rose;
+     class llmp,semp,bm25p orange;
 ```
 
-**Answer Generation:**
-1. **Path Formatting**: Converts exploration paths into readable format
-2. **Prompt Construction**: Creates detailed reasoning prompt with path information
-3. **LLM Synthesis**: Asks LLM to analyze paths and generate comprehensive answer
-4. **Structured Output**: Returns answer in 3-part format:
-   - Direct answer to the question
-   - Supporting evidence from exploration
-   - Key relationships that support the answer
+## Exploration Phase Detail
+
+```mermaid
+---
+title: Per-node Exploration (one frontier node)
+---
+%%{ init: { 'flowchart': { 'curve': 'step' } } }%%
+flowchart LR
+
+    node[Current Node] --> gr[get_relations<br/>outgoing + incoming]
+    gr --> sr[score_relations<br/>PruningStrategy]
+    sr --> toprel[Top-width Relations]
+    toprel --> gfi[get_full_entity_info<br/>for each target]
+    gfi --> se[score_entities<br/>PruningStrategy]
+    se --> comb[Combined Score<br/>rel × entity × parent]
+    comb --> newnode[New ExplorationNode<br/>depth+1]
+
+     classDef rose fill:#DD8694,stroke:#333,stroke-width:2px,color:#fff;
+     classDef orange fill:#F19914,stroke:#333,stroke-width:2px,color:#fff;
+     class node,gr,sr,toprel rose;
+     class gfi,se,comb,newnode orange;
+```
+
+**Two-stage scoring per hop:**
+
+| Stage | Input | Method (LLM) | Method (Semantic) | Method (BM25) |
+|-------|-------|---------------|-------------------|---------------|
+| Relation scoring | `(query, entity_name, relations)` | `TOG_RELATION_SCORING_PROMPT` → scores 1–10 | Cosine similarity query↔relation text | BM25 normalized 1–10 |
+| Entity scoring | `(query, current_path, entity_candidates)` | `TOG_ENTITY_SCORING_PROMPT` → scores 1–10 | Cosine similarity query↔entity text | BM25 normalized 1–10 |
+
+If the number of entity candidates exceeds `num_retain_entity`, they are randomly sampled before the entity-scoring step (matching the original ToG paper semantics).
+
+## Pruning Strategies
+
+Three strategies implement the `PruningStrategy` base class:
+
+| Class | Relation Scoring | Entity Scoring | LLM calls per hop |
+|-------|-----------------|----------------|-------------------|
+| `LLMPruning` | Structured prompt → parse list | Structured prompt → parse list | 2 |
+| `SemanticPruning` | Cosine similarity (embeddings) | Cosine similarity (embeddings) | 0 (embedding only) |
+| `BM25Pruning` | BM25 IDF-TF lexical score | BM25 IDF-TF lexical score | 0 |
+
+## Reasoning Phase Detail
+
+`ToGReasoning` provides three operations:
+
+- **`check_early_termination`** — lightweight YES/NO LLM check against the top-3 frontier nodes at each depth. Returns `(True, answer)` or `(False, None)`.
+- **`generate_answer`** — builds a rich context block (CHUNKS → ENTITIES → RELATIONSHIPS with full descriptions) and calls the LLM with `TOG_REASONING_PROMPT`. Returns `(answer, reasoning_paths, metrics)`.
+- **`format_paths`** — formats all explored nodes into the structured context text used by both functions above.
 
 ## Key Data Structures
 
-### ExplorationNode
+### `ExplorationNode` (`state.py`)
+
 ```python
 @dataclass
 class ExplorationNode:
@@ -122,12 +151,15 @@ class ExplorationNode:
     entity_name: str
     entity_description: str
     depth: int
-    score: float
+    score: float                              # accumulated: parent.score × rel × entity
     parent: ExplorationNode | None
     relation_from_parent: str | None
+    relation_full_description: str | None     # full text from Relationship object
+    entity_full_description: str | None       # full text from Entity object
 ```
 
-### ToGSearchState
+### `ToGSearchState` (`state.py`)
+
 ```python
 @dataclass
 class ToGSearchState:
@@ -139,77 +171,45 @@ class ToGSearchState:
     beam_width: int
 ```
 
-## Configuration Parameters
+`prune_current_frontier()` sorts nodes at `current_depth` by score descending and slices to `beam_width`.
 
-| Parameter | Default | Description |
-|-----------|----------|-------------|
-| `width` | 3 | Beam width - number of parallel paths to maintain |
-| `depth` | 3 | Maximum exploration depth |
-| `prune_strategy` | "llm" | Method for scoring relations (llm/semantic) |
-| `num_retain_entity` | 5 | Number of relations to keep per entity |
-| `temperature_exploration` | 0.4 | LLM creativity during exploration |
-| `temperature_reasoning` | 0.0 | LLM creativity for final answer |
-| `max_context_tokens` | 8000 | Maximum tokens for context |
-| `max_exploration_paths` | 10 | Maximum paths to explore |
+### `ToGMetrics` (`search.py`)
 
-## Example Walkthrough
+Aggregates `PruningMetrics` (from exploration) and `ReasoningMetrics` (from reasoning), broken down into separate `exploration` / `reasoning` categories and returned in the final `SearchResult`.
 
-**Query:** "How does ToG differ from Global Search?"
+## Configuration
 
-### Step 1: Entity Discovery
-- Finds entities: "GLOBAL SEARCH", "TOG SEARCH", "EVIDENCE-BASED ANSWERS"
-- Creates root nodes with score 1.0
+Below are the key parameters of the [`ToGSearch` class](https://github.com/microsoft/graphrag/blob/main//graphrag/query/structured_search/tog_search/search.py):
 
-### Step 2: Exploration (Depth 0 → 1)
-- For "GLOBAL SEARCH": Finds relations to "HIGH-LEVEL QUESTIONS", "ENTIRE DATASET"
-- For "TOG SEARCH": Finds relations to "ITERATIVE GRAPH TRAVERSAL", "DEEP REASONING"
-- LLM scores relations based on query relevance
-- Keeps top 5 relations per entity
-
-### Step 3: Pruning
-- Sorts all new nodes by score
-- Keeps top 3 nodes (beam width = 3)
-- Discards low-scoring paths
-
-### Step 4: Continue Exploration
-- Repeats process for depth 1 → 2, then 2 → 3
-- Each level explores relations from retained nodes
-- Continues until max depth reached
-
-### Step 5: Reasoning
-- Collects all exploration paths
-- Formats paths for LLM analysis
-- Generates structured answer with evidence
-
-## Advantages of ToG
-
-1. **Deep Reasoning**: Explores multiple hops through the knowledge graph
-2. **Evidence-Based**: Every answer is backed by explicit exploration paths
-3. **Transparent**: Users can see exactly how the algorithm reached conclusions
-4. **Adaptive**: LLM-guided pruning focuses exploration on relevant paths
-5. **Controlled**: Beam search prevents exponential growth while maintaining diversity
-
-## Use Cases
-
-- **Complex Relationship Analysis**: "How does A influence B through intermediary factors?"
-- **Multi-hop Reasoning**: "What are the paths from entity X to concept Y?"
-- **Comparative Analysis**: "Compare the roles of different entities"
-- **Causal Inference**: "What are the cause-and-effect relationships?"
+* `model`: `ChatModel` used for pruning (LLM strategy) and reasoning
+* `entities`: list of `Entity` objects loaded from the indexed parquet files
+* `relationships`: list of `Relationship` objects from the indexed output
+* `tokenizer`: used for accurate token counting in metrics
+* `pruning_strategy`: a `PruningStrategy` instance — `LLMPruning`, `SemanticPruning`, or `BM25Pruning`
+* `reasoning_module`: a `ToGReasoning` instance for answer generation
+* `text_units`: optional list of `TextUnit` objects for source-chunk grounding in the context
+* `embedding_model`: optional `EmbeddingModel` for semantic entity linking
+* `entity_text_embeddings`: optional `BaseVectorStore` with pre-computed entity embeddings
+* `width`: beam width — number of parallel paths to maintain (default `3`)
+* `depth`: maximum exploration depth / hops (default `3`)
+* `num_retain_entity`: maximum entity candidates before random sampling in entity-scoring stage (default `5`)
+* `callbacks`: optional list of `QueryCallbacks` for streaming event hooks
+* `debug`: enables verbose logging of exploration steps
 
 ## Comparison with Other Methods
 
-| Method | Approach | Depth | Transparency | Best For |
-|--------|----------|--------|--------------|-----------|
-| **Global Search** | Community-level aggregation | Shallow | Low | Dataset overview |
-| **Local Search** | Entity neighborhood | Shallow | Medium | Specific entity details |
-| **DRIFT Search** | Adaptive local+global | Medium | Medium | Dynamic exploration |
-| **ToG Search** | Iterative graph traversal | Deep | High | Complex reasoning |
+| Method | Approach | Hops | LLM calls | Transparency | Best For |
+|--------|----------|------|-----------|--------------|----------|
+| **Global Search** | Map-reduce over community reports | Shallow | Many (parallel) | Low | Dataset-wide themes |
+| **Local Search** | Entity neighbourhood retrieval | Shallow | Few | Medium | Specific entity details |
+| **DRIFT Search** | Adaptive local + global | Medium | Medium | Medium | Dynamic exploration |
+| **ToG Search** | Beam-search graph traversal | Deep (configurable) | Many (sequential) | High | Multi-hop causal/relational queries |
 
-## Implementation Notes
+## How to Use
 
-- **Memory Efficiency**: Beam search controls memory usage by limiting parallel paths
-- **LLM Usage**: Multiple LLM calls for relation scoring and final reasoning
-- **Fallback Handling**: Graceful degradation when entities or relations are missing
-- **Debug Support**: Detailed logging of exploration process for analysis
+```bash
+# CLI
+graphrag query --root ./my-project --method tog "your multi-hop question"
+```
 
-This algorithm represents a significant advancement in knowledge graph reasoning, combining the systematic exploration of traditional graph algorithms with the semantic understanding of large language models.
+An example notebook can be found at [`examples_notebooks/tog_search.ipynb`](../examples_notebooks/tog_search.ipynb).

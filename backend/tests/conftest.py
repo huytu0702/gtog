@@ -1,7 +1,13 @@
 """Pytest configuration for backend tests."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
+
+@pytest.fixture
+def valid_edge_secret_headers() -> dict[str, str]:
+    return {"X-Edge-Secret": "secret-123"}
 
 
 @pytest.fixture(autouse=True)

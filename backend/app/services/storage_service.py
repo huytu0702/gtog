@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import UploadFile
 
@@ -56,7 +55,9 @@ class StorageService:
             return False
         return bool(collection.get("activeVersion"))
 
-    def _to_collection_response(self, item: dict, document_count: int, indexed: bool) -> CollectionResponse:
+    def _to_collection_response(
+        self, item: dict, document_count: int, indexed: bool
+    ) -> CollectionResponse:
         return CollectionResponse(
             id=str(item["collectionId"]),
             name=str(item.get("name") or item["collectionId"]),
@@ -74,7 +75,7 @@ class StorageService:
         )
 
     def create_collection(
-        self, collection_id: str, description: Optional[str] = None
+        self, collection_id: str, description: str | None = None
     ) -> CollectionResponse:
         """Create a new collection in Cosmos metadata + Blob content storage."""
         self._ensure_blob_enabled()
@@ -92,7 +93,9 @@ class StorageService:
         if self.serving_repo is not None:
             self.serving_repo.purge_collection(collection_id)
 
-        container = self.blob_client.get_container_client(_collection_container(collection_id))
+        container = self.blob_client.get_container_client(
+            _collection_container(collection_id)
+        )
         if container.exists():
             container.delete_container()
 
@@ -163,7 +166,9 @@ class StorageService:
 
         content = await file.read()
         content_sha256 = hashlib.sha256(content).hexdigest()
-        container = self.blob_client.get_container_client(_collection_container(collection_id))
+        container = self.blob_client.get_container_client(
+            _collection_container(collection_id)
+        )
         container.upload_blob(f"input/{file.filename}", content, overwrite=True)
 
         item = self.control_plane.upsert_document(
@@ -196,13 +201,17 @@ class StorageService:
         if self.control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        blob_container = self.blob_client.get_container_client(_collection_container(collection_id))
+        blob_container = self.blob_client.get_container_client(
+            _collection_container(collection_id)
+        )
         blob = blob_container.get_blob_client(f"input/{document_name}")
         if not blob.exists():
             raise ValueError(f"Document '{document_name}' not found")
 
         blob.delete_blob()
-        self.control_plane.delete_document(collection_id=collection_id, document_name=document_name)
+        self.control_plane.delete_document(
+            collection_id=collection_id, document_name=document_name
+        )
         return True
 
 

@@ -79,3 +79,4 @@ test-project/cache/
 /backend/storage/collections/test_2
 /backend/storage/collections/test
 .venv_new/.worktrees/
+.opencode/

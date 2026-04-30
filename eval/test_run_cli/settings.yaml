@@ -5,35 +5,51 @@
 ## There are a number of settings to tune the threading and token limits for LLM calls - check the docs.
 
 models:
+  # Stronger model for graph building (entity extraction, summarization, community reports)
   default_chat_model:
     type: chat
     model_provider: gemini
-    auth_type: api_key # or azure_managed_identity
-    api_key: ${GRAPHRAG_API_KEY} # set this in the generated .env file, or remove if managed identity
-    model: gemini-2.5-flash-lite
-    # api_base: https://<instance>.openai.azure.com
-    # api_version: 2024-05-01-preview
-    model_supports_json: true # recommended if this is available for your model.
-    concurrent_requests: 25
-    async_mode: threaded # or asyncio
+    auth_type: api_key
+    api_key: ${GRAPHRAG_API_KEY}
+    model: gemini-2.5-flash
+    model_supports_json: true
+    concurrent_requests: 5
+    async_mode: threaded
     retry_strategy: exponential_backoff
-    max_retries: 10
-    tokens_per_minute: null
-    requests_per_minute: null
+    max_retries: 7
+    max_retry_wait: 60.0
+    tokens_per_minute: 100000
+    requests_per_minute: 1000
+
+  # Lighter model for querying (local, global, drift, basic, ToG search)
+  query_chat_model:
+    type: chat
+    model_provider: gemini
+    auth_type: api_key
+    api_key: ${GRAPHRAG_API_KEY}
+    model: gemini-2.5-flash-lite
+    model_supports_json: true
+    concurrent_requests: 10
+    async_mode: threaded
+    retry_strategy: exponential_backoff
+    max_retries: 7
+    max_retry_wait: 60.0
+    tokens_per_minute: 100000
+    requests_per_minute: 1500
+
   default_embedding_model:
     type: embedding
     model_provider: gemini
     auth_type: api_key
     api_key: ${GRAPHRAG_API_KEY}
     model: gemini-embedding-001
-    # api_base: https://<instance>.openai.azure.com
-    # api_version: 2024-05-01-preview
-    concurrent_requests: 25
-    async_mode: threaded # or asyncio
+    concurrent_requests: 10
+    async_mode: threaded
     retry_strategy: exponential_backoff
-    max_retries: 10
-    tokens_per_minute: null
-    requests_per_minute: null
+    max_retries: 7
+    max_retry_wait: 60.0
+    tokens_per_minute: 100000
+    requests_per_minute: 1500
 
 ### Input settings ###
 
@@ -57,7 +73,7 @@ output:
   base_dir: "output"
     
 cache:
-  type: file # [file, blob, cosmosdb]
+  type: file # [file, memory, none]
   base_dir: "cache"
 
 reporting:
@@ -67,10 +83,15 @@ reporting:
 vector_store:
   default_vector_store:
     type: lancedb
-    db_uri: output\lancedb
+    db_uri: output/lancedb
     container_name: default
-    index_schma:
-      vector_size: 1536
+    embeddings_schema:
+      entity.description:
+        vector_size: 3072
+      community.full_content:
+        vector_size: 3072
+      text_unit.text:
+        vector_size: 3072
 
 ### Workflow settings ###
 
@@ -81,7 +102,7 @@ embed_text:
 extract_graph:
   model_id: default_chat_model
   prompt: "prompts/extract_graph.txt"
-  entity_types: [organization,person,geo,event]
+  entity_types: [organization, person, geo, event, concept]
   max_gleanings: 1
 
 summarize_descriptions:
@@ -126,35 +147,35 @@ snapshots:
 ## See the config docs: https://microsoft.github.io/graphrag/config/yaml/#query
 
 local_search:
-  chat_model_id: default_chat_model
+  chat_model_id: query_chat_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/local_search_system_prompt.txt"
 
 global_search:
-  chat_model_id: default_chat_model
+  chat_model_id: query_chat_model
   map_prompt: "prompts/global_search_map_system_prompt.txt"
   reduce_prompt: "prompts/global_search_reduce_system_prompt.txt"
   knowledge_prompt: "prompts/global_search_knowledge_system_prompt.txt"
 
 drift_search:
-  chat_model_id: default_chat_model
+  chat_model_id: query_chat_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/drift_search_system_prompt.txt"
   reduce_prompt: "prompts/drift_search_reduce_prompt.txt"
 
 basic_search:
-  chat_model_id: default_chat_model
+  chat_model_id: query_chat_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/basic_search_system_prompt.txt"
 
 # ToG (Think-on-Graph) search configuration
 tog_search:
-  chat_model_id: default_chat_model
+  chat_model_id: query_chat_model
   embedding_model_id: default_embedding_model
   width: 3                          # Beam width for exploration
   depth: 3                          # Maximum exploration depth
   prune_strategy: llm               # Options: llm, semantic, bm25
-  num_retain_entity: 5              # Entities to retain per level
+  num_retain_entity: 3              # Entities to retain per level
   temperature_exploration: 0.4      # LLM temperature for exploration
   temperature_reasoning: 0.0        # LLM temperature for final answer
   max_context_tokens: 8000          # Maximum context tokens

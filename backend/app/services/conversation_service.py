@@ -48,7 +48,9 @@ class ConversationService:
             return
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
-            raise ConversationSessionNotFoundError(f"Collection '{collection_id}' not found")
+            raise ConversationSessionNotFoundError(
+                f"Collection '{collection_id}' not found"
+            )
 
     def _require_session(self, collection_id: str, session_id: str) -> dict[str, Any]:
         self._ensure_repository()
@@ -143,15 +145,21 @@ class ConversationService:
         collection_id: str,
         session_id: str,
         user_query: str,
-        assistant_response: str,
+        assistant_response: str | dict | list,
         rewritten_query: str | None,
         method_used: str | None,
     ) -> None:
         """Append one user+assistant exchange and run optional auto-summary."""
         session = self._require_session(collection_id, session_id)
+        # Coerce non-str responses (dicts/lists from some search methods) to str
+        response_str = (
+            assistant_response
+            if isinstance(assistant_response, str)
+            else str(assistant_response)
+        )
         user_content = self._truncate(user_query, settings.conversation_turn_max_chars)
         assistant_content = self._truncate(
-            assistant_response,
+            response_str,
             settings.conversation_turn_max_chars,
         )
 
@@ -183,7 +191,9 @@ class ConversationService:
             user_turn_increment=1,
         )
 
-        user_turn_count = int(updated.get("userTurnCount", session.get("userTurnCount", 0)))
+        user_turn_count = int(
+            updated.get("userTurnCount", session.get("userTurnCount", 0))
+        )
         if user_turn_count < settings.conversation_summarize_user_turn_threshold:
             return
 
@@ -197,7 +207,9 @@ class ConversationService:
             summary = self._truncate(summary, settings.conversation_summary_max_chars)
             self.repo.update_summary(session_id=session_id, summary=summary)
         except Exception:
-            logger.exception("Failed to auto-summarize conversation session %s", session_id)
+            logger.exception(
+                "Failed to auto-summarize conversation session %s", session_id
+            )
 
     def purge_collection(self, collection_id: str) -> None:
         """Delete all session data for one collection."""

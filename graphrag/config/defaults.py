@@ -426,6 +426,7 @@ class VectorStoreDefaults:
     container_name: str = "default"
     overwrite: bool = True
     url: None = None
+    connection_string: None = None
     api_key: None = None
     audience: None = None
     database_name: None = None

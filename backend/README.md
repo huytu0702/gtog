@@ -62,7 +62,18 @@ AZURE_COSMOS_DATABASE_NAME=gtog-control
 AZURE_COSMOS_RETRY_TOTAL=9
 AZURE_COSMOS_RETRY_BACKOFF_MAX_SECONDS=30
 AZURE_COSMOS_RETRY_ON_STATUS_CODES=429,503
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+EDGE_ORIGIN_SECRET=
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS_PER_MINUTE=120
 ```
+
+Notes:
+- `EDGE_ORIGIN_SECRET` is a secondary backend guard for `X-Edge-Secret`, not a substitute for a private API origin.
+- Production deployment should route `api.<domain>` through Cloudflare Tunnel to a private ACA API origin.
+- Keep `EDGE_ORIGIN_SECRET` empty for local development and tests.
+- Backward compatibility: the backend still accepts legacy `AFD_ORIGIN_SECRET` as an env alias during migration.
+- The tunnel connector uses its own `CLOUDFLARE_TUNNEL_TOKEN` secret outside the backend runtime.
 
 ### 4. Verify Settings
 
@@ -127,6 +138,7 @@ The API will be available at:
 - **API**: http://localhost:8000
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
+- **Readiness Probe**: http://localhost:8000/health/readiness
 
 ## API Usage
 
@@ -209,6 +221,7 @@ curl -X POST http://localhost:8000/api/collections/my_docs/search/drift \
 - `POST /api/collections/{id}/search/local` - Local search
 - `POST /api/collections/{id}/search/tog` - ToG search
 - `POST /api/collections/{id}/search/drift` - DRIFT search
+- `GET /api/collections/{id}/search/agent/stream?query=...` - EventSource SSE stream
 
 ## Project Structure
 
@@ -249,9 +262,15 @@ The project follows standard Python conventions. Key packages:
 
 ### Logging
 
-Logs are written to stdout with the format:
+Logs are written to stdout as structured JSON. In cloud deployments, backend request logs should capture:
+
+- `cf_ray` for Cloudflare request correlation
+- `cf_connecting_ip` for original client IP when present
+- `request_id` for app-side tracing
+
+Local development still writes the same JSON envelope to stdout.
 ```
-%(asctime)s - %(name)s - %(levelname)s - %(message)s
+{"event":"http_request","method":"GET","path":"/health","status_code":200}
 ```
 
 ## Troubleshooting

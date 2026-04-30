@@ -1250,6 +1250,7 @@ async def tog_search(
     - config (GraphRagConfig): A graphrag configuration (from settings.yaml)
     - entities (pd.DataFrame): A DataFrame containing the final entities (from entities.parquet)
     - relationships (pd.DataFrame): A DataFrame containing the final relationships (from relationships.parquet)
+    - text_units (pd.DataFrame): A DataFrame containing the text units (from text_units.parquet)
     - query (str): The user query to search for.
 
     Returns
@@ -1307,6 +1308,7 @@ def tog_search_streaming(
     - config (GraphRagConfig): A graphrag configuration (from settings.yaml)
     - entities (pd.DataFrame): A DataFrame containing the final entities (from entities.parquet)
     - relationships (pd.DataFrame): A DataFrame containing the final relationships (from relationships.parquet)
+    - text_units (pd.DataFrame): A DataFrame containing the text units (from text_units.parquet)
     - query (str): The user query to search for.
 
     Returns

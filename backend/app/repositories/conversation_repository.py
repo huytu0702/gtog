@@ -43,9 +43,13 @@ class CosmosConversationRepository:
     ) -> None:
         kwargs = client_kwargs or {}
         if connection_string:
-            self._client = CosmosClient.from_connection_string(connection_string, **kwargs)
+            self._client = CosmosClient.from_connection_string(
+                connection_string, **kwargs
+            )
         elif endpoint and (key or credential):
-            self._client = CosmosClient(url=endpoint, credential=key or credential, **kwargs)
+            self._client = CosmosClient(
+                url=endpoint, credential=key or credential, **kwargs
+            )
         else:
             raise ValueError(
                 "Cosmos DB is not configured. Set AZURE_COSMOS_CONNECTION_STRING "
@@ -115,7 +119,9 @@ class CosmosConversationRepository:
             inserted += 1
         return inserted
 
-    def list_turns_desc(self, *, session_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    def list_turns_desc(
+        self, *, session_id: str, limit: int = 200
+    ) -> list[dict[str, Any]]:
         rows = list(
             self._turns.query_items(
                 query=(
@@ -144,7 +150,9 @@ class CosmosConversationRepository:
 
         now = _utcnow_iso()
         session["turnCount"] = int(session.get("turnCount", 0)) + int(total_increment)
-        session["userTurnCount"] = int(session.get("userTurnCount", 0)) + int(user_turn_increment)
+        session["userTurnCount"] = int(session.get("userTurnCount", 0)) + int(
+            user_turn_increment
+        )
         session["lastTurnAt"] = now
         session["updatedAt"] = now
         return self._sessions.replace_item(item=session["id"], body=session)

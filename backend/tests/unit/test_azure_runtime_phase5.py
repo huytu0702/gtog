@@ -12,7 +12,9 @@ def test_is_cosmos_configured_with_managed_identity(monkeypatch):
     _reset_runtime_caches()
     monkeypatch.setattr(settings, "azure_key_vault_url", "")
     monkeypatch.setattr(settings, "azure_cosmos_connection_string", "")
-    monkeypatch.setattr(settings, "azure_cosmos_endpoint", "https://example.documents.azure.com:443/")
+    monkeypatch.setattr(
+        settings, "azure_cosmos_endpoint", "https://example.documents.azure.com:443/"
+    )
     monkeypatch.setattr(settings, "azure_cosmos_key", "")
     monkeypatch.setattr(settings, "azure_use_managed_identity", True)
 
@@ -32,6 +34,38 @@ def test_resolve_storage_connection_string_from_account_key(monkeypatch):
     assert "AccountKey=key123" in conn
 
 
+def test_resolve_cosmos_connection_string_from_endpoint_key(monkeypatch):
+    _reset_runtime_caches()
+    monkeypatch.setattr(settings, "azure_key_vault_url", "")
+    monkeypatch.setattr(settings, "azure_cosmos_connection_string", "")
+    monkeypatch.setattr(
+        settings, "azure_cosmos_endpoint", "https://example.documents.azure.com:443/"
+    )
+    monkeypatch.setattr(settings, "azure_cosmos_key", "key123")
+
+    conn = azure_runtime.resolve_cosmos_connection_string()
+
+    assert (
+        conn
+        == "AccountEndpoint=https://example.documents.azure.com:443/;AccountKey=key123;"
+    )
+
+
+def test_cosmos_account_url_from_connection_string(monkeypatch):
+    _reset_runtime_caches()
+    monkeypatch.setattr(settings, "azure_key_vault_url", "")
+    monkeypatch.setattr(
+        settings,
+        "azure_cosmos_connection_string",
+        "AccountEndpoint=https://example.documents.azure.com:443/;AccountKey=key123;",
+    )
+    monkeypatch.setattr(settings, "azure_cosmos_endpoint", "")
+
+    url = azure_runtime.cosmos_account_url()
+
+    assert url == "https://example.documents.azure.com:443/"
+
+
 def test_cosmos_client_kwargs_parses_retry_status_codes(monkeypatch):
     _reset_runtime_caches()
     monkeypatch.setattr(settings, "azure_cosmos_connection_timeout_seconds", 20)
@@ -41,7 +75,9 @@ def test_cosmos_client_kwargs_parses_retry_status_codes(monkeypatch):
     monkeypatch.setattr(settings, "azure_cosmos_retry_connect", 5)
     monkeypatch.setattr(settings, "azure_cosmos_retry_read", 4)
     monkeypatch.setattr(settings, "azure_cosmos_retry_status", 8)
-    monkeypatch.setattr(settings, "azure_cosmos_retry_on_status_codes", "429, 503, invalid")
+    monkeypatch.setattr(
+        settings, "azure_cosmos_retry_on_status_codes", "429, 503, invalid"
+    )
 
     kwargs = azure_runtime.cosmos_client_kwargs()
 

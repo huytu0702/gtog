@@ -3,6 +3,8 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. Always use haiku model for exploring
 use .venv as virtual environment.
 
+**You can access .env in this project and azure CLI, cloudflared CLI**
+
 ## Repository Type
 
 This is a **GraphRAG with ToG Enhancement** repository - a Microsoft Research project that combines knowledge graph-based retrieval-augmented generation with Think-on-Graph deep reasoning capabilities.
@@ -41,9 +43,9 @@ graphrag index --root ./my-graphrag-project --config settings.yaml
 graphrag update --root ./my-graphrag-project
 
 # Query the knowledge graph
-graphrag query --root ./my-graphrag-project --method global "your query"
-graphrag query --root ./my-graphrag-project --method local "your query"
-graphrag query --root ./my-graphrag-project --method tog "your query"
+graphrag query --root ./my-graphrag-project --method global --query "your query"
+graphrag query --root ./my-graphrag-project --method local --query "your query"
+graphrag query --root ./my-graphrag-project --method tog --query "your query"
 
 # Generate optimized prompts
 graphrag prompt-tune --root ./my-graphrag-project --config settings.yaml
