@@ -28,7 +28,11 @@ QUERY
   │ NO
   ▼
 [3] EXPLORATION LOOP (depth 1..3)
-  │   ├─ _process_node() ──► score_relations() → score_entities()
+  │   ├─ _process_node()
+  │   │     ├─ get_relations()
+  │   │     ├─ _filter_backtrack_relations() ──► loại cạnh ngược lại (anti-cycle)
+  │   │     ├─ score_relations() ──► LLM/semantic
+  │   │     └─ score_entities() ──► LLM/semantic
   │   ├─ prune_current_frontier() ──► giữ top beam_width=3
   │   └─ check_early_termination() ──► LLM kiểm tra sớm
   │
@@ -88,6 +92,41 @@ LLM response: "NO: cần thêm thông tin về mối quan hệ tài trợ"
 
 ## Bước 3: Exploration Loop (Depth 1 → 3)
 
+### Cơ chế Backtrack Prevention (mới)
+
+Trước khi score relations, `_process_node` lọc bỏ relation sẽ đi ngược lại cạnh vừa dùng để đến node hiện tại — tránh vòng lặp A→B→A.
+
+```
+Cơ chế: _filter_backtrack_relations(node, relations)
+
+Nếu node B được tạo ra bằng cách đi qua:
+  relation_from_parent     = "tài trợ bởi"
+  relation_direction       = "outgoing"   (A → B)
+
+Thì khi expand B, loại bỏ:
+  ("tài trợ bởi", A, "incoming", ...)    ← đây là bước ngược B → A
+
+Giữ nguyên:
+  ("tài trợ bởi", C, "outgoing", ...)    ← cùng tên nhưng đi tiếp, không phải backtrack
+  ("hợp tác với", A, "incoming", ...)    ← khác relation, không lọc
+
+Tương đương pre_relations + pre_heads trong ToG gốc (GasolSun36/ToG).
+Root nodes (relation_from_parent=None) → không lọc gì.
+```
+
+**Ví dụ trực quan:**
+```
+Before filter (tất cả relations của Google):
+  ("tài trợ bởi",  "MIT",     "incoming", 0.9)   ← BACKTRACK → bị loại
+  ("sở hữu",       "DeepMind","outgoing", 0.8)   → giữ lại
+  ("đầu tư vào",   "Waymo",   "outgoing", 0.7)   → giữ lại
+  ("hợp tác với",  "MIT",     "incoming", 0.6)   → giữ lại (khác relation)
+
+After filter → [("sở hữu",...), ("đầu tư vào",...), ("hợp tác với",...)]
+```
+
+---
+
 ### Depth 1
 
 ```
@@ -102,6 +141,8 @@ Frontier = [MIT, Google, OpenAI]  (3 nodes, = width)
          │     │          ("hợp tác với", "OpenAI", "outgoing", 0.8),
          │     │          ("nghiên cứu về", "Deep Learning", "outgoing", 0.7),
          │     │          ("đặt tại", "Cambridge", "outgoing", 0.5), ...]
+         │     │
+         │     ├─ _filter_backtrack_relations()   ← MIT là root node, không lọc gì
          │     │
          │     ├─ LLMPruning.score_relations()   ← temperature=0.4
          │     │     prompt: "Query: ... Entity: MIT
@@ -190,10 +231,17 @@ Frontier depth-1 = [Google, OpenAI, Microsoft]
          │     current_path = "MIT --[tài trợ bởi]--> Google"   ← từ _node_to_path_string()
          │     relation_history = "MIT --[tài trợ bởi]--> Google"
          │     │
-         │     get_relations("Google") → [("sở hữu", DeepMind), ("đầu tư vào", Waymo), ...]
+         │     get_relations("Google")
+         │       → [("tài trợ bởi", "MIT", "incoming", 0.9),   ← BACKTRACK
+         │            ("sở hữu",     "DeepMind", "outgoing", 0.8),
+         │            ("đầu tư vào", "Waymo",    "outgoing", 0.7), ...]
+         │     │
+         │     _filter_backtrack_relations(Google_node, relations)
+         │       Google arrived via ("tài trợ bởi", "outgoing")
+         │       → loại ("tài trợ bởi", "MIT", "incoming")
+         │       → giữ [("sở hữu",...), ("đầu tư vào",...)]
          │     │
          │     score_relations(relation_history=..., current_path=...)
-         │     LLM biết ngữ cảnh đường đi hiện tại, tránh loop lại MIT
          │     │
          │     score_entities() → new nodes
          │
@@ -334,6 +382,10 @@ Query: "Công ty nào tài trợ cho dự án nghiên cứu AI của MIT?"
   ▼ check_early_termination → NO
   │
   ▼ _process_node × 3 (parallel)
+  │   ├─ get_relations()
+  │   ├─ _filter_backtrack_relations()  ← root nodes: no-op
+  │   ├─ score_relations()
+  │   └─ score_entities()
   │
   ┌──────────────────────────────────────────────┐
   │  Depth 1 candidates (before prune)           │

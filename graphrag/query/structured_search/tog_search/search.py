@@ -514,6 +514,15 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             )
             return [], []
 
+        relations = self._filter_backtrack_relations(node, relations)
+        if not relations:
+            logger.debug(
+                "[ToG][node=%s][depth=%d] no_relations_after_backtrack_filter",
+                node.entity_name,
+                node.depth,
+            )
+            return [], []
+
         logger.debug(
             "[ToG][node=%s][depth=%d] relations=%d",
             node.entity_name,
@@ -706,6 +715,29 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             query_embedding=query_embedding,
             **context_kwargs,
         )
+
+    @staticmethod
+    def _filter_backtrack_relations(
+        node: ExplorationNode,
+        relations: list[tuple[str, str, str, float]],
+    ) -> list[tuple[str, str, str, float]]:
+        """Remove the relation that would immediately reverse the edge used to reach this node.
+
+        Mirrors the original ToG paper's pre_relations + pre_heads filtering:
+        if we arrived via relation R in direction D, remove relation R in the
+        opposite direction from the candidate list to prevent A->B->A cycles.
+        """
+        if node.relation_from_parent is None or node.relation_direction_from_parent is None:
+            return relations
+
+        backtrack_direction = (
+            "incoming" if node.relation_direction_from_parent == "outgoing" else "outgoing"
+        )
+        return [
+            (rel, target, direction, weight)
+            for rel, target, direction, weight in relations
+            if not (rel == node.relation_from_parent and direction == backtrack_direction)
+        ]
 
     def _node_to_path_string(self, node: ExplorationNode) -> str:
         """Build a readable chain string from root to current node."""
