@@ -42,13 +42,20 @@ Now score the following:
 Question: "{query}"
 Entity: {entity_name}
 
+Current reasoning path:
+{current_path}
+
+Previous relations followed:
+{relation_history}
+
 Available relations:
 {relations}
 
-Score each relation (1-10) based on how likely it leads to answering the question.
+Score each relation (1-10) as the next-hop option given the current path.
 Consider:
 - Direct relevance to the question's intent
 - Whether the relation leads toward the answer
 - The semantic connection between the relation and question
+- Avoiding redundant backtracking unless it is useful for answering the question
 
 Output ONLY a list of numbers in brackets, e.g., [8, 3, 6, 4]

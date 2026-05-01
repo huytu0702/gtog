@@ -70,10 +70,12 @@ class QueryResult:
             "method": self.method,
         }
         if self.efficiency:
-            result["latency"] = self.efficiency.latency
-            result["llm_calls"] = self.efficiency.llm_calls
-            result["prompt_tokens"] = self.efficiency.prompt_tokens
-            result["output_tokens"] = self.efficiency.output_tokens
+            result["efficiency"] = {
+                "latency": self.efficiency.latency,
+                "llm_calls": self.efficiency.llm_calls,
+                "input_tokens": self.efficiency.prompt_tokens,
+                "output_tokens": self.efficiency.output_tokens,
+            }
         return result
 
 

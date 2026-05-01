@@ -10,3 +10,5 @@ Question: {query}
 
 Retrieved ToG Context (chunks, entities, and relationships):
 {exploration_paths}
+
+You don't need to cite anything
