@@ -155,8 +155,12 @@ class Settings(BaseSettings):
 
     @property
     def collections_dir(self) -> Path:
-        """Get the collections directory path."""
-        return Path(self.storage_root_dir) / "collections"
+        """Get the collections directory path, resolved relative to backend dir."""
+        backend_dir = Path(__file__).parent.parent
+        p = Path(self.storage_root_dir)
+        if not p.is_absolute():
+            p = backend_dir / p
+        return p / "collections"
 
     @property
     def settings_yaml_path(self) -> Path:

@@ -174,7 +174,8 @@ async def _run_graphrag_search(route_decision, collection_id: str, search_query:
 
 
 @router.post("/agent/summarize", response_model=SummarizeResponse)
-async def summarize_conversation(collection_id: str, request: SummarizeRequest):    """
+async def summarize_conversation(collection_id: str, request: SummarizeRequest):
+    """
     Compress conversation history into a summary.
 
     Call this when conversation_history exceeds your threshold (e.g. 6 turns).
