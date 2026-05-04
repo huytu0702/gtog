@@ -80,3 +80,5 @@ test-project/cache/
 /backend/storage/collections/test
 .venv_new/.worktrees/
 .opencode/
+.playwright-mcp/
+storage/
