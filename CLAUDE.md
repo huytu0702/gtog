@@ -94,7 +94,8 @@ uv run poe prompt_tune <...args>
 
 ```bash
 cd backend
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.venv\scripts\activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend Development
