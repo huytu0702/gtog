@@ -28,6 +28,7 @@ from ..models import (
 )
 from ..services import (
     conversation_service,
+    insufficiency_judge,
     query_service,
     router_agent,
     summarization_service,
@@ -152,35 +153,61 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         _raise_for_unknown(e)
 
 
-_INSUFFICIENCY_PATTERNS = [
-    "i don't know",
-    "i do not know",
-    "don't have any information",
-    "do not have any information",
-    "no information",
-    "not mentioned",
-    "not found in",
-    "not available",
-    "cannot find",
-    "unable to find",
-    "no relevant",
-    "the provided data does not",
-    "the documents do not",
-    "not in the",
-    "no data",
-]
-_INSUFFICIENCY_MIN_LENGTH = 80
+def _normalize_response_text(response) -> str:
+    """Normalize GraphRAG response into text for judge input."""
+    if response is None:
+        return ""
+    if isinstance(response, str):
+        return response
+    try:
+        return json.dumps(response)
+    except Exception:
+        return str(response)
 
 
-def _is_insufficient(response) -> bool:
-    """Return True when a GraphRAG response lacks useful information."""
-    if not response:
-        return True
-    text = response if isinstance(response, str) else str(response)
-    if len(text.strip()) < _INSUFFICIENCY_MIN_LENGTH:
-        return True
-    lower = text.lower()
-    return any(p in lower for p in _INSUFFICIENCY_PATTERNS)
+def _build_context_metadata(context_data: dict | None) -> str:
+    """Build compact context metadata for insufficiency judge."""
+    if not context_data:
+        return "{}"
+    summary = {
+        key: len(value) if isinstance(value, dict) else 0
+        for key, value in context_data.items()
+    }
+    return json.dumps(summary)
+
+
+async def _should_trigger_web_fallback(
+    *,
+    original_query: str,
+    search_query: str,
+    method_used: str,
+    graphrag_response,
+    context_data: dict | None,
+) -> bool:
+    """Use LLM judge to decide if web fallback is needed."""
+    if not settings.web_fallback_enabled or not settings.tavily_api_key:
+        return False
+
+    response_text = _normalize_response_text(graphrag_response)
+    decision = await insufficiency_judge.judge(
+        original_query=original_query,
+        search_query=search_query,
+        method_used=method_used,
+        graphrag_response=response_text,
+        context_metadata=_build_context_metadata(context_data),
+    )
+
+    if decision is None:
+        return False
+
+    should_fallback = not decision.is_sufficient
+    logger.info(
+        "Insufficiency judge decision: fallback=%s confidence=%.2f reason=%s",
+        should_fallback,
+        decision.confidence,
+        decision.reason,
+    )
+    return should_fallback
 
 
 async def _run_graphrag_search(route_decision, collection_id: str, search_query: str):
@@ -270,8 +297,15 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
         result = await _run_graphrag_search(route_decision, collection_id, search_query)
 
         web_result = None
-        if _is_insufficient(result.response):
-            logger.info("GraphRAG response insufficient, falling back to web search")
+        should_fallback = await _should_trigger_web_fallback(
+            original_query=request.query,
+            search_query=search_query,
+            method_used=route_decision.method,
+            graphrag_response=result.response,
+            context_data=result.context_data,
+        )
+        if should_fallback:
+            logger.info("LLM judge marked GraphRAG response insufficient, triggering web fallback")
             try:
                 web_result = await web_search_service.search(search_query)
             except Exception:
@@ -417,10 +451,25 @@ def _build_agent_stream_response(
                     }),
                 }
 
-            # Auto web search fallback if GraphRAG response is insufficient
+            # LLM sufficiency judgment before optional web fallback
+            yield {
+                "event": "status",
+                "data": json.dumps({
+                    "step": "judging_sufficiency",
+                    "message": "Checking if indexed data is sufficient...",
+                }),
+            }
+
             web_result = None
-            if _is_insufficient(result.response):
-                logger.info("GraphRAG response insufficient, falling back to web search (SSE)")
+            should_fallback = await _should_trigger_web_fallback(
+                original_query=request.query,
+                search_query=search_query,
+                method_used=route_decision.method,
+                graphrag_response=result.response,
+                context_data=result.context_data,
+            )
+            if should_fallback:
+                logger.info("LLM judge marked GraphRAG response insufficient, triggering web fallback (SSE)")
                 yield {
                     "event": "status",
                     "data": json.dumps({

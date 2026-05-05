@@ -102,6 +102,14 @@ class Settings(BaseSettings):
     # Model Configuration
     default_chat_model: str = "gemini/gemini-2.5-flash-lite"
     default_embedding_model: str = "gemini/gemini-embedding-001"
+    insufficiency_judge_enabled: bool = True
+    insufficiency_judge_model: str = "gemini/gemini-2.5-flash-lite"
+    insufficiency_judge_timeout_seconds: int = 4
+    insufficiency_judge_max_tokens: int = 250
+    insufficiency_judge_temperature: float = 0.0
+    insufficiency_judge_min_confidence: float = 0.5
+    insufficiency_judge_max_response_chars: int = 6000
+    web_fallback_enabled: bool = True
 
     # Server Configuration
     host: str = "0.0.0.0"

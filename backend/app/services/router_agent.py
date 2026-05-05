@@ -53,7 +53,7 @@ class RouterAgent:
     def _default_prompt(self) -> str:
         """Return default prompt if file not found."""
         return """Analyze the query and return JSON with rewritten_query, method, confidence, reasoning.
-Methods: local, global, tog, drift, web
+Methods: local, global, tog, drift
 Query: {query}
 Collection: {collection_context}
 {conversation_history_block}"""
