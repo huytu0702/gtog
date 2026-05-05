@@ -1,6 +1,5 @@
 """Search endpoints for all GraphRAG search methods."""
 
-import asyncio
 import json
 import logging
 
@@ -153,6 +152,37 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         _raise_for_unknown(e)
 
 
+_INSUFFICIENCY_PATTERNS = [
+    "i don't know",
+    "i do not know",
+    "don't have any information",
+    "do not have any information",
+    "no information",
+    "not mentioned",
+    "not found in",
+    "not available",
+    "cannot find",
+    "unable to find",
+    "no relevant",
+    "the provided data does not",
+    "the documents do not",
+    "not in the",
+    "no data",
+]
+_INSUFFICIENCY_MIN_LENGTH = 80
+
+
+def _is_insufficient(response) -> bool:
+    """Return True when a GraphRAG response lacks useful information."""
+    if not response:
+        return True
+    text = response if isinstance(response, str) else str(response)
+    if len(text.strip()) < _INSUFFICIENCY_MIN_LENGTH:
+        return True
+    lower = text.lower()
+    return any(p in lower for p in _INSUFFICIENCY_PATTERNS)
+
+
 async def _run_graphrag_search(route_decision, collection_id: str, search_query: str):
     """Dispatch to the appropriate GraphRAG search method based on route decision."""
     if route_decision.method == "global":
@@ -237,36 +267,15 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
 
         search_query = route_decision.rewritten_query or request.query
 
-        if request.web_search_enabled:
-            # Run GraphRAG + web search in parallel; each synthesizes independently
-            graphrag_result, web_result = await asyncio.gather(
-                _run_graphrag_search(route_decision, collection_id, search_query),
-                web_search_service.search(search_query),
-            )
-
-            if session_id:
-                await conversation_service.append_exchange(
-                    collection_id=collection_id,
-                    session_id=session_id,
-                    user_query=request.query,
-                    assistant_response=graphrag_result.response,
-                    rewritten_query=route_decision.rewritten_query,
-                    method_used=route_decision.method,
-                )
-
-            return AgentSearchResponse(
-                method_used=route_decision.method,
-                router_reasoning=route_decision.reasoning,
-                rewritten_query=route_decision.rewritten_query,
-                response=graphrag_result.response,
-                sources=[],
-                context_data=graphrag_result.context_data,
-                web_response=web_result.response,
-                web_sources=[s.model_dump() for s in web_result.sources],
-                session_id=session_id,
-            )
-
         result = await _run_graphrag_search(route_decision, collection_id, search_query)
+
+        web_result = None
+        if _is_insufficient(result.response):
+            logger.info("GraphRAG response insufficient, falling back to web search")
+            try:
+                web_result = await web_search_service.search(search_query)
+            except Exception:
+                logger.exception("Web search fallback failed")
 
         if session_id:
             await conversation_service.append_exchange(
@@ -285,6 +294,9 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             response=result.response,
             sources=[],
             context_data=result.context_data,
+            web_response=web_result.response if web_result else None,
+            web_sources=[s.model_dump() for s in web_result.sources] if web_result else [],
+            web_search_triggered=web_result is not None,
             session_id=session_id,
         )
 
@@ -385,20 +397,18 @@ def _build_agent_stream_response(
             search_query = route_decision.rewritten_query or request.query
             assistant_response = ""
 
-            # Execute search
-            # For GraphRAG methods, get full response (non-streaming for now)
+            # Execute GraphRAG search
             result = await _run_graphrag_search(route_decision, collection_id, search_query)
             assistant_response = result.response
 
-            # Coerce response to str for streaming chunks (response may be
-            # str | dict | list depending on the search method).
+            # Coerce response to str for streaming chunks
             response_str = (
                 result.response
                 if isinstance(result.response, str)
                 else json.dumps(result.response)
             )
 
-            # Stream the response in chunks
+            # Stream the GraphRAG response in chunks
             for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
                 yield {
                     "event": "content",
@@ -406,7 +416,22 @@ def _build_agent_stream_response(
                         "delta": response_str[i : i + _SSE_CHUNK_SIZE]
                     }),
                 }
-            sources = []
+
+            # Auto web search fallback if GraphRAG response is insufficient
+            web_result = None
+            if _is_insufficient(result.response):
+                logger.info("GraphRAG response insufficient, falling back to web search (SSE)")
+                yield {
+                    "event": "status",
+                    "data": json.dumps({
+                        "step": "web_searching",
+                        "message": "Searching the web for more information...",
+                    }),
+                }
+                try:
+                    web_result = await web_search_service.search(search_query)
+                except Exception:
+                    logger.exception("Web search fallback failed in SSE")
 
             if session_id:
                 await conversation_service.append_exchange(
@@ -424,9 +449,12 @@ def _build_agent_stream_response(
                 "data": json.dumps({
                     "method_used": route_decision.method,
                     "rewritten_query": route_decision.rewritten_query,
-                    "sources": sources,
+                    "sources": [],
                     "router_reasoning": route_decision.reasoning,
                     "session_id": session_id,
+                    "web_search_triggered": web_result is not None,
+                    "web_response": web_result.response if web_result else None,
+                    "web_sources": [s.model_dump() for s in web_result.sources] if web_result else [],
                 }),
             }
 

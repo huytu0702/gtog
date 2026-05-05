@@ -108,6 +108,7 @@ type Message = {
     method?: string;
     webContent?: string;
     webSources?: Array<{ id: number; title: string; url?: string }>;
+    webSearchTriggered?: boolean;
 };
 
 type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent';
@@ -122,7 +123,6 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     const [input, setInput] = React.useState('');
     const [method, setMethod] = React.useState<SearchMethod>('agent');
     const [showAdvancedMethods, setShowAdvancedMethods] = React.useState(false);
-    const [webSearchEnabled, setWebSearchEnabled] = React.useState(false);
 
     // Auto-expand manual methods panel when an advanced method is active
     React.useEffect(() => {
@@ -148,23 +148,10 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                     case 'local': return searchApi.local(collection.id, query);
                     case 'tog': return searchApi.tog(collection.id, query);
                     case 'drift': return searchApi.drift(collection.id, query);
-                    case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
-                    default: return searchApi.agent(collection.id, query, convHistory, convSummary, webSearchEnabled);
+                    case 'agent': return searchApi.agent(collection.id, query, convHistory, convSummary);
+                    default: return searchApi.agent(collection.id, query, convHistory, convSummary);
                 }
             };
-
-            // For non-agent methods with web search enabled, run both in parallel
-            if (webSearchEnabled && method !== 'agent') {
-                const [baseResult, webResult] = await Promise.all([
-                    fetchBase(),
-                    searchApi.web(collection.id, query),
-                ]);
-                return {
-                    ...baseResult,
-                    web_response: webResult.response,
-                    web_sources: webResult.sources,
-                };
-            }
 
             return fetchBase();
         },
@@ -187,6 +174,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                     method: methodUsed,
                     webContent: (data as any).web_response ?? undefined,
                     webSources: (data as any).web_sources ?? undefined,
+                    webSearchTriggered: (data as any).web_search_triggered ?? false,
                 },
             ]);
 
@@ -301,9 +289,15 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                     )}
 
                                     {msg.method && (
-                                        <div className="text-xs text-gray-500 font-bold flex items-center gap-1">
+                                        <div className="text-xs text-gray-500 font-bold flex items-center gap-2">
                                             {msg.method === 'agent' && <Sparkles className="w-3 h-3" />}
                                             Used {msg.method} search
+                                            {msg.webSearchTriggered && (
+                                                <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 border border-blue-400 text-blue-700 rounded text-xs font-bold">
+                                                    <Globe className="w-3 h-3" />
+                                                    Web-augmented
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -407,35 +401,11 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
                         <div className="p-4 bg-yellow-100 border-2 border-black text-sm">
                             <p className="font-bold mb-1">Tip:</p>
-                            {method === 'agent' && !webSearchEnabled && 'Automatically selects the best search method for your query.'}
-                            {method === 'agent' && webSearchEnabled && 'Auto + Web: Combines knowledge base with live web search results.'}
-                            {method === 'global' && !webSearchEnabled && 'Best for overview questions about the entire collection.'}
-                            {method === 'global' && webSearchEnabled && 'Global + Web: Overview of collection combined with live web results.'}
-                            {method === 'local' && !webSearchEnabled && 'Best for specific questions about entities and their relationships.'}
-                            {method === 'local' && webSearchEnabled && 'Local + Web: Entity search combined with live web results.'}
-                            {method === 'tog' && !webSearchEnabled && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
-                            {method === 'tog' && webSearchEnabled && 'ToG + Web: Deep graph reasoning combined with live web results.'}
-                            {method === 'drift' && !webSearchEnabled && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
-                            {method === 'drift' && webSearchEnabled && 'DRIFT + Web: Dynamic reasoning combined with live web results.'}
-                        </div>
-
-                        <div className="border-t-2 border-black pt-4">
-                            <label className="block font-bold mb-2 flex items-center gap-2">
-                                <Globe className="w-4 h-4" />
-                                Web Search
-                            </label>
-                            <button
-                                onClick={() => setWebSearchEnabled((v) => !v)}
-                                className={cn(
-                                    'w-full px-4 py-3 border-2 border-black font-bold transition-all uppercase flex items-center justify-between',
-                                    webSearchEnabled
-                                        ? 'bg-main shadow-hard-sm translate-x-[-2px] translate-y-[-2px]'
-                                        : 'bg-white hover:bg-gray-100'
-                                )}
-                            >
-                                <span>Web</span>
-                                <span>{webSearchEnabled ? 'ON' : 'OFF'}</span>
-                            </button>
+                            {method === 'agent' && 'Automatically selects the best search method. Falls back to web search if the knowledge base lacks information.'}
+                            {method === 'global' && 'Best for overview questions about the entire collection.'}
+                            {method === 'local' && 'Best for specific questions about entities and their relationships.'}
+                            {method === 'tog' && 'Think-on-Graph: Good for complex multi-hop reasoning.'}
+                            {method === 'drift' && 'DRIFT: Dynamic reasoning for hypothetical scenarios.'}
                         </div>
                     </div>
                 </NBCard>

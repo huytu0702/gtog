@@ -89,6 +89,7 @@ export interface AgentSearchResult {
         title: string;
         url?: string;
     }>;
+    web_search_triggered?: boolean;
 }
 
 export interface SummarizeResult {
@@ -189,14 +190,12 @@ export const searchApi = {
         query: string,
         conversationHistory: ConversationTurn[] = [],
         conversationSummary?: string,
-        webSearchEnabled: boolean = false,
     ) => {
         const response = await api.post<AgentSearchResult>(`/collections/${collectionId}/search/agent`, {
             query,
             stream: false,
             conversation_history: conversationHistory,
             conversation_summary: conversationSummary,
-            web_search_enabled: webSearchEnabled,
         });
         return response.data;
     },
