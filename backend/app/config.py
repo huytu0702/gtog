@@ -1,8 +1,10 @@
 """Application configuration using Pydantic Settings."""
 
 import logging
+from functools import cached_property
 from pathlib import Path
 
+import yaml
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -100,10 +102,10 @@ class Settings(BaseSettings):
     conversation_summary_max_chars: int = 2000
 
     # Model Configuration
-    default_chat_model: str = "gemini/gemini-2.5-flash-lite"
-    default_embedding_model: str = "gemini/gemini-embedding-001"
+    default_chat_model: str = ""
+    default_embedding_model: str = ""
     insufficiency_judge_enabled: bool = True
-    insufficiency_judge_model: str = "gemini/gemini-2.5-flash-lite"
+    insufficiency_judge_model: str = ""
     insufficiency_judge_timeout_seconds: int = 4
     insufficiency_judge_max_tokens: int = 250
     insufficiency_judge_temperature: float = 0.0
@@ -177,6 +179,143 @@ class Settings(BaseSettings):
     def settings_yaml_path(self) -> Path:
         """Get the shared settings.yaml path."""
         return Path(__file__).parent.parent / "settings.yaml"
+
+    @cached_property
+    def _models_config(self) -> dict:
+        """Load models section from backend settings.yaml."""
+        try:
+            data = yaml.safe_load(self.settings_yaml_path.read_text(encoding="utf-8")) or {}
+            return (data.get("models") or {})
+        except Exception as exc:
+            _config_logger.warning("Failed to read models config from settings.yaml: %s", exc)
+            return {}
+
+    def _resolve_model_config(self, model_id: str, fallback_model: str, fallback_provider: str) -> tuple[str, str]:
+        model_config = (self._models_config.get(model_id) or {})
+        model = str(model_config.get("model") or "").strip()
+        provider = str(model_config.get("model_provider") or "").strip().lower()
+        if model and provider:
+            return model, provider
+        _config_logger.warning(
+            "models.%s is missing model/provider in settings.yaml; using defaults.",
+            model_id,
+        )
+        return fallback_model, fallback_provider
+
+    @cached_property
+    def _query_chat_model_config(self) -> tuple[str, str]:
+        """Resolve query chat model/provider from backend settings.yaml."""
+        return self._resolve_model_config(
+            "query_chat_model",
+            fallback_model="gpt-5.4-mini",
+            fallback_provider="openai",
+        )
+
+    @cached_property
+    def _default_chat_model_config(self) -> tuple[str, str]:
+        """Resolve default chat model/provider from backend settings.yaml."""
+        return self._resolve_model_config(
+            "default_chat_model",
+            fallback_model="gpt-5.2",
+            fallback_provider="openai",
+        )
+
+    @property
+    def query_chat_model(self) -> str:
+        """Return model name configured for query-time chat calls."""
+        return self._query_chat_model_config[0]
+
+    @property
+    def query_chat_model_provider(self) -> str:
+        """Return provider configured for query-time chat model."""
+        return self._query_chat_model_config[1]
+
+    @property
+    def query_chat_model_litellm(self) -> str:
+        """Return LiteLLM model identifier for query-time chat calls."""
+        model = self.query_chat_model
+        provider = self.query_chat_model_provider
+        if "/" in model:
+            return model
+        return f"{provider}/{model}" if provider else model
+
+    def api_key_for_provider(self, provider: str) -> str:
+        """Return API key for known providers; empty string for unknown providers."""
+        normalized = provider.strip().lower()
+        if normalized in {"openai", "azure_openai"}:
+            return self.openai_api_key
+        if normalized in {"gemini", "google"}:
+            return self.google_api_key or self.graphrag_api_key
+        _config_logger.warning("No API key mapping for provider: %s", provider)
+        return ""
+
+    @property
+    def query_chat_model_api_key(self) -> str:
+        """Return API key mapped to query-time chat model provider."""
+        return self.api_key_for_provider(self.query_chat_model_provider)
+
+    def provider_from_model(self, model_name: str, fallback_provider: str) -> str:
+        """Infer provider from prefixed model string, else return fallback provider."""
+        if "/" in model_name:
+            return model_name.split("/", 1)[0].strip().lower()
+        return fallback_provider
+
+    @property
+    def default_chat_model_provider(self) -> str:
+        """Return provider for the effective default chat model."""
+        fallback_provider = self._default_chat_model_config[1]
+        model = self.default_chat_model or self._default_chat_model_config[0]
+        return self.provider_from_model(model, fallback_provider)
+
+    @property
+    def default_chat_model_litellm(self) -> str:
+        """Return LiteLLM model identifier for default chat calls."""
+        model = self.default_chat_model or self._default_chat_model_config[0]
+        provider = self.default_chat_model_provider
+        if "/" in model:
+            return model
+        return f"{provider}/{model}" if provider else model
+
+    @property
+    def default_chat_model_api_key(self) -> str:
+        """Return API key mapped to default chat model provider."""
+        return self.api_key_for_provider(self.default_chat_model_provider)
+
+    @cached_property
+    def _default_embedding_model_config(self) -> tuple[str, str]:
+        """Resolve default embedding model/provider from backend settings.yaml."""
+        try:
+            data = yaml.safe_load(self.settings_yaml_path.read_text(encoding="utf-8")) or {}
+            embedding_model = (
+                ((data.get("models") or {}).get("default_embedding_model") or {})
+            )
+            model = str(embedding_model.get("model") or "").strip()
+            provider = str(embedding_model.get("model_provider") or "").strip().lower()
+            if model and provider:
+                return model, provider
+            _config_logger.warning(
+                "models.default_embedding_model is missing model/provider in settings.yaml; using defaults."
+            )
+        except Exception as exc:
+            _config_logger.warning(
+                "Failed to read default_embedding_model from settings.yaml: %s",
+                exc,
+            )
+        return "gemini-embedding-001", "gemini"
+
+    @property
+    def default_embedding_model_provider(self) -> str:
+        """Return provider configured for default embedding model."""
+        return self._default_embedding_model_config[1]
+
+    @property
+    def default_embedding_model_litellm(self) -> str:
+        """Return LiteLLM model identifier for embedding calls."""
+        model = self.default_embedding_model or self._default_embedding_model_config[0]
+        provider = self.default_embedding_model_provider
+        if "/" in model:
+            return model
+        return f"{provider}/{model}" if provider else model
 
 
 # Global settings instance

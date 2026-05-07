@@ -32,6 +32,11 @@ class InsufficiencyJudge:
     def __init__(self) -> None:
         self.prompt_template = self._load_prompt()
 
+    def _provider_from_model(self, model_name: str) -> str:
+        if "/" in model_name:
+            return model_name.split("/", 1)[0].strip().lower()
+        return settings.query_chat_model_provider
+
     def _load_prompt(self) -> str:
         prompt_path = (
             Path(__file__).parent.parent.parent
@@ -51,15 +56,18 @@ class InsufficiencyJudge:
 
     async def _call_llm(self, prompt: str):
         max_retries = 2
+        model_name = settings.insufficiency_judge_model or settings.query_chat_model_litellm
+        provider = self._provider_from_model(model_name)
+        api_key = settings.api_key_for_provider(provider)
         for attempt in range(max_retries + 1):
             try:
                 return await asyncio.wait_for(
                     acompletion(
-                        model=settings.insufficiency_judge_model,
+                        model=model_name,
                         messages=[{"role": "user", "content": prompt}],
                         temperature=settings.insufficiency_judge_temperature,
                         max_tokens=settings.insufficiency_judge_max_tokens,
-                        api_key=settings.google_api_key,
+                        api_key=api_key,
                         response_format={"type": "json_object"},
                     ),
                     timeout=settings.insufficiency_judge_timeout_seconds,
@@ -74,11 +82,11 @@ class InsufficiencyJudge:
                 if "response_format" in str(e):
                     return await asyncio.wait_for(
                         acompletion(
-                            model=settings.insufficiency_judge_model,
+                            model=model_name,
                             messages=[{"role": "user", "content": prompt}],
                             temperature=settings.insufficiency_judge_temperature,
                             max_tokens=settings.insufficiency_judge_max_tokens,
-                            api_key=settings.google_api_key,
+                            api_key=api_key,
                         ),
                         timeout=settings.insufficiency_judge_timeout_seconds,
                     )

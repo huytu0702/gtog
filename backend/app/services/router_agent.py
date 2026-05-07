@@ -139,11 +139,11 @@ Collection: {collection_context}
         for attempt in range(max_retries + 1):
             try:
                 response = await acompletion(
-                    model=settings.default_chat_model,
+                    model=settings.query_chat_model_litellm,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=_LLM_TEMPERATURE,
                     max_tokens=_LLM_MAX_TOKENS,  # Increased for more complete responses
-                    api_key=settings.google_api_key,
+                    api_key=settings.query_chat_model_api_key,
                     response_format={"type": "json_object"},  # Force JSON output
                 )
                 return response
@@ -169,11 +169,11 @@ Collection: {collection_context}
                         "response_format not supported, falling back to standard completion"
                     )
                     return await acompletion(
-                        model=settings.default_chat_model,
+                        model=settings.query_chat_model_litellm,
                         messages=[{"role": "user", "content": prompt}],
                         temperature=_LLM_TEMPERATURE,
                         max_tokens=_LLM_MAX_TOKENS,
-                        api_key=settings.google_api_key,
+                        api_key=settings.query_chat_model_api_key,
                     )
                 raise
 

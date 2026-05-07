@@ -32,11 +32,11 @@ class SummarizationService:
 
     async def _call_llm(self, prompt: str) -> str:
         response = await acompletion(
-            model=settings.default_chat_model,
+            model=settings.default_chat_model_litellm,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=300,
-            api_key=settings.google_api_key,
+            api_key=settings.default_chat_model_api_key,
         )
         return response.choices[0].message.content or ""
 

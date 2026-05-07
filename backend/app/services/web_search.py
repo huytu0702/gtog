@@ -56,11 +56,11 @@ Include [N] citations."""
         for attempt in range(max_retries + 1):
             try:
                 response = await acompletion(
-                    model=settings.default_chat_model,
+                    model=settings.default_chat_model_litellm,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.3,
                     max_tokens=1000,
-                    api_key=settings.google_api_key,
+                    api_key=settings.default_chat_model_api_key,
                 )
                 return response
             except RateLimitError as e:
@@ -178,12 +178,12 @@ Include [N] citations."""
 
                 # Stream LLM response
                 stream = await acompletion(
-                    model=settings.default_chat_model,
+                    model=settings.default_chat_model_litellm,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.3,
                     max_tokens=1000,
                     stream=True,
-                    api_key=settings.google_api_key,
+                    api_key=settings.default_chat_model_api_key,
                 )
 
                 async for chunk in stream:
