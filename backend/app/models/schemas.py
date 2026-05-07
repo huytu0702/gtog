@@ -222,6 +222,7 @@ class AgentSearchResponse(BaseModel):
     session_id: str | None = None
     web_response: str | None = None
     web_sources: list = Field(default_factory=list)
+    web_search_triggered: bool = False
 
 
 class SessionCreateResponse(BaseModel):

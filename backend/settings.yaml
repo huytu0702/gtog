@@ -8,34 +8,36 @@ models:
   # Stronger model for graph building (entity extraction, summarization, community reports)
   default_chat_model:
     type: chat
-    model_provider: gemini
+    model_provider: openai
     auth_type: api_key
-    api_key: ${GRAPHRAG_API_KEY}
-    model: gemini-2.5-flash
+    api_key: ${OPENAI_API_KEY}
+    api_base: ${OPENAI_API_BASE}
+    model: gpt-5.2
     model_supports_json: true
     concurrent_requests: 5
     async_mode: threaded
     retry_strategy: exponential_backoff
     max_retries: 7
     max_retry_wait: 60.0
-    tokens_per_minute: 100000
-    requests_per_minute: 1000
+    tokens_per_minute: 1000000
+    requests_per_minute: 10000
 
   # Lighter model for querying (local, global, drift, basic, ToG search)
   query_chat_model:
     type: chat
-    model_provider: gemini
+    model_provider: openai
     auth_type: api_key
-    api_key: ${GRAPHRAG_API_KEY}
-    model: gemini-2.5-flash-lite
+    api_key: ${OPENAI_API_KEY}
+    api_base: ${OPENAI_API_BASE}
+    model: gpt-5.4-mini
     model_supports_json: true
-    concurrent_requests: 10
+    concurrent_requests: 2
     async_mode: threaded
     retry_strategy: exponential_backoff
     max_retries: 7
     max_retry_wait: 60.0
     tokens_per_minute: 100000
-    requests_per_minute: 1500
+    requests_per_minute: 600
 
   default_embedding_model:
     type: embedding
@@ -102,7 +104,7 @@ embed_text:
 extract_graph:
   model_id: default_chat_model
   prompt: "prompts/extract_graph.txt"
-  entity_types: [organization, person, geo, event, concept]
+  entity_types: [character, animal, place, object, activity, event]
   max_gleanings: 1
 
 summarize_descriptions:
@@ -117,6 +119,7 @@ extract_graph_nlp:
 
 cluster_graph:
   max_cluster_size: 10
+  use_lcc: false
 
 extract_claims:
   enabled: false
@@ -175,11 +178,10 @@ tog_search:
   width: 3                          # Beam width for exploration
   depth: 3                          # Maximum exploration depth
   prune_strategy: llm               # Options: llm, semantic, bm25
-  num_retain_entity: 3              # Entities to retain per level
+  num_retain_entity: 5              
   temperature_exploration: 0.4      # LLM temperature for exploration
   temperature_reasoning: 0.0        # LLM temperature for final answer
   max_context_tokens: 8000          # Maximum context tokens
-  max_exploration_paths: 10         # Maximum exploration paths
   relation_scoring_prompt: "prompts/tog_relation_scoring_prompt.txt"
   entity_scoring_prompt: "prompts/tog_entity_scoring_prompt.txt"
   reasoning_prompt: "prompts/tog_reasoning_prompt.txt"

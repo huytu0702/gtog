@@ -365,6 +365,9 @@ def load_graphrag_config(
             "output.base_dir": str(collection_dir / "output"),
             "cache.type": "file",
             "cache.base_dir": str(collection_dir / "cache"),
+            "vector_store.default_vector_store.db_uri": str(
+                collection_dir / "output" / "lancedb"
+            ),
         }
 
     cli_overrides.update(

@@ -41,7 +41,7 @@ _REQUIRED_DATASETS: dict[str, list[str]] = {
         "text_units",
         "relationships",
     ],
-    "tog": ["entities", "relationships"],
+    "tog": ["entities", "relationships", "text_units"],
     "drift": [
         "entities",
         "communities",
@@ -156,13 +156,46 @@ class QueryService:
         )
         return frame
 
+    def _load_context_from_local(
+        self, collection_id: str, method: str
+    ) -> tuple[str, dict[str, pd.DataFrame]]:
+        from ..config import settings
+
+        output_dir = settings.collections_dir / collection_id / "output"
+        if not output_dir.exists():
+            raise FileNotFoundError(
+                f"Collection '{collection_id}' not found or not indexed yet. "
+                f"Expected output at: {output_dir}"
+            )
+
+        required = _REQUIRED_DATASETS[method]
+        frames: dict[str, pd.DataFrame] = {}
+        for dataset in required:
+            parquet_path = output_dir / f"{dataset}.parquet"
+            if not parquet_path.exists():
+                raise ServingContextNotReadyError(
+                    f"Collection '{collection_id}' is missing indexed file: {dataset}.parquet. "
+                    "Run indexing first."
+                )
+            frame = pd.read_parquet(parquet_path)
+            if dataset == "community_reports":
+                frame = _normalize_community_reports_frame(frame)
+            frames[dataset] = frame
+
+        if method == "local":
+            covariates_path = output_dir / "covariates.parquet"
+            if covariates_path.exists():
+                covariates = pd.read_parquet(covariates_path)
+                if not covariates.empty:
+                    frames["covariates"] = covariates
+
+        return "local", frames
+
     async def _load_context_from_serving(
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
         if self.control_plane is None or self.serving_repo is None:
-            raise ServingContextUnavailableError(
-                "Cosmos serving repository is not configured"
-            )
+            return self._load_context_from_local(collection_id, method)
 
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
@@ -329,6 +362,7 @@ class QueryService:
                 config=config,
                 entities=entities,
                 relationships=relationships,
+                text_units=frames["text_units"],
                 query=query,
             )
             logger.info("ToG search completed for collection %s", collection_id)

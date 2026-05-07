@@ -77,6 +77,7 @@ export interface AgentSearchResult {
     router_reasoning: string;
     rewritten_query?: string;
     response: string;
+    context_data?: Record<string, unknown> | null;
     sources: Array<{
         id: number;
         title: string;
@@ -89,6 +90,53 @@ export interface AgentSearchResult {
         title: string;
         url?: string;
     }>;
+    web_search_triggered?: boolean;
+}
+
+export interface AgentStreamStatusEvent {
+    type: 'status';
+    step: string;
+    message: string;
+    method?: string;
+}
+
+export interface AgentStreamContentEvent {
+    type: 'content';
+    chunk: string;
+}
+
+export interface AgentStreamDoneEvent {
+    type: 'done';
+    method_used: string;
+    router_reasoning: string;
+    rewritten_query?: string;
+    web_response?: string | null;
+    web_sources?: Array<{
+        id: number;
+        title: string;
+        url?: string;
+    }>;
+    web_search_triggered?: boolean;
+    context_data?: Record<string, unknown> | null;
+}
+
+export interface AgentStreamErrorEvent {
+    type: 'error';
+    error: string;
+}
+
+export type AgentStreamEvent =
+    | AgentStreamStatusEvent
+    | AgentStreamContentEvent
+    | AgentStreamDoneEvent
+    | AgentStreamErrorEvent;
+
+export interface AgentStreamHandlers {
+    onEvent?: (event: AgentStreamEvent) => void;
+    onStatus?: (event: AgentStreamStatusEvent) => void;
+    onContent?: (event: AgentStreamContentEvent) => void;
+    onDone?: (event: AgentStreamDoneEvent) => void;
+    onError?: (event: AgentStreamErrorEvent) => void;
 }
 
 export interface SummarizeResult {
@@ -189,14 +237,12 @@ export const searchApi = {
         query: string,
         conversationHistory: ConversationTurn[] = [],
         conversationSummary?: string,
-        webSearchEnabled: boolean = false,
     ) => {
         const response = await api.post<AgentSearchResult>(`/collections/${collectionId}/search/agent`, {
             query,
             stream: false,
             conversation_history: conversationHistory,
             conversation_summary: conversationSummary,
-            web_search_enabled: webSearchEnabled,
         });
         return response.data;
     },
@@ -241,11 +287,145 @@ export const searchApi = {
         eventSource.addEventListener('done', handleEvent as EventListener);
         eventSource.addEventListener('error', handleEvent as EventListener);
 
-        eventSource.onerror = (error) => {
-            console.error('SSE error:', error);
+        eventSource.onerror = () => {
             eventSource.close();
         };
 
         return eventSource;
+    },
+    agentStreamPost: async (
+        collectionId: string,
+        query: string,
+        handlers: AgentStreamHandlers,
+        conversationHistory: ConversationTurn[] = [],
+        conversationSummary?: string,
+        signal?: AbortSignal,
+    ) => {
+        const response = await fetch(`${API_BASE_URL}/collections/${collectionId}/search/agent/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                query,
+                stream: true,
+                conversation_history: conversationHistory,
+                conversation_summary: conversationSummary,
+            }),
+            signal,
+        });
+
+        if (!response.ok) {
+            throw new ApiStatusError(response.status);
+        }
+
+        if (!response.body) {
+            throw new Error('No stream body returned by server');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = 'message';
+
+        const emit = (eventName: string, payload: string) => {
+            let parsed: Record<string, unknown>;
+            try {
+                parsed = payload ? (JSON.parse(payload) as Record<string, unknown>) : {};
+            } catch {
+                return;
+            }
+
+            if (eventName === 'status') {
+                const statusEvent: AgentStreamStatusEvent = {
+                    type: 'status',
+                    step: String(parsed.step ?? ''),
+                    message: String(parsed.message ?? ''),
+                    method: parsed.method ? String(parsed.method) : undefined,
+                };
+                handlers.onEvent?.(statusEvent);
+                handlers.onStatus?.(statusEvent);
+                return;
+            }
+
+            if (eventName === 'content') {
+                const chunk = parsed.delta ?? parsed.content ?? '';
+                const contentEvent: AgentStreamContentEvent = {
+                    type: 'content',
+                    chunk: String(chunk),
+                };
+                handlers.onEvent?.(contentEvent);
+                handlers.onContent?.(contentEvent);
+                return;
+            }
+
+            if (eventName === 'done') {
+                const doneEvent: AgentStreamDoneEvent = {
+                    type: 'done',
+                    method_used: String(parsed.method_used ?? ''),
+                    router_reasoning: String(parsed.router_reasoning ?? ''),
+                    rewritten_query: parsed.rewritten_query ? String(parsed.rewritten_query) : undefined,
+                    web_response: parsed.web_response ? String(parsed.web_response) : undefined,
+                    web_sources: Array.isArray(parsed.web_sources)
+                        ? (parsed.web_sources as Array<{ id: number; title: string; url?: string }>)
+                        : undefined,
+                    web_search_triggered: Boolean(parsed.web_search_triggered),
+                    context_data: (parsed.context_data as Record<string, unknown> | null | undefined) ?? null,
+                };
+                handlers.onEvent?.(doneEvent);
+                handlers.onDone?.(doneEvent);
+                return;
+            }
+
+            if (eventName === 'error') {
+                const errorEvent: AgentStreamErrorEvent = {
+                    type: 'error',
+                    error: String(parsed.error ?? parsed.message ?? 'Unknown stream error'),
+                };
+                handlers.onEvent?.(errorEvent);
+                handlers.onError?.(errorEvent);
+            }
+        };
+
+        const processBlock = (block: string) => {
+            const lines = block.split('\n');
+            const dataLines: string[] = [];
+
+            for (const rawLine of lines) {
+                const line = rawLine.trimEnd();
+                if (line.startsWith('event:')) {
+                    currentEvent = line.slice('event:'.length).trim();
+                    continue;
+                }
+                if (line.startsWith('data:')) {
+                    dataLines.push(line.slice('data:'.length).trimStart());
+                }
+            }
+
+            if (dataLines.length > 0) {
+                emit(currentEvent, dataLines.join('\n'));
+            }
+            currentEvent = 'message';
+        };
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                if (buffer.trim()) {
+                    processBlock(buffer);
+                }
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const blocks = buffer.split(/\r?\n\r?\n/);
+            buffer = blocks.pop() ?? '';
+
+            for (const block of blocks) {
+                if (block.trim()) {
+                    processBlock(block);
+                }
+            }
+        }
     },
 };

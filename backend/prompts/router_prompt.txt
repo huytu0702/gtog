@@ -5,7 +5,6 @@ Available search methods:
 - LOCAL: Questions about specific entities mentioned in documents. Focused queries on particular topics/names/concepts.
 - TOG: Questions about relationships between entities. Multi-hop reasoning through entity connections.
 - DRIFT: Local search + community context for broader variety. Expands query into detailed follow-up questions.
-- WEB: External information not in documents. Real-time/current events, topics outside indexed data.
 
 Collection context:
 {collection_context}
@@ -17,14 +16,14 @@ Current query: {query}
 YOU MUST respond with ONLY a valid JSON object (no markdown, no code blocks, no explanations):
 {{
   "rewritten_query": "Standalone version of the query with all pronouns and implicit references resolved. If the query is already standalone, repeat it unchanged.",
-  "method": "local|global|tog|drift|web",
+  "method": "local|global|tog|drift",
   "confidence": 0.0-1.0,
   "reasoning": "Brief explanation of why this method was chosen"
 }}
 
 Rules:
 - If history or summary is present, resolve pronouns and implicit references in rewritten_query (e.g. "it", "he", "she", "they", "that film", "his work").
-- If the query asks about current events, news, or real-time information, choose WEB.
+- If the query asks about current events, news, or real-time information, still choose the best GraphRAG method first (fallback web search is handled after GraphRAG answer).
 - If the query asks about relationships or connections between concepts, choose TOG.
 - If the query asks for broad overviews or trends across many topics, choose GLOBAL.
 - If the query asks what a document/collection/dataset is about, or asks for a summary/overview of the entire content, choose GLOBAL.
@@ -32,3 +31,6 @@ Rules:
 - Use DRIFT only when LOCAL might miss important related context.
 - Default to LOCAL if uncertain between LOCAL and other methods.
 - Consider method_used values in history — prefer consistency unless the query type clearly differs.
+- Do not change any entity name from the user's query when generating rewritten_query.
+- Do not correct spelling, grammar, casing, or factual identity of names/entities from the current query.
+- For standalone first-turn queries, rewritten_query MUST be exactly identical to Current query.

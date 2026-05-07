@@ -3,9 +3,10 @@
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from litellm import acompletion
 from litellm.exceptions import RateLimitError
@@ -19,9 +20,13 @@ SearchMethodType = Literal["local", "global", "tog", "drift"]
 
 RECENT_TURNS_IN_PROMPT = 3  # user turns to include in prompt (after summary)
 _LLM_MAX_TOKENS = 500
-_LLM_TEMPERATURE = 0.1
+_DEFAULT_LLM_TEMPERATURE = 0.1
 _LLM_MAX_RETRIES = 3
 _LLM_RETRY_BASE_DELAY = 1.0
+_CONTEXT_REFERENCE_PATTERN = re.compile(
+    r"\b(it|its|he|him|his|she|her|hers|they|them|their|theirs|this|that|these|those)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -41,6 +46,12 @@ class RouterAgent:
         """Initialize the router agent."""
         self.prompt_template = self._load_prompt()
 
+    def _temperature_for_model(self, model_name: str) -> float:
+        normalized = model_name.split("/", 1)[-1].strip().lower()
+        if normalized.startswith("gpt-5"):
+            return 1.0
+        return _DEFAULT_LLM_TEMPERATURE
+
     def _load_prompt(self) -> str:
         """Load the router prompt template."""
         prompt_path = (
@@ -53,10 +64,19 @@ class RouterAgent:
     def _default_prompt(self) -> str:
         """Return default prompt if file not found."""
         return """Analyze the query and return JSON with rewritten_query, method, confidence, reasoning.
-Methods: local, global, tog, drift, web
+Methods: local, global, tog, drift
 Query: {query}
 Collection: {collection_context}
 {conversation_history_block}"""
+
+    def _should_preserve_standalone_query(
+        self,
+        query: str,
+        conversation_history: list[ConversationTurn] | None,
+        conversation_summary: str | None,
+    ) -> bool:
+        has_context = bool(conversation_history or conversation_summary)
+        return not has_context and not _CONTEXT_REFERENCE_PATTERN.search(query)
 
     def _format_history_block(
         self,
@@ -122,14 +142,15 @@ Collection: {collection_context}
         max_retries = _LLM_MAX_RETRIES
         base_delay = _LLM_RETRY_BASE_DELAY
 
+        model_name = settings.query_chat_model_litellm
         for attempt in range(max_retries + 1):
             try:
                 response = await acompletion(
-                    model=settings.default_chat_model,
+                    model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=_LLM_TEMPERATURE,
+                    temperature=self._temperature_for_model(model_name),
                     max_tokens=_LLM_MAX_TOKENS,  # Increased for more complete responses
-                    api_key=settings.google_api_key,
+                    api_key=settings.query_chat_model_api_key,
                     response_format={"type": "json_object"},  # Force JSON output
                 )
                 return response
@@ -155,11 +176,11 @@ Collection: {collection_context}
                         "response_format not supported, falling back to standard completion"
                     )
                     return await acompletion(
-                        model=settings.default_chat_model,
+                        model=model_name,
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=_LLM_TEMPERATURE,
+                        temperature=self._temperature_for_model(model_name),
                         max_tokens=_LLM_MAX_TOKENS,
-                        api_key=settings.google_api_key,
+                        api_key=settings.query_chat_model_api_key,
                     )
                 raise
 
@@ -194,8 +215,9 @@ Collection: {collection_context}
             conversation_history_block=history_block,
         )
 
+        content = ""
         try:
-            response = await self._call_llm(prompt)
+            response: Any = await self._call_llm(prompt)
             content = response.choices[0].message.content
 
             # Log the raw response for debugging
@@ -229,6 +251,12 @@ Collection: {collection_context}
                 method = "local"
 
             rewritten_query = decision.get("rewritten_query") or query
+            if self._should_preserve_standalone_query(
+                query,
+                conversation_history,
+                conversation_summary,
+            ):
+                rewritten_query = query
 
             return RouteDecision(
                 method=method,

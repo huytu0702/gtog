@@ -2,6 +2,11 @@
 
 from .conversation_service import ConversationService, conversation_service
 from .indexing_service import IndexingService, indexing_service
+from .insufficiency_judge import (
+    InsufficiencyDecision,
+    InsufficiencyJudge,
+    insufficiency_judge,
+)
 from .query_service import QueryService, query_service
 from .queue_service import QueueService, queue_service
 from .router_agent import RouteDecision, RouterAgent, router_agent
@@ -16,6 +21,8 @@ from .web_search import WebSearchResult, WebSearchService, web_search_service
 __all__ = [
     "ConversationService",
     "IndexingService",
+    "InsufficiencyDecision",
+    "InsufficiencyJudge",
     "QueryService",
     "QueueService",
     "RouteDecision",
@@ -27,6 +34,7 @@ __all__ = [
     "WebSearchService",
     "conversation_service",
     "indexing_service",
+    "insufficiency_judge",
     "query_service",
     "queue_service",
     "router_agent",

@@ -1,6 +1,5 @@
 """Search endpoints for all GraphRAG search methods."""
 
-import asyncio
 import json
 import logging
 
@@ -29,6 +28,7 @@ from ..models import (
 )
 from ..services import (
     conversation_service,
+    insufficiency_judge,
     query_service,
     router_agent,
     summarization_service,
@@ -153,6 +153,63 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         _raise_for_unknown(e)
 
 
+def _normalize_response_text(response) -> str:
+    """Normalize GraphRAG response into text for judge input."""
+    if response is None:
+        return ""
+    if isinstance(response, str):
+        return response
+    try:
+        return json.dumps(response)
+    except Exception:
+        return str(response)
+
+
+def _build_context_metadata(context_data: dict | None) -> str:
+    """Build compact context metadata for insufficiency judge."""
+    if not context_data:
+        return "{}"
+    summary = {
+        key: len(value) if isinstance(value, dict) else 0
+        for key, value in context_data.items()
+    }
+    return json.dumps(summary)
+
+
+async def _should_trigger_web_fallback(
+    *,
+    original_query: str,
+    search_query: str,
+    method_used: str,
+    graphrag_response,
+    context_data: dict | None,
+) -> bool:
+    """Use LLM judge to decide if web fallback is needed."""
+    if not settings.web_fallback_enabled or not settings.tavily_api_key:
+        return False
+
+    response_text = _normalize_response_text(graphrag_response)
+    decision = await insufficiency_judge.judge(
+        original_query=original_query,
+        search_query=search_query,
+        method_used=method_used,
+        graphrag_response=response_text,
+        context_metadata=_build_context_metadata(context_data),
+    )
+
+    if decision is None:
+        return False
+
+    should_fallback = not decision.is_sufficient
+    logger.info(
+        "Insufficiency judge decision: fallback=%s confidence=%.2f reason=%s",
+        should_fallback,
+        decision.confidence,
+        decision.reason,
+    )
+    return should_fallback
+
+
 async def _run_graphrag_search(route_decision, collection_id: str, search_query: str):
     """Dispatch to the appropriate GraphRAG search method based on route decision."""
     if route_decision.method == "global":
@@ -174,7 +231,8 @@ async def _run_graphrag_search(route_decision, collection_id: str, search_query:
 
 
 @router.post("/agent/summarize", response_model=SummarizeResponse)
-async def summarize_conversation(collection_id: str, request: SummarizeRequest):    """
+async def summarize_conversation(collection_id: str, request: SummarizeRequest):
+    """
     Compress conversation history into a summary.
 
     Call this when conversation_history exceeds your threshold (e.g. 6 turns).
@@ -236,36 +294,22 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
 
         search_query = route_decision.rewritten_query or request.query
 
-        if request.web_search_enabled:
-            # Run GraphRAG + web search in parallel; each synthesizes independently
-            graphrag_result, web_result = await asyncio.gather(
-                _run_graphrag_search(route_decision, collection_id, search_query),
-                web_search_service.search(search_query),
-            )
-
-            if session_id:
-                await conversation_service.append_exchange(
-                    collection_id=collection_id,
-                    session_id=session_id,
-                    user_query=request.query,
-                    assistant_response=graphrag_result.response,
-                    rewritten_query=route_decision.rewritten_query,
-                    method_used=route_decision.method,
-                )
-
-            return AgentSearchResponse(
-                method_used=route_decision.method,
-                router_reasoning=route_decision.reasoning,
-                rewritten_query=route_decision.rewritten_query,
-                response=graphrag_result.response,
-                sources=[],
-                context_data=graphrag_result.context_data,
-                web_response=web_result.response,
-                web_sources=[s.model_dump() for s in web_result.sources],
-                session_id=session_id,
-            )
-
         result = await _run_graphrag_search(route_decision, collection_id, search_query)
+
+        web_result = None
+        should_fallback = await _should_trigger_web_fallback(
+            original_query=request.query,
+            search_query=search_query,
+            method_used=route_decision.method,
+            graphrag_response=result.response,
+            context_data=result.context_data,
+        )
+        if should_fallback:
+            logger.info("LLM judge marked GraphRAG response insufficient, triggering web fallback")
+            try:
+                web_result = await web_search_service.search(search_query)
+            except Exception:
+                logger.exception("Web search fallback failed")
 
         if session_id:
             await conversation_service.append_exchange(
@@ -284,6 +328,9 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             response=result.response,
             sources=[],
             context_data=result.context_data,
+            web_response=web_result.response if web_result else None,
+            web_sources=[s.model_dump() for s in web_result.sources] if web_result else [],
+            web_search_triggered=web_result is not None,
             session_id=session_id,
         )
 
@@ -384,20 +431,18 @@ def _build_agent_stream_response(
             search_query = route_decision.rewritten_query or request.query
             assistant_response = ""
 
-            # Execute search
-            # For GraphRAG methods, get full response (non-streaming for now)
+            # Execute GraphRAG search
             result = await _run_graphrag_search(route_decision, collection_id, search_query)
             assistant_response = result.response
 
-            # Coerce response to str for streaming chunks (response may be
-            # str | dict | list depending on the search method).
+            # Coerce response to str for streaming chunks
             response_str = (
                 result.response
                 if isinstance(result.response, str)
                 else json.dumps(result.response)
             )
 
-            # Stream the response in chunks
+            # Stream the GraphRAG response in chunks
             for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
                 yield {
                     "event": "content",
@@ -405,7 +450,37 @@ def _build_agent_stream_response(
                         "delta": response_str[i : i + _SSE_CHUNK_SIZE]
                     }),
                 }
-            sources = []
+
+            # LLM sufficiency judgment before optional web fallback
+            yield {
+                "event": "status",
+                "data": json.dumps({
+                    "step": "judging_sufficiency",
+                    "message": "Checking if indexed data is sufficient...",
+                }),
+            }
+
+            web_result = None
+            should_fallback = await _should_trigger_web_fallback(
+                original_query=request.query,
+                search_query=search_query,
+                method_used=route_decision.method,
+                graphrag_response=result.response,
+                context_data=result.context_data,
+            )
+            if should_fallback:
+                logger.info("LLM judge marked GraphRAG response insufficient, triggering web fallback (SSE)")
+                yield {
+                    "event": "status",
+                    "data": json.dumps({
+                        "step": "web_searching",
+                        "message": "Searching the web for more information...",
+                    }),
+                }
+                try:
+                    web_result = await web_search_service.search(search_query)
+                except Exception:
+                    logger.exception("Web search fallback failed in SSE")
 
             if session_id:
                 await conversation_service.append_exchange(
@@ -423,9 +498,13 @@ def _build_agent_stream_response(
                 "data": json.dumps({
                     "method_used": route_decision.method,
                     "rewritten_query": route_decision.rewritten_query,
-                    "sources": sources,
+                    "sources": [],
                     "router_reasoning": route_decision.reasoning,
+                    "context_data": result.context_data,
                     "session_id": session_id,
+                    "web_search_triggered": web_result is not None,
+                    "web_response": web_result.response if web_result else None,
+                    "web_sources": [s.model_dump() for s in web_result.sources] if web_result else [],
                 }),
             }
 

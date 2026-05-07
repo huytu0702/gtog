@@ -37,23 +37,28 @@ class TestAgentSearchEndpoint:
 
         with patch("backend.app.routers.search.router_agent") as mock_router:
             with patch("backend.app.routers.search.query_service") as mock_query:
-                mock_router.route = AsyncMock(return_value=mock_route_decision)
-                mock_query.local_search = AsyncMock(return_value=mock_search_response)
+                with patch(
+                    "backend.app.routers.search._should_trigger_web_fallback",
+                    new_callable=AsyncMock,
+                ) as mock_should_fallback:
+                    mock_router.route = AsyncMock(return_value=mock_route_decision)
+                    mock_query.local_search = AsyncMock(return_value=mock_search_response)
+                    mock_should_fallback.return_value = False
 
-                transport = httpx.ASGITransport(app=app)
-                async with httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                ) as client:
-                    response = await client.post(
-                        "/api/collections/test-collection/search/agent",
-                        json={"query": "What is chamomile?", "stream": False},
-                    )
+                    transport = httpx.ASGITransport(app=app)
+                    async with httpx.AsyncClient(
+                        transport=transport,
+                        base_url="http://testserver",
+                    ) as client:
+                        response = await client.post(
+                            "/api/collections/test-collection/search/agent",
+                            json={"query": "What is chamomile?", "stream": False},
+                        )
 
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert "method_used" in data
-                    assert "router_reasoning" in data
+                        assert response.status_code == 200
+                        data = response.json()
+                        assert "method_used" in data
+                        assert "router_reasoning" in data
 
 
 class TestWebSearchEndpoint:
@@ -179,28 +184,34 @@ class TestAgentStreamEndpoint:
     @pytest.mark.asyncio
     async def test_agent_stream_get_returns_event_stream_headers(self):
         mock_route_decision = MagicMock()
-        mock_route_decision.method = "web"
+        mock_route_decision.method = "local"
         mock_route_decision.confidence = 0.95
-        mock_route_decision.reasoning = "Needs web context"
+        mock_route_decision.reasoning = "Needs local context"
         mock_route_decision.rewritten_query = None
 
-        async def fake_stream(_query: str):
-            yield "stream chunk"
+        mock_search_response = MagicMock()
+        mock_search_response.response = "stream chunk"
+        mock_search_response.context_data = {}
 
         with patch("backend.app.routers.search.router_agent") as mock_router:
-            with patch("backend.app.routers.search.web_search_service") as mock_web:
-                mock_router.route = AsyncMock(return_value=mock_route_decision)
-                mock_web.search_streaming = fake_stream
+            with patch("backend.app.routers.search.query_service") as mock_query:
+                with patch(
+                    "backend.app.routers.search._should_trigger_web_fallback",
+                    new_callable=AsyncMock,
+                ) as mock_should_fallback:
+                    mock_router.route = AsyncMock(return_value=mock_route_decision)
+                    mock_query.local_search = AsyncMock(return_value=mock_search_response)
+                    mock_should_fallback.return_value = False
 
-                transport = httpx.ASGITransport(app=app)
-                async with httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                ) as client:
-                    response = await client.get(
-                        "/api/collections/test-collection/search/agent/stream",
-                        params={"query": "What changed?"},
-                    )
+                    transport = httpx.ASGITransport(app=app)
+                    async with httpx.AsyncClient(
+                        transport=transport,
+                        base_url="http://testserver",
+                    ) as client:
+                        response = await client.get(
+                            "/api/collections/test-collection/search/agent/stream",
+                            params={"query": "What changed?"},
+                        )
 
         assert response.status_code == 200
         assert response.headers.get("content-type", "").startswith("text/event-stream")

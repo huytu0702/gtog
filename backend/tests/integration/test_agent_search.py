@@ -21,16 +21,17 @@ class TestAgentSearchIntegration:
             yield client
 
     @pytest.mark.asyncio
-    async def test_full_agent_search_flow(self, client):
-        """Test complete agent search from request to response."""
-        # This test verifies the full flow works end-to-end
-        # with mocked external services
-
+    async def test_full_agent_search_flow_with_web_fallback(self, client):
+        """GraphRAG runs first, then web fallback when judge marks insufficient."""
         mock_route = MagicMock()
-        mock_route.method = "web"
+        mock_route.method = "local"
         mock_route.confidence = 0.9
-        mock_route.reasoning = "External information needed"
+        mock_route.reasoning = "Focused entity query"
         mock_route.rewritten_query = "What are the latest FDA regulations?"
+
+        mock_graphrag_result = MagicMock()
+        mock_graphrag_result.response = "I do not have enough indexed information."
+        mock_graphrag_result.context_data = {}
 
         mock_web_result = MagicMock()
         mock_web_result.response = "The FDA regulations..."
@@ -41,24 +42,32 @@ class TestAgentSearchIntegration:
             new_callable=AsyncMock,
         ) as mock_router:
             with patch(
-                "backend.app.routers.search.web_search_service.search",
+                "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
-            ) as mock_web:
-                mock_router.return_value = mock_route
-                mock_web.return_value = mock_web_result
+            ) as mock_local:
+                with patch(
+                    "backend.app.routers.search._should_trigger_web_fallback",
+                    new_callable=AsyncMock,
+                ) as mock_should_fallback:
+                    with patch(
+                        "backend.app.routers.search.web_search_service.search",
+                        new_callable=AsyncMock,
+                    ) as mock_web:
+                        mock_router.return_value = mock_route
+                        mock_local.return_value = mock_graphrag_result
+                        mock_should_fallback.return_value = True
+                        mock_web.return_value = mock_web_result
 
-                response = await client.post(
-                    "/api/collections/test/search/agent",
-                    json={"query": "What are latest FDA regulations?", "stream": False},
-                )
+                        response = await client.post(
+                            "/api/collections/test/search/agent",
+                            json={"query": "What are latest FDA regulations?", "stream": False},
+                        )
 
-                assert response.status_code == 200
-                data = response.json()
-                assert data["method_used"] == "web"
-                assert (
-                    "FDA" in data["response"]
-                    or "regulations" in data["response"].lower()
-                )
+                        assert response.status_code == 200
+                        data = response.json()
+                        assert data["method_used"] == "local"
+                        assert data["web_search_triggered"] is True
+                        assert "FDA" in data["web_response"]
 
     @pytest.mark.asyncio
     async def test_summarize_endpoint_returns_summary_and_trimmed_history(self, client):
@@ -114,29 +123,34 @@ class TestAgentSearchIntegration:
                 "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
             ) as mock_local:
-                mock_router.return_value = mock_route
-                mock_local.return_value = mock_result
+                with patch(
+                    "backend.app.routers.search._should_trigger_web_fallback",
+                    new_callable=AsyncMock,
+                ) as mock_should_fallback:
+                    mock_router.return_value = mock_route
+                    mock_local.return_value = mock_result
+                    mock_should_fallback.return_value = False
 
-                response = await client.post(
-                    "/api/collections/test/search/agent",
-                    json={
-                        "query": "Who directed it?",
-                        "stream": False,
-                        "conversation_summary": "User asked about Inception (2010).",
-                        "conversation_history": [
-                            {"role": "user", "content": "Who starred in it?",
-                             "rewritten_query": "Who starred in Inception?", "method_used": "local"},
-                            {"role": "assistant", "content": "Leonardo DiCaprio."},
-                        ],
-                    },
-                )
+                    response = await client.post(
+                        "/api/collections/test/search/agent",
+                        json={
+                            "query": "Who directed it?",
+                            "stream": False,
+                            "conversation_summary": "User asked about Inception (2010).",
+                            "conversation_history": [
+                                {"role": "user", "content": "Who starred in it?",
+                                 "rewritten_query": "Who starred in Inception?", "method_used": "local"},
+                                {"role": "assistant", "content": "Leonardo DiCaprio."},
+                            ],
+                        },
+                    )
 
-                assert response.status_code == 200
-                args, kwargs = mock_router.call_args
-                assert kwargs.get("conversation_summary") == "User asked about Inception (2010)."
-                history = kwargs.get("conversation_history") or (args[2] if len(args) > 2 else None)
-                assert history is not None
-                assert len(history) == 2
+                    assert response.status_code == 200
+                    args, kwargs = mock_router.call_args
+                    assert kwargs.get("conversation_summary") == "User asked about Inception (2010)."
+                    history = kwargs.get("conversation_history") or (args[2] if len(args) > 2 else None)
+                    assert history is not None
+                    assert len(history) == 2
 
     @pytest.mark.asyncio
     async def test_agent_search_response_includes_rewritten_query(self, client):
@@ -159,17 +173,22 @@ class TestAgentSearchIntegration:
                 "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
             ) as mock_local:
-                mock_router.return_value = mock_route
-                mock_local.return_value = mock_result
+                with patch(
+                    "backend.app.routers.search._should_trigger_web_fallback",
+                    new_callable=AsyncMock,
+                ) as mock_should_fallback:
+                    mock_router.return_value = mock_route
+                    mock_local.return_value = mock_result
+                    mock_should_fallback.return_value = False
 
-                response = await client.post(
-                    "/api/collections/test/search/agent",
-                    json={"query": "Who directed it?", "stream": False},
-                )
+                    response = await client.post(
+                        "/api/collections/test/search/agent",
+                        json={"query": "Who directed it?", "stream": False},
+                    )
 
-                assert response.status_code == 200
-                data = response.json()
-                assert data["rewritten_query"] == "Who directed Inception?"
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data["rewritten_query"] == "Who directed Inception?"
 
     @pytest.mark.asyncio
     async def test_agent_search_uses_rewritten_query_for_search(self, client):
@@ -192,14 +211,19 @@ class TestAgentSearchIntegration:
                 "backend.app.routers.search.query_service.local_search",
                 new_callable=AsyncMock,
             ) as mock_local:
-                mock_router.return_value = mock_route
-                mock_local.return_value = mock_result
+                with patch(
+                    "backend.app.routers.search._should_trigger_web_fallback",
+                    new_callable=AsyncMock,
+                ) as mock_should_fallback:
+                    mock_router.return_value = mock_route
+                    mock_local.return_value = mock_result
+                    mock_should_fallback.return_value = False
 
-                await client.post(
-                    "/api/collections/test/search/agent",
-                    json={"query": "Who directed it?", "stream": False},
-                )
+                    await client.post(
+                        "/api/collections/test/search/agent",
+                        json={"query": "Who directed it?", "stream": False},
+                    )
 
-                args, kwargs = mock_local.call_args
-                query_used = kwargs.get("query") or args[1]
-                assert query_used == "Who directed Inception?"
+                    args, kwargs = mock_local.call_args
+                    query_used = kwargs.get("query") or args[1]
+                    assert query_used == "Who directed Inception?"

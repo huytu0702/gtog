@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any, Union
+from typing import Union
 
 
 @dataclass
@@ -12,13 +12,14 @@ class ExplorationNode:
     depth: int
     score: float
     parent: Union["ExplorationNode", None]
-    relation_from_parent: Union[str, None]
-    relation_full_description: Union[str, None] = None  # Full relationship description
-    entity_full_description: Union[str, None] = (
-        None  # Full entity description from Entity object
-    )
+    relation_from_parent: str | None
+    relation_full_description: str | None = None
+    entity_full_description: str | None = None
+    relation_direction_from_parent: str | None = None
+    relation_source_id: str | None = None
+    relation_target_id: str | None = None
 
-    def get_path(self) -> List[tuple[str, str]]:
+    def get_path(self) -> list[tuple[str, str | None]]:
         """Returns the path from root to this node as (entity, relation) pairs."""
         path = []
         current = self
@@ -27,6 +28,34 @@ class ExplorationNode:
             current = current.parent
         return list(reversed(path))
 
+    def get_relation_history(self) -> list[tuple[str, str, str, str]]:
+        """Return relation history from root to current node."""
+        history = []
+        current = self
+        while current.parent is not None:
+            history.append((
+                current.parent.entity_name,
+                current.relation_from_parent or "related_to",
+                current.entity_name,
+                current.relation_direction_from_parent or "unknown",
+            ))
+            current = current.parent
+        return list(reversed(history))
+
+    def get_relation_history_text(self) -> str:
+        """Return compact relation history text for prompts."""
+        history = self.get_relation_history()
+        if not history:
+            return "None"
+
+        lines = []
+        for parent, relation, child, direction in history:
+            if direction == "incoming":
+                lines.append(f"{parent} <--[{relation}]-- {child}")
+            else:
+                lines.append(f"{parent} --[{relation}]--> {child}")
+        return "\n".join(lines)
+
 
 @dataclass
 class ToGSearchState:
@@ -34,8 +63,8 @@ class ToGSearchState:
 
     query: str
     current_depth: int
-    nodes_by_depth: Dict[int, List[ExplorationNode]]
-    finished_paths: List[ExplorationNode]
+    nodes_by_depth: dict[int, list[ExplorationNode]]
+    finished_paths: list[ExplorationNode]
     max_depth: int
     beam_width: int
 
@@ -45,7 +74,7 @@ class ToGSearchState:
             self.nodes_by_depth[node.depth] = []
         self.nodes_by_depth[node.depth].append(node)
 
-    def get_current_frontier(self) -> List[ExplorationNode]:
+    def get_current_frontier(self) -> list[ExplorationNode]:
         """Get nodes at the current exploration depth."""
         return self.nodes_by_depth.get(self.current_depth, [])
 

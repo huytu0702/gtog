@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -36,6 +37,12 @@ class IndexingService:
     def __init__(self):
         self.control_plane = get_control_plane_repository()
         self.queue_service = queue_service
+        # Local mode: in-memory job state keyed by collection_id
+        self._local_jobs: dict[str, dict[str, Any]] = {}
+
+    @property
+    def _is_local(self) -> bool:
+        return self.control_plane is None and not self.queue_service.is_configured()
 
     @staticmethod
     def _parse_time(value: str | None) -> datetime | None:
@@ -152,8 +159,92 @@ class IndexingService:
             error=job.get("error"),
         )
 
+    def _local_status_response(self, collection_id: str) -> IndexStatusResponse:
+        job = self._local_jobs.get(collection_id, {})
+        return IndexStatusResponse(
+            collection_id=collection_id,
+            job_id=str(job.get("id", "")),
+            status=job.get("status", IndexStatus.PENDING),
+            progress=float(job.get("progress", 0.0)),
+            message=str(job.get("message", "Indexing queued")),
+            attempt=0,
+            max_attempts=1,
+            started_at=job.get("started_at"),
+            completed_at=job.get("completed_at"),
+            error=job.get("error"),
+        )
+
+    async def _run_local_indexing(self, collection_id: str, job_id: str) -> None:
+        """Execute indexing directly in the background for local mode."""
+        job = self._local_jobs[collection_id]
+        job.update({"status": IndexStatus.RUNNING, "progress": 10.0, "message": "Loading configuration...", "started_at": datetime.now(timezone.utc).replace(tzinfo=None)})
+        try:
+            apply_arrow_fix()
+            config = load_graphrag_config(collection_id, use_cloud_vectors=False)
+
+            job.update({"progress": 20.0, "message": "Running indexing pipeline..."})
+            outputs = await api.build_index(
+                config=config,
+                verbose=True,
+                callbacks=[NoopWorkflowCallbacks()],
+            )
+
+            error_messages: list[str] = []
+            for output in outputs:
+                if output.errors:
+                    error_messages.extend([str(err) for err in output.errors])
+
+            if error_messages:
+                job.update({
+                    "status": IndexStatus.FAILED,
+                    "progress": 100.0,
+                    "message": "Indexing failed",
+                    "error": self._sanitize_error("; ".join(error_messages[:3])),
+                    "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                })
+                return
+
+            job.update({"progress": 90.0, "message": "Indexing completed successfully"})
+            try:
+                from .query_service import query_service
+                query_service.invalidate_collection_cache(collection_id)
+            except Exception:
+                logger.exception("Failed to invalidate cache for collection %s", collection_id)
+
+            job.update({
+                "status": IndexStatus.COMPLETED,
+                "progress": 100.0,
+                "message": "Indexing completed successfully",
+                "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            })
+        except Exception as err:
+            logger.exception("Error during local indexing for %s", collection_id)
+            job.update({
+                "status": IndexStatus.FAILED,
+                "progress": 100.0,
+                "message": "Indexing failed",
+                "error": self._sanitize_error(str(err)),
+                "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            })
+        finally:
+            remove_arrow_fix()
+
     async def start_indexing(self, collection_id: str) -> IndexStatusResponse:
         """Persist a durable job, dispatch it, and return current status immediately."""
+        if self._is_local:
+            existing = self._local_jobs.get(collection_id, {})
+            if existing.get("status") == IndexStatus.RUNNING:
+                return self._local_status_response(collection_id)
+            job_id = uuid.uuid4().hex
+            self._local_jobs[collection_id] = {
+                "id": job_id,
+                "status": IndexStatus.PENDING,
+                "progress": 0.0,
+                "message": "Indexing queued",
+            }
+            asyncio.create_task(self._run_local_indexing(collection_id, job_id))
+            return self._local_status_response(collection_id)
+
         self._ensure_dispatch_enabled()
         control_plane = self._require_control_plane()
 
@@ -394,6 +485,10 @@ class IndexingService:
 
     def get_index_status(self, collection_id: str) -> IndexStatusResponse | None:
         """Get the latest indexing status for a collection."""
+        if self._is_local:
+            if collection_id not in self._local_jobs:
+                return None
+            return self._local_status_response(collection_id)
         control_plane = self._require_control_plane()
         latest_job = control_plane.get_latest_indexing_job(collection_id)
         if latest_job is None:
