@@ -66,7 +66,7 @@ function CitationBadge({
             )}
         >
             {dataset} <span className="opacity-70">({ids})</span>
-            <span className="absolute bottom-full left-0 z-50 mb-2 hidden max-h-64 w-80 max-w-[80vw] overflow-y-auto whitespace-pre-wrap border-2 border-black bg-white p-3 text-left text-xs font-medium normal-case text-black shadow-hard group-hover:block">
+            <span className="invisible absolute bottom-full left-0 z-50 block max-h-64 w-80 max-w-[80vw] overflow-y-auto whitespace-pre-wrap border-2 border-black bg-white p-3 text-left text-xs font-medium normal-case text-black opacity-0 shadow-hard transition-opacity group-hover:visible group-hover:opacity-100">
                 {tooltip}
             </span>
         </span>
