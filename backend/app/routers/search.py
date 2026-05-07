@@ -500,6 +500,7 @@ def _build_agent_stream_response(
                     "rewritten_query": route_decision.rewritten_query,
                     "sources": [],
                     "router_reasoning": route_decision.reasoning,
+                    "context_data": result.context_data,
                     "session_id": session_id,
                     "web_search_triggered": web_result is not None,
                     "web_response": web_result.response if web_result else None,

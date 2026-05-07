@@ -61,12 +61,14 @@ function CitationBadge({
     return (
         <span
             className={cn(
-                'inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-bold border rounded-sm mx-0.5 align-middle cursor-help',
+                'group relative inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-bold border rounded-sm mx-0.5 align-middle cursor-help',
                 color
             )}
-            title={tooltip}
         >
             {dataset} <span className="opacity-70">({ids})</span>
+            <span className="absolute bottom-full left-0 z-50 mb-2 hidden max-h-64 w-80 max-w-[80vw] overflow-y-auto whitespace-pre-wrap border-2 border-black bg-white p-3 text-left text-xs font-medium normal-case text-black shadow-hard group-hover:block">
+                {tooltip}
+            </span>
         </span>
     );
 }
@@ -102,6 +104,53 @@ function MessageContent({ text, context }: { text: string; context: ContextLooku
     }
 
     return <p className="whitespace-pre-wrap font-medium leading-relaxed">{parts}</p>;
+}
+
+function MethodBadge({ method, webSearchTriggered }: { method: string; webSearchTriggered?: boolean }) {
+    return (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase">
+            <span className="inline-flex items-center gap-1 border-2 border-black bg-main px-2 py-1 shadow-hard-sm">
+                {method === 'agent' && <Sparkles className="w-3 h-3" />}
+                {method} search
+            </span>
+            {webSearchTriggered && (
+                <span className="inline-flex items-center gap-1 border-2 border-blue-400 bg-blue-100 px-2 py-1 text-blue-700 shadow-hard-sm">
+                    <Globe className="w-3 h-3" />
+                    Web-augmented
+                </span>
+            )}
+        </div>
+    );
+}
+
+function ProcessingStatus({ steps, currentStep, streamError }: {
+    steps: StatusStep[];
+    currentStep?: string;
+    streamError?: string;
+}) {
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center gap-2 font-bold">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Thinking...
+            </div>
+            <div className="space-y-1 text-sm">
+                {steps.map((step, stepIdx) => (
+                    <div key={`${step.step}-${stepIdx}`} className="flex items-center gap-2">
+                        {currentStep === step.step ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                            <span className="w-3 h-3 inline-flex items-center justify-center">•</span>
+                        )}
+                        <span>{step.message}</span>
+                    </div>
+                ))}
+            </div>
+            {streamError && (
+                <div className="text-sm text-red-700 font-bold">Error: {streamError}</div>
+            )}
+        </div>
+    );
 }
 
 interface CollectionChatProps {
@@ -289,7 +338,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                 { role: 'user', content: query },
                 {
                     role: 'bot',
-                    content: STREAMING_PLACEHOLDER,
+                    content: '',
                     statusSteps: [{ step: 'routing', message: 'Analyzing question...' }],
                     currentStep: 'routing',
                 },
@@ -441,33 +490,27 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                 <div className="space-y-2">
                                     <div
                                         className={cn(
-                                            'p-4 border-2 border-black shadow-hard-sm',
-                                            msg.role === 'user' ? 'bg-white' : 'bg-white'
+                                            'p-4 border-2 border-black shadow-hard-sm bg-white',
+                                            msg.statusSteps && msg.role === 'bot' ? 'min-w-72' : ''
                                         )}
                                     >
-                                        <MessageContent text={msg.content} context={(msg.context as ContextLookup | null) ?? null} />
-                                    </div>
-
-                                    {msg.statusSteps && msg.statusSteps.length > 0 && (
-                                        <div className="p-3 border-2 border-black shadow-hard-sm bg-gray-50 text-xs">
-                                            <div className="font-bold mb-2">Processing status</div>
-                                            <div className="space-y-1">
-                                                {msg.statusSteps.map((step, stepIdx) => (
-                                                    <div key={`${step.step}-${stepIdx}`} className="flex items-center gap-2">
-                                                        {msg.currentStep === step.step ? (
-                                                            <Loader2 className="w-3 h-3 animate-spin" />
-                                                        ) : (
-                                                            <span className="w-3 h-3 inline-flex items-center justify-center">•</span>
-                                                        )}
-                                                        <span>{step.message}</span>
-                                                    </div>
-                                                ))}
+                                        {msg.content && (
+                                            <MessageContent text={msg.content} context={(msg.context as ContextLookup | null) ?? null} />
+                                        )}
+                                        {msg.statusSteps && msg.statusSteps.length > 0 && (msg.currentStep || msg.streamError) && (
+                                            <div className={msg.content ? 'mt-3 border-t-2 border-black pt-3' : ''}>
+                                                <ProcessingStatus
+                                                    steps={msg.statusSteps}
+                                                    currentStep={msg.currentStep}
+                                                    streamError={msg.streamError}
+                                                />
                                             </div>
-                                            {msg.streamError && (
-                                                <div className="mt-2 text-red-700 font-bold">Error: {msg.streamError}</div>
-                                            )}
-                                        </div>
-                                    )}
+                                        )}
+                                        {!msg.content && !msg.currentStep && !msg.streamError && (
+                                            <MessageContent text={msg.content} context={(msg.context as ContextLookup | null) ?? null} />
+                                        )}
+                                        {msg.method && <MethodBadge method={msg.method} webSearchTriggered={msg.webSearchTriggered} />}
+                                    </div>
 
                                     {msg.webContent && (
                                         <div className="p-4 border-2 border-black shadow-hard-sm bg-blue-50">
@@ -490,19 +533,6 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                                         </a>
                                                     ))}
                                                 </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {msg.method && (
-                                        <div className="text-xs text-gray-500 font-bold flex items-center gap-2">
-                                            {msg.method === 'agent' && <Sparkles className="w-3 h-3" />}
-                                            Used {msg.method} search
-                                            {msg.webSearchTriggered && (
-                                                <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 border border-blue-400 text-blue-700 rounded text-xs font-bold">
-                                                    <Globe className="w-3 h-3" />
-                                                    Web-augmented
-                                                </span>
                                             )}
                                         </div>
                                     )}

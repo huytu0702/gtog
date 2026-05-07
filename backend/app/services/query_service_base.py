@@ -110,11 +110,10 @@ def _serialize_context_records(
                 name = f"{source} → {target}" if source and target else source or target
             else:
                 name = str(row.get(name_col, "")) if name_col in df.columns else short_id
-            desc = (
-                str(row.get(desc_col, ""))
-                if desc_col and desc_col in df.columns
-                else ""
-            )
+            raw_desc = row.get(desc_col, "") if desc_col and desc_col in df.columns else ""
+            desc = _non_empty_text(raw_desc)
+            if key_lower == "reports" and not desc:
+                desc = _non_empty_text(row.get("full_content"))
             lookup[short_id] = {"name": name, "description": desc}
         result[key] = lookup
     return result or None

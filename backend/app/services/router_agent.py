@@ -20,7 +20,7 @@ SearchMethodType = Literal["local", "global", "tog", "drift"]
 
 RECENT_TURNS_IN_PROMPT = 3  # user turns to include in prompt (after summary)
 _LLM_MAX_TOKENS = 500
-_LLM_TEMPERATURE = 0.1
+_DEFAULT_LLM_TEMPERATURE = 0.1
 _LLM_MAX_RETRIES = 3
 _LLM_RETRY_BASE_DELAY = 1.0
 _CONTEXT_REFERENCE_PATTERN = re.compile(
@@ -45,6 +45,12 @@ class RouterAgent:
     def __init__(self):
         """Initialize the router agent."""
         self.prompt_template = self._load_prompt()
+
+    def _temperature_for_model(self, model_name: str) -> float:
+        normalized = model_name.split("/", 1)[-1].strip().lower()
+        if normalized.startswith("gpt-5"):
+            return 1.0
+        return _DEFAULT_LLM_TEMPERATURE
 
     def _load_prompt(self) -> str:
         """Load the router prompt template."""
@@ -136,12 +142,13 @@ Collection: {collection_context}
         max_retries = _LLM_MAX_RETRIES
         base_delay = _LLM_RETRY_BASE_DELAY
 
+        model_name = settings.query_chat_model_litellm
         for attempt in range(max_retries + 1):
             try:
                 response = await acompletion(
-                    model=settings.query_chat_model_litellm,
+                    model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=_LLM_TEMPERATURE,
+                    temperature=self._temperature_for_model(model_name),
                     max_tokens=_LLM_MAX_TOKENS,  # Increased for more complete responses
                     api_key=settings.query_chat_model_api_key,
                     response_format={"type": "json_object"},  # Force JSON output
@@ -169,9 +176,9 @@ Collection: {collection_context}
                         "response_format not supported, falling back to standard completion"
                     )
                     return await acompletion(
-                        model=settings.query_chat_model_litellm,
+                        model=model_name,
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=_LLM_TEMPERATURE,
+                        temperature=self._temperature_for_model(model_name),
                         max_tokens=_LLM_MAX_TOKENS,
                         api_key=settings.query_chat_model_api_key,
                     )

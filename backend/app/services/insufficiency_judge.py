@@ -37,6 +37,12 @@ class InsufficiencyJudge:
             return model_name.split("/", 1)[0].strip().lower()
         return settings.query_chat_model_provider
 
+    def _temperature_for_model(self, model_name: str) -> float:
+        normalized = model_name.split("/", 1)[-1].strip().lower()
+        if normalized.startswith("gpt-5"):
+            return 1.0
+        return settings.insufficiency_judge_temperature
+
     def _load_prompt(self) -> str:
         prompt_path = (
             Path(__file__).parent.parent.parent
@@ -65,7 +71,7 @@ class InsufficiencyJudge:
                     acompletion(
                         model=model_name,
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=settings.insufficiency_judge_temperature,
+                        temperature=self._temperature_for_model(model_name),
                         max_tokens=settings.insufficiency_judge_max_tokens,
                         api_key=api_key,
                         response_format={"type": "json_object"},
@@ -84,7 +90,7 @@ class InsufficiencyJudge:
                         acompletion(
                             model=model_name,
                             messages=[{"role": "user", "content": prompt}],
-                            temperature=settings.insufficiency_judge_temperature,
+                            temperature=self._temperature_for_model(model_name),
                             max_tokens=settings.insufficiency_judge_max_tokens,
                             api_key=api_key,
                         ),
