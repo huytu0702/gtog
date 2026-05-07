@@ -14,6 +14,8 @@ import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { NBInput } from '@/components/ui/NBInput';
 import { Send, Bot, User, Settings, Loader2, Globe, Sparkles, ChevronDown } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 
 const DATASET_COLORS: Record<string, string> = {
@@ -77,6 +79,24 @@ function CitationBadge({
 const CITATION_RE = /\[Data:\s*((?:[^[\]]+?))\]/g;
 const ENTRY_RE = /([A-Za-z]+)\s*\(([^)]+)\)/g;
 
+const MARKDOWN_COMPONENTS = {
+    p: ({ children }: { children?: React.ReactNode }) => <span className="font-medium leading-relaxed">{children}</span>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-2 list-disc pl-5">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-2 list-decimal pl-5">{children}</ol>,
+    li: ({ children }: { children?: React.ReactNode }) => <li className="mb-1">{children}</li>,
+    h1: ({ children }: { children?: React.ReactNode }) => <h1 className="mb-2 block text-xl font-bold">{children}</h1>,
+    h2: ({ children }: { children?: React.ReactNode }) => <h2 className="mb-2 block text-lg font-bold">{children}</h2>,
+    h3: ({ children }: { children?: React.ReactNode }) => <h3 className="mb-2 block text-base font-bold">{children}</h3>,
+    code: ({ children }: { children?: React.ReactNode }) => <code className="rounded bg-gray-100 px-1 py-0.5 text-sm">{children}</code>,
+    pre: ({ children }: { children?: React.ReactNode }) => <pre className="mb-2 overflow-x-auto rounded border-2 border-black bg-gray-50 p-3">{children}</pre>,
+    a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+        <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 underline hover:text-blue-800">
+            {children}
+        </a>
+    ),
+    blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="mb-2 border-l-4 border-black pl-3 italic">{children}</blockquote>,
+};
+
 function MessageContent({ text, context }: { text: string; context: ContextLookup | null }) {
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
@@ -85,8 +105,18 @@ function MessageContent({ text, context }: { text: string; context: ContextLooku
     const citationRe = new RegExp(CITATION_RE.source, 'g');
     while ((match = citationRe.exec(text)) !== null) {
         if (match.index > lastIndex) {
-            parts.push(text.slice(lastIndex, match.index));
+            const markdownChunk = text.slice(lastIndex, match.index);
+            parts.push(
+                <ReactMarkdown
+                    key={`md-${match.index}`}
+                    remarkPlugins={[remarkGfm]}
+                    components={MARKDOWN_COMPONENTS}
+                >
+                    {markdownChunk}
+                </ReactMarkdown>
+            );
         }
+
         const inner = match[1];
         const badges: React.ReactNode[] = [];
         const entryRe = new RegExp(ENTRY_RE.source, 'g');
@@ -96,14 +126,24 @@ function MessageContent({ text, context }: { text: string; context: ContextLooku
                 <CitationBadge key={badges.length} dataset={entryMatch[1]} ids={entryMatch[2]} context={context} />
             );
         }
-        parts.push(<span key={match.index}>{badges}</span>);
+        parts.push(<span key={`citation-${match.index}`}>{badges}</span>);
         lastIndex = match.index + match[0].length;
     }
+
     if (lastIndex < text.length) {
-        parts.push(text.slice(lastIndex));
+        const markdownChunk = text.slice(lastIndex);
+        parts.push(
+            <ReactMarkdown
+                key="md-tail"
+                remarkPlugins={[remarkGfm]}
+                components={MARKDOWN_COMPONENTS}
+            >
+                {markdownChunk}
+            </ReactMarkdown>
+        );
     }
 
-    return <p className="whitespace-pre-wrap font-medium leading-relaxed">{parts}</p>;
+    return <div className="whitespace-pre-wrap">{parts}</div>;
 }
 
 function MethodBadge({ method, webSearchTriggered }: { method: string; webSearchTriggered?: boolean }) {
