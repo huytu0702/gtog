@@ -2,7 +2,14 @@
 
 import React from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { searchApi, Collection, SearchResult, ConversationTurn } from '@/lib/api';
+import {
+    searchApi,
+    Collection,
+    SearchResult,
+    ConversationTurn,
+    AgentSearchResult,
+    AgentStreamStatusEvent,
+} from '@/lib/api';
 import { NBButton } from '@/components/ui/NBButton';
 import { NBCard } from '@/components/ui/NBCard';
 import { NBInput } from '@/components/ui/NBInput';
@@ -73,16 +80,16 @@ function MessageContent({ text, context }: { text: string; context: ContextLooku
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
-    CITATION_RE.lastIndex = 0;
-    while ((match = CITATION_RE.exec(text)) !== null) {
+    const citationRe = new RegExp(CITATION_RE.source, 'g');
+    while ((match = citationRe.exec(text)) !== null) {
         if (match.index > lastIndex) {
             parts.push(text.slice(lastIndex, match.index));
         }
         const inner = match[1];
         const badges: React.ReactNode[] = [];
+        const entryRe = new RegExp(ENTRY_RE.source, 'g');
         let entryMatch: RegExpExecArray | null;
-        ENTRY_RE.lastIndex = 0;
-        while ((entryMatch = ENTRY_RE.exec(inner)) !== null) {
+        while ((entryMatch = entryRe.exec(inner)) !== null) {
             badges.push(
                 <CitationBadge key={badges.length} dataset={entryMatch[1]} ids={entryMatch[2]} context={context} />
             );
@@ -101,20 +108,48 @@ interface CollectionChatProps {
     collection: Collection;
 }
 
+type StatusStep = {
+    step: string;
+    message: string;
+    method?: string;
+};
+
 type Message = {
     role: 'user' | 'bot';
     content: string;
-    context?: any;
+    context?: Record<string, unknown> | null;
     method?: string;
     webContent?: string;
     webSources?: Array<{ id: number; title: string; url?: string }>;
     webSearchTriggered?: boolean;
+    statusSteps?: StatusStep[];
+    currentStep?: string;
+    streamError?: string;
 };
 
 type SearchMethod = 'global' | 'local' | 'tog' | 'drift' | 'agent';
 
 // Summarize when history exceeds this many user turns
 const SUMMARIZE_THRESHOLD = 6;
+
+const STREAMING_PLACEHOLDER = 'Preparing response...';
+
+function formatStatusMessage(event: AgentStreamStatusEvent): string {
+    switch (event.step) {
+        case 'routing':
+            return 'Analyzing question...';
+        case 'routed':
+            return event.method ? `Selected ${event.method.toUpperCase()} search...` : 'Selected search method...';
+        case 'searching':
+            return 'Searching knowledge graph...';
+        case 'judging_sufficiency':
+            return 'Checking information sufficiency...';
+        case 'web_searching':
+            return 'Searching the web for additional context...';
+        default:
+            return event.message || 'Processing...';
+    }
+}
 
 export function CollectionChat({ collection }: CollectionChatProps) {
     const [messages, setMessages] = React.useState<Message[]>([
@@ -132,12 +167,47 @@ export function CollectionChat({ collection }: CollectionChatProps) {
     const [convHistory, setConvHistory] = React.useState<ConversationTurn[]>([]);
     const [convSummary, setConvSummary] = React.useState<string | undefined>(undefined);
     const scrollRef = React.useRef<HTMLDivElement>(null);
+    const streamAbortRef = React.useRef<AbortController | null>(null);
+    const streamingMessageIndexRef = React.useRef<number | null>(null);
 
     React.useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
+
+    React.useEffect(() => () => {
+        streamAbortRef.current?.abort();
+    }, []);
+
+    const updateConversation = React.useCallback(async (query: string, methodUsed: string, response: string, rewrittenQuery?: string) => {
+        const userTurn: ConversationTurn = {
+            role: 'user',
+            content: query,
+            rewritten_query: rewrittenQuery,
+            method_used: methodUsed,
+        };
+        const assistantTurn: ConversationTurn = {
+            role: 'assistant',
+            content: response,
+        };
+        const newHistory = [...convHistory, userTurn, assistantTurn];
+        const userTurnCount = newHistory.filter((t) => t.role === 'user').length;
+
+        if (userTurnCount >= SUMMARIZE_THRESHOLD) {
+            try {
+                const result = await searchApi.summarize(collection.id, newHistory, convSummary);
+                setConvSummary(result.summary);
+                setConvHistory(result.trimmed_history);
+                return;
+            } catch {
+                setConvHistory(newHistory);
+                return;
+            }
+        }
+
+        setConvHistory(newHistory);
+    }, [collection.id, convHistory, convSummary]);
 
     const searchMutation = useMutation({
         mutationFn: async (query: string) => {
@@ -155,57 +225,34 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
             return fetchBase();
         },
-        onSuccess: async (data: SearchResult | any, query: string) => {
-            const methodUsed = data.method_used || data.method;
-            const reasoning = data.router_reasoning;
-            let content = data.response;
-
-            // Add reasoning for agent search
-            if (reasoning) {
-                content = `[${methodUsed.toUpperCase()} search selected: ${reasoning}]\n\n${content}`;
-            }
+        onSuccess: async (data: SearchResult | AgentSearchResult, query: string) => {
+            const methodUsed = 'method_used' in data ? data.method_used : data.method;
+            const reasoning = 'router_reasoning' in data ? data.router_reasoning : undefined;
+            const content = data.response;
 
             setMessages((prev) => [
                 ...prev,
                 {
                     role: 'bot',
                     content,
-                    context: data.context_data,
+                    context: 'context_data' in data ? data.context_data : null,
                     method: methodUsed,
-                    webContent: (data as any).web_response ?? undefined,
-                    webSources: (data as any).web_sources ?? undefined,
-                    webSearchTriggered: (data as any).web_search_triggered ?? false,
+                    webContent: 'web_response' in data ? data.web_response ?? undefined : undefined,
+                    webSources: 'web_sources' in data ? data.web_sources ?? undefined : undefined,
+                    webSearchTriggered: 'web_search_triggered' in data ? data.web_search_triggered ?? false : false,
+                    statusSteps: reasoning
+                        ? [{ step: 'routed', message: `[${methodUsed.toUpperCase()} search selected: ${reasoning}]`, method: methodUsed }]
+                        : undefined,
                 },
             ]);
 
-            // Update conversation history for agent method
             if (method === 'agent') {
-                const userTurn: ConversationTurn = {
-                    role: 'user',
-                    content: query,
-                    rewritten_query: data.rewritten_query,
-                    method_used: methodUsed,
-                };
-                const assistantTurn: ConversationTurn = {
-                    role: 'assistant',
-                    content: data.response,
-                };
-                const newHistory = [...convHistory, userTurn, assistantTurn];
-
-                // Count user turns
-                const userTurnCount = newHistory.filter(t => t.role === 'user').length;
-                if (userTurnCount >= SUMMARIZE_THRESHOLD) {
-                    try {
-                        const result = await searchApi.summarize(collection.id, newHistory, convSummary);
-                        setConvSummary(result.summary);
-                        setConvHistory(result.trimmed_history);
-                    } catch {
-                        // On summarization failure, keep history as-is
-                        setConvHistory(newHistory);
-                    }
-                } else {
-                    setConvHistory(newHistory);
-                }
+                await updateConversation(
+                    query,
+                    methodUsed,
+                    data.response,
+                    'rewritten_query' in data ? data.rewritten_query : undefined,
+                );
             }
         },
         onError: (error: Error) => {
@@ -216,12 +263,150 @@ export function CollectionChat({ collection }: CollectionChatProps) {
         },
     });
 
-    const handleSend = (e: React.FormEvent) => {
+    const updateStreamingMessage = React.useCallback((updater: (message: Message) => Message) => {
+        const index = streamingMessageIndexRef.current;
+        if (index === null) return;
+
+        setMessages((prev) => {
+            if (!prev[index] || prev[index].role !== 'bot') return prev;
+            const updated = updater(prev[index]);
+            const next = [...prev];
+            next[index] = updated;
+            return next;
+        });
+    }, []);
+
+    const handleAgentStream = React.useCallback(async (query: string) => {
+        setIsStreaming(true);
+        const abortController = new AbortController();
+        streamAbortRef.current = abortController;
+
+        setMessages((prev) => {
+            const startIndex = prev.length + 1;
+            streamingMessageIndexRef.current = startIndex;
+            return [
+                ...prev,
+                { role: 'user', content: query },
+                {
+                    role: 'bot',
+                    content: STREAMING_PLACEHOLDER,
+                    statusSteps: [{ step: 'routing', message: 'Analyzing question...' }],
+                    currentStep: 'routing',
+                },
+            ];
+        });
+
+        let finalMethodUsed = 'agent';
+        let finalRewrittenQuery: string | undefined;
+        let finalResponse = '';
+
+        try {
+            await searchApi.agentStreamPost(
+                collection.id,
+                query,
+                {
+                    onStatus: (event) => {
+                        const mappedMessage = formatStatusMessage(event);
+                        updateStreamingMessage((message) => {
+                            const prevSteps = message.statusSteps ?? [];
+                            const exists = prevSteps.some((step) => step.step === event.step);
+                            const nextSteps = exists
+                                ? prevSteps.map((step) => (
+                                    step.step === event.step
+                                        ? { step: event.step, message: mappedMessage, method: event.method }
+                                        : step
+                                ))
+                                : [...prevSteps, { step: event.step, message: mappedMessage, method: event.method }];
+
+                            const content = message.content === STREAMING_PLACEHOLDER ? '' : message.content;
+                            return {
+                                ...message,
+                                content,
+                                currentStep: event.step,
+                                method: event.method ?? message.method,
+                                statusSteps: nextSteps,
+                            };
+                        });
+                    },
+                    onContent: (event) => {
+                        finalResponse += event.chunk;
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            content: finalResponse,
+                        }));
+                    },
+                    onDone: (event) => {
+                        finalMethodUsed = event.method_used || finalMethodUsed;
+                        finalRewrittenQuery = event.rewritten_query;
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            content: finalResponse || message.content || 'No response content returned.',
+                            currentStep: undefined,
+                            context: event.context_data ?? null,
+                            method: event.method_used,
+                            webContent: event.web_response ?? undefined,
+                            webSources: event.web_sources ?? undefined,
+                            webSearchTriggered: event.web_search_triggered ?? false,
+                            statusSteps: event.router_reasoning
+                                ? [
+                                    ...(message.statusSteps ?? []),
+                                    {
+                                        step: 'reasoning',
+                                        message: `[${event.method_used.toUpperCase()} search selected: ${event.router_reasoning}]`,
+                                        method: event.method_used,
+                                    },
+                                ]
+                                : message.statusSteps,
+                        }));
+                    },
+                    onError: (event) => {
+                        streamAbortRef.current?.abort();
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            currentStep: undefined,
+                            streamError: event.error,
+                            content: message.content && message.content !== STREAMING_PLACEHOLDER
+                                ? message.content
+                                : `Error: ${event.error}`,
+                        }));
+                    },
+                },
+                convHistory,
+                convSummary,
+                abortController.signal,
+            );
+
+            if (finalResponse) {
+                await updateConversation(query, finalMethodUsed, finalResponse, finalRewrittenQuery);
+            }
+        } catch (error) {
+            if ((error as Error).name !== 'AbortError') {
+                updateStreamingMessage((message) => ({
+                    ...message,
+                    currentStep: undefined,
+                    streamError: (error as Error).message,
+                    content: `Error: ${(error as Error).message}`,
+                }));
+            }
+        } finally {
+            setIsStreaming(false);
+            streamAbortRef.current = null;
+            streamingMessageIndexRef.current = null;
+        }
+    }, [collection.id, convHistory, convSummary, updateConversation, updateStreamingMessage]);
+
+    const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || searchMutation.isPending) return;
+        if (!input.trim() || searchMutation.isPending || isStreaming) return;
 
         const query = input;
         setInput('');
+
+        if (method === 'agent') {
+            await handleAgentStream(query);
+            return;
+        }
+
         setMessages((prev) => [...prev, { role: 'user', content: query }]);
         searchMutation.mutate(query);
     };
@@ -260,8 +445,29 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                             msg.role === 'user' ? 'bg-white' : 'bg-white'
                                         )}
                                     >
-                                        <MessageContent text={msg.content} context={msg.context ?? null} />
+                                        <MessageContent text={msg.content} context={(msg.context as ContextLookup | null) ?? null} />
                                     </div>
+
+                                    {msg.statusSteps && msg.statusSteps.length > 0 && (
+                                        <div className="p-3 border-2 border-black shadow-hard-sm bg-gray-50 text-xs">
+                                            <div className="font-bold mb-2">Processing status</div>
+                                            <div className="space-y-1">
+                                                {msg.statusSteps.map((step, stepIdx) => (
+                                                    <div key={`${step.step}-${stepIdx}`} className="flex items-center gap-2">
+                                                        {msg.currentStep === step.step ? (
+                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                        ) : (
+                                                            <span className="w-3 h-3 inline-flex items-center justify-center">•</span>
+                                                        )}
+                                                        <span>{step.message}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {msg.streamError && (
+                                                <div className="mt-2 text-red-700 font-bold">Error: {msg.streamError}</div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {msg.webContent && (
                                         <div className="p-4 border-2 border-black shadow-hard-sm bg-blue-50">
@@ -304,7 +510,7 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                             </div>
                         ))}
 
-                        {searchMutation.isPending && (
+                        {searchMutation.isPending && method !== 'agent' && (
                             <div className="flex gap-4 max-w-[80%]">
                                 <div className="w-10 h-10 bg-main border-2 border-black flex items-center justify-center flex-shrink-0 shadow-hard-sm">
                                     <Bot className="w-6 h-6" />
@@ -325,9 +531,9 @@ export function CollectionChat({ collection }: CollectionChatProps) {
                                 onChange={(e) => setInput(e.target.value)}
                                 placeholder="Ask a question..."
                                 className="flex-1"
-                                disabled={searchMutation.isPending}
+                                disabled={searchMutation.isPending || isStreaming}
                             />
-                            <NBButton type="submit" disabled={searchMutation.isPending || !input.trim()}>
+                            <NBButton type="submit" disabled={searchMutation.isPending || isStreaming || !input.trim()}>
                                 <Send className="w-5 h-5" />
                             </NBButton>
                         </form>
