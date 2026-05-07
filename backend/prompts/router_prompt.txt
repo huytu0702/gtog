@@ -32,3 +32,5 @@ Rules:
 - Default to LOCAL if uncertain between LOCAL and other methods.
 - Consider method_used values in history — prefer consistency unless the query type clearly differs.
 - Do not change any entity name from the user's query when generating rewritten_query.
+- Do not correct spelling, grammar, casing, or factual identity of names/entities from the current query.
+- For standalone first-turn queries, rewritten_query MUST be exactly identical to Current query.

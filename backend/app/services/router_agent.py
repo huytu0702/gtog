@@ -3,9 +3,10 @@
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from litellm import acompletion
 from litellm.exceptions import RateLimitError
@@ -22,6 +23,10 @@ _LLM_MAX_TOKENS = 500
 _LLM_TEMPERATURE = 0.1
 _LLM_MAX_RETRIES = 3
 _LLM_RETRY_BASE_DELAY = 1.0
+_CONTEXT_REFERENCE_PATTERN = re.compile(
+    r"\b(it|its|he|him|his|she|her|hers|they|them|their|theirs|this|that|these|those)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -57,6 +62,15 @@ Methods: local, global, tog, drift
 Query: {query}
 Collection: {collection_context}
 {conversation_history_block}"""
+
+    def _should_preserve_standalone_query(
+        self,
+        query: str,
+        conversation_history: list[ConversationTurn] | None,
+        conversation_summary: str | None,
+    ) -> bool:
+        has_context = bool(conversation_history or conversation_summary)
+        return not has_context and not _CONTEXT_REFERENCE_PATTERN.search(query)
 
     def _format_history_block(
         self,
@@ -194,8 +208,9 @@ Collection: {collection_context}
             conversation_history_block=history_block,
         )
 
+        content = ""
         try:
-            response = await self._call_llm(prompt)
+            response: Any = await self._call_llm(prompt)
             content = response.choices[0].message.content
 
             # Log the raw response for debugging
@@ -229,6 +244,12 @@ Collection: {collection_context}
                 method = "local"
 
             rewritten_query = decision.get("rewritten_query") or query
+            if self._should_preserve_standalone_query(
+                query,
+                conversation_history,
+                conversation_summary,
+            ):
+                rewritten_query = query
 
             return RouteDecision(
                 method=method,

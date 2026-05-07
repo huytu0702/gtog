@@ -65,8 +65,8 @@ class TestRouterAgent:
             )
 
     @pytest.mark.asyncio
-    async def test_route_identifies_web_search_query(self, router_agent):
-        """route() should identify queries needing web search."""
+    async def test_route_defaults_web_method_to_local(self, router_agent):
+        """route() should keep unsupported web method inside GraphRAG routing."""
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[
@@ -82,7 +82,7 @@ class TestRouterAgent:
                 "What are the latest FDA regulations?", "herbs collection"
             )
 
-            assert result.method == "web"
+            assert result.method == "local"
 
     def test_format_history_block_empty(self, router_agent):
         """Returns empty string when no history and no summary."""
@@ -133,7 +133,7 @@ class TestRouterAgent:
         assert "Question 4" in result
 
     @pytest.mark.asyncio
-    async def test_route_returns_rewritten_query(self, router_agent):
+    async def test_route_returns_rewritten_query_for_context_reference(self, router_agent):
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = (
@@ -144,6 +144,19 @@ class TestRouterAgent:
             mock_llm.return_value = mock_response
             result = await router_agent.route("Who directed it?", "movies collection")
             assert result.rewritten_query == "Who directed Inception?"
+
+    @pytest.mark.asyncio
+    async def test_route_preserves_standalone_entity_name_without_context(self, router_agent):
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            '{"rewritten_query": "who is justin bieber", '
+            '"method": "local", "confidence": 0.9, "reasoning": "entity query"}'
+        )
+        with patch.object(router_agent, "_call_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = mock_response
+            result = await router_agent.route("who is justin beiber", "demo collection")
+            assert result.rewritten_query == "who is justin beiber"
 
     @pytest.mark.asyncio
     async def test_route_falls_back_to_original_query_when_rewrite_missing(self, router_agent):
