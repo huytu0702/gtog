@@ -119,6 +119,7 @@ extract_graph_nlp:
 
 cluster_graph:
   max_cluster_size: 10
+  use_lcc: false
 
 extract_claims:
   enabled: false

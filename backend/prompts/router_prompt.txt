@@ -31,3 +31,4 @@ Rules:
 - Use DRIFT only when LOCAL might miss important related context.
 - Default to LOCAL if uncertain between LOCAL and other methods.
 - Consider method_used values in history — prefer consistency unless the query type clearly differs.
+- Do not change any entity name from the user's query when generating rewritten_query.
