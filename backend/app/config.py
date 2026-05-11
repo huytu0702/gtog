@@ -113,6 +113,16 @@ class Settings(BaseSettings):
     insufficiency_judge_max_response_chars: int = 6000
     web_fallback_enabled: bool = True
 
+    # AI Guardrails
+    ai_guardrails_enabled: bool = False
+    ai_guardrails_mode: str = "shadow"
+    ai_guardrails_fail_mode: str = "open"
+    ai_guardrails_config_path: str = str(_BACKEND_DIR / "app" / "guardrails")
+    ai_guardrails_timeout_seconds: int = 8
+    ai_guardrails_log_decisions: bool = True
+    ai_guardrails_block_web_on_sensitive_query: bool = True
+    ai_guardrails_return_metadata: bool = False
+
     # Server Configuration
     host: str = "0.0.0.0"
     port: int = 8000

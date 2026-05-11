@@ -105,6 +105,25 @@ class TestToGDebugEndpoint:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
+    async def test_tog_debug_returns_generic_500_when_preview_fails(self):
+        with patch("backend.app.routers.search.settings.enable_tog_debug_endpoint", True):
+            with patch(
+                "backend.app.routers.search.query_service.get_tog_entities_preview",
+                side_effect=RuntimeError("secret path /tmp/internal"),
+            ):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.get(
+                        "/api/collections/test-collection/search/tog/debug"
+                    )
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error"
+
+    @pytest.mark.asyncio
     async def test_tog_debug_returns_data_when_enabled(self):
         with patch("backend.app.routers.search.settings.enable_tog_debug_endpoint", True):
             with patch(
@@ -157,6 +176,25 @@ class TestSearchErrorMapping:
                 )
 
         assert response.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_global_returns_generic_500_when_unknown_error_occurs(self):
+        with patch(
+            "backend.app.routers.search.query_service.global_search",
+            new=AsyncMock(side_effect=RuntimeError("secret path /tmp/internal")),
+        ):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/global",
+                    json={"query": "hello"},
+                )
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error"
 
     @pytest.mark.asyncio
     async def test_local_returns_400_when_vector_store_runtime_config_invalid(self):
