@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-01T13:03:41.478690+00:00",
+    "input_file": "F:\\KL\\gtog-eval\\eval_results_medical_sub_set_2\\eval_results_ragas_detailed.json",
+    "model": "gpt-5.2",
+    "base_url": "http://127.0.0.1:8317/v1",
+    "settings_path": "F:\\KL\\gtog-eval\\medical_graphrag_project\\settings.yaml"
+  },
+  "overall": {
+    "count": 50,
+    "success_count": 50,
+    "fail_count": 0,
+    "skip_count": 0
+  },
+  "by_method": {
+    "tog": {
+      "count": 50,
+      "success_count": 50,
+      "fail_count": 0,
+      "skip_count": 0,
+      "context_precision": 0.98,
+      "context_recall": 0.94,
+      "faithfulness": 0.889619,
+      "answer_relevancy": 0.913155,
+      "answer_correctness_custom": 0.82
+    }
+  }
+}
