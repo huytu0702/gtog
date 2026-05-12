@@ -1,0 +1,13 @@
+dataset:
+  path: ../questions/benchmark_questions.json
+indexes:
+  default: F:/KL/gtog-eval/benchmarks/nlp_graph
+methods:
+- local
+- basic
+- tog
+output:
+  dir: F:/KL/gtog-eval/benchmarks/reports/nlp_graph_query
+  save_intermediate: true
+judge:
+  temperature: 0.0

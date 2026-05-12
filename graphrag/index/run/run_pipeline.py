@@ -9,6 +9,7 @@ import re
 import time
 from collections.abc import AsyncIterable
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -19,6 +20,10 @@ from graphrag.index.run.utils import create_run_context
 from graphrag.index.typing.context import PipelineRunContext
 from graphrag.index.typing.pipeline import Pipeline
 from graphrag.index.typing.pipeline_run_result import PipelineRunResult
+from graphrag.language_model.providers.litellm.request_wrappers.usage_logging import (
+    set_usage_log_path,
+    set_usage_workflow,
+)
 from graphrag.storage.pipeline_storage import PipelineStorage
 from graphrag.utils.api import create_cache_from_config, create_storage_from_config
 from graphrag.utils.storage import load_table_from_storage, write_table_to_storage
@@ -93,12 +98,16 @@ async def run_pipeline(
             state=state,
         )
 
-    async for table in _run_pipeline(
-        pipeline=pipeline,
-        config=config,
-        context=context,
-    ):
-        yield table
+    usage_path_token = set_usage_log_path(Path(config.output.base_dir) / "llm_usage.jsonl")
+    try:
+        async for table in _run_pipeline(
+            pipeline=pipeline,
+            config=config,
+            context=context,
+        ):
+            yield table
+    finally:
+        set_usage_log_path(None, usage_path_token)
 
 
 async def _run_pipeline(
@@ -116,17 +125,21 @@ async def _run_pipeline(
         logger.info("Executing pipeline...")
         for name, workflow_function in pipeline.run():
             last_workflow = name
-            context.callbacks.workflow_start(name, None)
-            work_time = time.time()
-            result = await workflow_function(config, context)
-            context.callbacks.workflow_end(name, result)
-            yield PipelineRunResult(
-                workflow=name, result=result.result, state=context.state, errors=None
-            )
-            context.stats.workflows[name] = {"overall": time.time() - work_time}
-            if result.stop:
-                logger.info("Halting pipeline at workflow request")
-                break
+            workflow_token = set_usage_workflow(name)
+            try:
+                context.callbacks.workflow_start(name, None)
+                work_time = time.time()
+                result = await workflow_function(config, context)
+                context.callbacks.workflow_end(name, result)
+                yield PipelineRunResult(
+                    workflow=name, result=result.result, state=context.state, errors=None
+                )
+                context.stats.workflows[name] = {"overall": time.time() - work_time}
+                if result.stop:
+                    logger.info("Halting pipeline at workflow request")
+                    break
+            finally:
+                set_usage_workflow(None, workflow_token)
 
         context.stats.total_runtime = time.time() - start_time
         logger.info("Indexing pipeline complete.")

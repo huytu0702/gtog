@@ -1,0 +1,12 @@
+[
+  {
+    "question": "Who treats Luna at Maple Clinic and what treatment is used?",
+    "ground_truth": "Dr. Mira Nguyen treats Luna with cetirizine and weekly skin checks.",
+    "context": "Luna is treated at Maple Clinic for seasonal allergies."
+  },
+  {
+    "question": "Which pharmacy supplies cetirizine to Maple Clinic?",
+    "ground_truth": "Oak Pharmacy supplies cetirizine tablets to Maple Clinic every Monday.",
+    "context": "Maple Clinic collaborates with Oak Pharmacy."
+  }
+]

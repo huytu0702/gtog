@@ -181,6 +181,8 @@ def _create_completions(
     completion, acompletion = with_logging(
         sync_fn=completion,
         async_fn=acompletion,
+        model_config=model_config,
+        request_type="chat",
     )
 
     return (completion, acompletion)

@@ -63,13 +63,13 @@ def with_cache(
         ):
             try:
                 if request_type == "chat":
-                    return ModelResponse(**cached_response["response"])
-                return EmbeddingResponse(**cached_response["response"])
+                    return _mark_cache_hit(ModelResponse(**cached_response["response"]), True)
+                return _mark_cache_hit(EmbeddingResponse(**cached_response["response"]), True)
             except Exception:  # noqa: BLE001
                 # Try to retrieve value from cache but if it fails, continue
                 # to make the request.
                 ...
-        response = sync_fn(**kwargs)
+        response = _mark_cache_hit(sync_fn(**kwargs), False)
         event_loop.run_until_complete(
             cache.set(cache_key, {"response": response.model_dump()})
         )
@@ -94,14 +94,19 @@ def with_cache(
         ):
             try:
                 if request_type == "chat":
-                    return ModelResponse(**cached_response["response"])
-                return EmbeddingResponse(**cached_response["response"])
+                    return _mark_cache_hit(ModelResponse(**cached_response["response"]), True)
+                return _mark_cache_hit(EmbeddingResponse(**cached_response["response"]), True)
             except Exception:  # noqa: BLE001
                 # Try to retrieve value from cache but if it fails, continue
                 # to make the request.
                 ...
-        response = await async_fn(**kwargs)
+        response = _mark_cache_hit(await async_fn(**kwargs), False)
         await cache.set(cache_key, {"response": response.model_dump()})
         return response
 
     return (_wrapped_with_cache, _wrapped_with_cache_async)
+
+
+def _mark_cache_hit(response: Any, cache_hit: bool) -> Any:
+    object.__setattr__(response, "_graphrag_cache_hit", cache_hit)
+    return response

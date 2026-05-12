@@ -167,6 +167,8 @@ def _create_embeddings(
     embedding, aembedding = with_logging(
         sync_fn=embedding,
         async_fn=aembedding,
+        model_config=model_config,
+        request_type="embedding",
     )
 
     return (embedding, aembedding)
