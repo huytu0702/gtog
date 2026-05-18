@@ -26,6 +26,7 @@ from graphrag.index.typing.context import PipelineRunContext
 from graphrag.index.typing.workflow import WorkflowFunctionOutput
 from graphrag.utils.storage import (
     load_table_from_storage,
+    storage_has_table,
     write_table_to_storage,
 )
 
@@ -63,9 +64,12 @@ async def run_workflow(
         or community_summary_embedding in embedded_fields
         or community_full_content_embedding in embedded_fields
     ):
-        community_reports = await load_table_from_storage(
-            "community_reports", context.output_storage
-        )
+        if await storage_has_table("community_reports", context.output_storage):
+            community_reports = await load_table_from_storage(
+                "community_reports", context.output_storage
+            )
+        else:
+            logger.warning("community_reports not found in storage, skipping community embeddings")
 
     text_embed = get_embedding_settings(config)
 

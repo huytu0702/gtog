@@ -15,9 +15,10 @@ from typing import Any, Optional
 import graphrag.api as api  # tests patch query_service_module.api.*
 import pandas as pd  # tests patch query_service_module.pd
 
+from ..config import settings
 from ..errors import ServingContextNotReadyError, ServingContextUnavailableError
 from ..models import SearchMethod, SearchResponse
-from ..repositories import get_control_plane_repository, get_serving_repository
+from ..repositories import get_control_plane_repository, get_pipeline_output_repository
 from ..utils import load_graphrag_config  # tests patch query_service_module.load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
@@ -104,7 +105,7 @@ class QueryService:
     def __init__(self) -> None:
         """Initialize the query service."""
         self.control_plane = get_control_plane_repository()
-        self.serving_repo = get_serving_repository()
+        self.pipeline_repo = get_pipeline_output_repository()
         self.context_cache = serving_context_cache
 
     async def _load_dataset_frame(
@@ -114,18 +115,18 @@ class QueryService:
         version: str,
         dataset: str,
     ) -> pd.DataFrame:
-        if self.serving_repo is None:
+        if self.pipeline_repo is None:
             raise ServingContextUnavailableError(
-                "Cosmos serving repository is not configured"
+                "Cosmos pipeline output repository is not configured"
             )
 
         def _loader() -> pd.DataFrame:
-            serving_repo = self.serving_repo
-            if serving_repo is None:
+            pipeline_repo = self.pipeline_repo
+            if pipeline_repo is None:
                 raise ServingContextUnavailableError(
-                    "Cosmos serving repository is not configured"
+                    "Cosmos pipeline output repository is not configured"
                 )
-            return serving_repo.load_dataframe(
+            return pipeline_repo.load_dataframe(
                 collection_id=collection_id,
                 version=version,
                 dataset=dataset,
@@ -145,12 +146,12 @@ class QueryService:
             )
         except Exception as exc:
             raise ServingContextUnavailableError(
-                f"Failed loading serving dataset '{dataset}' for version '{version}'"
+                f"Failed loading pipeline dataset '{dataset}' for version '{version}'"
             ) from exc
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         logger.info(
-            "serving_context_load collection=%s version=%s dataset=%s "
+            "pipeline_context_load collection=%s version=%s dataset=%s "
             "cache_hit=%s rows=%s load_ms=%.2f",
             collection_id, version, dataset, cache_hit, len(frame), elapsed_ms,
         )
@@ -191,11 +192,16 @@ class QueryService:
 
         return "local", frames
 
-    async def _load_context_from_serving(
+    async def _load_context_from_pipeline(
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
-        if self.control_plane is None or self.serving_repo is None:
+        if settings.index_output_mode.lower() == "local_file":
             return self._load_context_from_local(collection_id, method)
+
+        if self.control_plane is None or self.pipeline_repo is None:
+            raise ServingContextUnavailableError(
+                "Cosmos control-plane or pipeline repository is not configured"
+            )
 
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
@@ -204,7 +210,7 @@ class QueryService:
         active_version = collection.get("activeVersion")
         if not active_version:
             raise ServingContextNotReadyError(
-                "Collection has not been indexed yet (no active serving version)"
+                "Collection has not been indexed yet (no active pipeline version)"
             )
 
         required = _REQUIRED_DATASETS[method]
@@ -225,18 +231,26 @@ class QueryService:
             if dataset == "community_reports":
                 frame = _normalize_community_reports_frame(frame)
             if frame.empty:
+                if dataset == "community_reports":
+                    logger.warning(
+                        "community_reports is empty for version %s, skipping", active_version
+                    )
+                    continue
                 raise ServingContextNotReadyError(
-                    f"Serving context is incomplete for active version {active_version} "
+                    f"Pipeline context is incomplete for active version {active_version} "
                     f"(dataset={dataset})"
                 )
             frames[dataset] = frame
 
         if method == "local":
-            covariates = await self._load_dataset_frame(
-                collection_id=collection_id,
-                version=str(active_version),
-                dataset="covariates",
-            )
+            try:
+                covariates = await self._load_dataset_frame(
+                    collection_id=collection_id,
+                    version=str(active_version),
+                    dataset="covariates",
+                )
+            except Exception:
+                covariates = pd.DataFrame()
             if not covariates.empty:
                 frames["covariates"] = covariates
 
@@ -255,7 +269,7 @@ class QueryService:
         response_type: str = "Multiple Paragraphs",
     ) -> SearchResponse:
         """Perform a global search on a collection."""
-        active_version, frames = await self._load_context_from_serving(
+        active_version, frames = await self._load_context_from_pipeline(
             collection_id, "global"
         )
         config = load_graphrag_config(
@@ -268,7 +282,7 @@ class QueryService:
                 config=config,
                 entities=frames["entities"],
                 communities=frames["communities"],
-                community_reports=frames["community_reports"],
+                community_reports=frames.get("community_reports", pd.DataFrame()),
                 community_level=community_level,
                 dynamic_community_selection=dynamic_community_selection,
                 response_type=response_type,
@@ -293,7 +307,7 @@ class QueryService:
         response_type: str = "Multiple Paragraphs",
     ) -> SearchResponse:
         """Perform a local search on a collection."""
-        active_version, frames = await self._load_context_from_serving(
+        active_version, frames = await self._load_context_from_pipeline(
             collection_id, "local"
         )
         config = load_graphrag_config(
@@ -308,7 +322,7 @@ class QueryService:
                 config=config,
                 entities=frames["entities"],
                 communities=frames["communities"],
-                community_reports=frames["community_reports"],
+                community_reports=frames.get("community_reports", pd.DataFrame()),
                 text_units=frames["text_units"],
                 relationships=frames["relationships"],
                 covariates=covariates,
@@ -333,7 +347,7 @@ class QueryService:
         query: str,
     ) -> SearchResponse:
         """Perform a ToG (Think-on-Graph) search on a collection."""
-        active_version, frames = await self._load_context_from_serving(
+        active_version, frames = await self._load_context_from_pipeline(
             collection_id, "tog"
         )
         config = load_graphrag_config(
@@ -392,7 +406,7 @@ class QueryService:
         response_type: str = "Multiple Paragraphs",
     ) -> SearchResponse:
         """Perform a DRIFT search on a collection."""
-        active_version, frames = await self._load_context_from_serving(
+        active_version, frames = await self._load_context_from_pipeline(
             collection_id, "drift"
         )
         config = load_graphrag_config(
@@ -405,7 +419,7 @@ class QueryService:
                 config=config,
                 entities=frames["entities"],
                 communities=frames["communities"],
-                community_reports=frames["community_reports"],
+                community_reports=frames.get("community_reports", pd.DataFrame()),
                 text_units=frames["text_units"],
                 relationships=frames["relationships"],
                 community_level=community_level,
@@ -427,9 +441,9 @@ class QueryService:
         self, collection_id: str, limit: int = 20
     ) -> dict[str, Any]:
         """Return ToG entity preview for debugging."""
-        if self.control_plane is None or self.serving_repo is None:
+        if self.control_plane is None or self.pipeline_repo is None:
             raise ServingContextUnavailableError(
-                "Cosmos serving repository is not configured"
+                "Cosmos pipeline output repository is not configured"
             )
         collection = self.control_plane.get_collection(collection_id)
         if collection is None:
@@ -439,20 +453,20 @@ class QueryService:
             raise ServingContextNotReadyError(
                 "Collection has not been indexed yet (no active serving version)"
             )
-        serving_repo = self.serving_repo
-        assert serving_repo is not None  # guarded by None-check above
+        pipeline_repo = self.pipeline_repo
+        assert pipeline_repo is not None  # guarded by None-check above
         cache_hit, entities_df = self.context_cache.get_or_load_with_status(
             collection_id=collection_id,
             version=active_version,
             dataset="entities",
-            loader=lambda: serving_repo.load_dataframe(
+            loader=lambda: pipeline_repo.load_dataframe(
                 collection_id=collection_id,
                 version=active_version,
                 dataset="entities",
             ),
         )
         logger.info(
-            "serving_context_preview collection=%s version=%s dataset=entities "
+            "pipeline_context_preview collection=%s version=%s dataset=entities "
             "cache_hit=%s rows=%s",
             collection_id, active_version, cache_hit, len(entities_df),
         )

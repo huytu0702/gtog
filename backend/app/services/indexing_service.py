@@ -22,11 +22,11 @@ from ..repositories import (
     INDEX_JOB_RUNNING,
     CosmosControlPlaneRepository,
     get_control_plane_repository,
+    get_pipeline_output_repository,
 )
 from ..utils import load_graphrag_config
 from ..utils.arrow_fix import apply_arrow_fix, remove_arrow_fix
 from .queue_service import queue_service
-from .serving_materialization_service import serving_materialization_service
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,14 @@ class IndexingService:
 
     def __init__(self):
         self.control_plane = get_control_plane_repository()
+        self.pipeline_repo = get_pipeline_output_repository()
         self.queue_service = queue_service
         # Local mode: in-memory job state keyed by collection_id
         self._local_jobs: dict[str, dict[str, Any]] = {}
 
     @property
     def _is_local(self) -> bool:
-        return self.control_plane is None and not self.queue_service.is_configured()
+        return settings.index_output_mode.lower() == "local_file"
 
     @staticmethod
     def _parse_time(value: str | None) -> datetime | None:
@@ -174,6 +175,42 @@ class IndexingService:
             error=job.get("error"),
         )
 
+    def _verify_pipeline_output(self, *, collection_id: str, version: str) -> dict[str, int]:
+        if self.pipeline_repo is None:
+            raise RuntimeError("Pipeline output repository is not configured")
+
+        required_datasets = [
+            "entities",
+            "relationships",
+            "text_units",
+            "communities",
+            "community_reports",
+        ]
+        row_counts: dict[str, int] = {}
+        for dataset in required_datasets:
+            if not self.pipeline_repo.dataset_exists(
+                collection_id=collection_id,
+                version=version,
+                dataset=dataset,
+            ):
+                raise RuntimeError(f"Missing pipeline dataset: {dataset}")
+            row_counts[dataset] = self.pipeline_repo.count_rows(
+                collection_id=collection_id,
+                version=version,
+                dataset=dataset,
+            )
+        if self.pipeline_repo.dataset_exists(
+            collection_id=collection_id,
+            version=version,
+            dataset="covariates",
+        ):
+            row_counts["covariates"] = self.pipeline_repo.count_rows(
+                collection_id=collection_id,
+                version=version,
+                dataset="covariates",
+            )
+        return row_counts
+
     async def _run_local_indexing(self, collection_id: str, job_id: str) -> None:
         """Execute indexing directly in the background for local mode."""
         job = self._local_jobs[collection_id]
@@ -229,6 +266,77 @@ class IndexingService:
         finally:
             remove_arrow_fix()
 
+    async def _run_cosmos_indexing_direct(self, collection_id: str, job_id: str) -> None:
+        """Execute indexing directly in cosmos_pipeline mode (no queue required)."""
+        control_plane = self._require_control_plane()
+        job = self._local_jobs[collection_id]
+        job.update({"status": IndexStatus.RUNNING, "progress": 10.0, "message": "Loading configuration...", "started_at": datetime.now(timezone.utc).replace(tzinfo=None)})
+        try:
+            apply_arrow_fix()
+            version = job_id[:16]
+            config = load_graphrag_config(collection_id, version=version, use_cloud_vectors=True)
+
+            job.update({"progress": 20.0, "message": "Running indexing pipeline..."})
+            outputs = await api.build_index(
+                config=config,
+                verbose=True,
+                callbacks=[NoopWorkflowCallbacks()],
+            )
+
+            error_messages: list[str] = []
+            for output in outputs:
+                if output.errors:
+                    error_messages.extend([str(err) for err in output.errors])
+
+            if error_messages:
+                job.update({
+                    "status": IndexStatus.FAILED,
+                    "progress": 100.0,
+                    "message": "Indexing failed",
+                    "error": self._sanitize_error("; ".join(error_messages[:3])),
+                    "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                })
+                return
+
+            job.update({"progress": 80.0, "message": "Verifying pipeline output..."})
+            if self.pipeline_repo is not None:
+                try:
+                    row_counts = await asyncio.to_thread(
+                        self._verify_pipeline_output,
+                        collection_id=collection_id,
+                        version=version,
+                    )
+                    logger.info("Pipeline output verified: %s", row_counts)
+                except Exception as verify_err:
+                    logger.warning("Pipeline output verification failed: %s", verify_err)
+
+            job.update({"progress": 90.0, "message": "Publishing active version..."})
+            control_plane.set_active_version(collection_id, version)
+
+            try:
+                from .query_service import query_service
+                query_service.invalidate_collection_cache(collection_id)
+            except Exception:
+                logger.exception("Failed to invalidate cache for collection %s", collection_id)
+
+            job.update({
+                "status": IndexStatus.COMPLETED,
+                "progress": 100.0,
+                "message": "Indexing completed successfully",
+                "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            })
+        except Exception as err:
+            logger.exception("Error during cosmos direct indexing for %s", collection_id)
+            job.update({
+                "status": IndexStatus.FAILED,
+                "progress": 100.0,
+                "message": "Indexing failed",
+                "error": self._sanitize_error(str(err)),
+                "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            })
+        finally:
+            remove_arrow_fix()
+
     async def start_indexing(self, collection_id: str) -> IndexStatusResponse:
         """Persist a durable job, dispatch it, and return current status immediately."""
         if self._is_local:
@@ -243,6 +351,21 @@ class IndexingService:
                 "message": "Indexing queued",
             }
             asyncio.create_task(self._run_local_indexing(collection_id, job_id))
+            return self._local_status_response(collection_id)
+
+        # cosmos_pipeline without queue: run directly (emulator / local dev)
+        if not self.queue_service.is_configured():
+            existing = self._local_jobs.get(collection_id, {})
+            if existing.get("status") == IndexStatus.RUNNING:
+                return self._local_status_response(collection_id)
+            job_id = uuid.uuid4().hex
+            self._local_jobs[collection_id] = {
+                "id": job_id,
+                "status": IndexStatus.PENDING,
+                "progress": 0.0,
+                "message": "Indexing queued (direct cosmos mode)",
+            }
+            asyncio.create_task(self._run_cosmos_indexing_direct(collection_id, job_id))
             return self._local_status_response(collection_id)
 
         self._ensure_dispatch_enabled()
@@ -278,6 +401,11 @@ class IndexingService:
         )
 
         target_version = str(running_job.get("targetVersion") or "")
+        if settings.index_output_mode.lower() != "cosmos_pipeline":
+            raise RuntimeError(
+                "Worker indexing requires INDEX_OUTPUT_MODE=cosmos_pipeline."
+            )
+
         renew_task = asyncio.create_task(
             self._heartbeat_loop(
                 collection_id=collection_id,
@@ -337,13 +465,19 @@ class IndexingService:
                 lease_owner_id=worker_id,
                 lease_duration_seconds=settings.indexing_worker_lease_duration_seconds,
                 progress=70.0,
-                message="Materializing serving context...",
+                message="Verifying pipeline output...",
             )
-            materialized_counts = (
-                serving_materialization_service.materialize_collection_version(
-                    collection_id=collection_id,
-                    version=target_version,
-                )
+            pipeline_counts = await asyncio.to_thread(
+                self._verify_pipeline_output,
+                collection_id=collection_id,
+                version=target_version,
+            )
+            control_plane.upsert_artifact_manifest(
+                collection_id=collection_id,
+                version=target_version,
+                artifact_name="pipeline-datasets",
+                counts=pipeline_counts,
+                checksum="storageMode=cosmos_pipeline",
             )
             control_plane.set_active_version(collection_id, target_version)
 
@@ -352,12 +486,12 @@ class IndexingService:
 
                 query_service.invalidate_collection_cache(collection_id)
                 if settings.serving_cache_warm_on_index_complete:
-                    await query_service._load_context_from_serving(
+                    await query_service._load_context_from_pipeline(
                         collection_id, "global"
                     )
             except Exception:
                 logger.exception(
-                    "Failed to invalidate serving context cache for collection %s",
+                    "Failed to invalidate pipeline context cache for collection %s",
                     collection_id,
                 )
 
@@ -369,7 +503,8 @@ class IndexingService:
                 metadata={
                     "stage": "build_index",
                     "version": target_version,
-                    "materializedCounts": materialized_counts,
+                    "pipelineCounts": pipeline_counts,
+                    "storageMode": "cosmos_pipeline",
                     "leaseOwnerId": worker_id,
                 },
                 progress=100.0,
@@ -485,7 +620,7 @@ class IndexingService:
 
     def get_index_status(self, collection_id: str) -> IndexStatusResponse | None:
         """Get the latest indexing status for a collection."""
-        if self._is_local:
+        if self._is_local or not self.queue_service.is_configured():
             if collection_id not in self._local_jobs:
                 return None
             return self._local_status_response(collection_id)

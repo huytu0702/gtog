@@ -92,6 +92,11 @@ class VectorStoreConfig(BaseModel):
         default=vector_store_defaults.overwrite,
     )
 
+    client_kwargs: dict | None = Field(
+        description="Optional kwargs forwarded to the CosmosDB client (e.g. for emulator).",
+        default=None,
+    )
+
     embeddings_schema: dict[str, VectorStoreSchemaConfig] = {}
 
     def _validate_embeddings_schema(self) -> None:

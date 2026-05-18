@@ -1,4 +1,4 @@
-"""Unit tests for worker-side indexing materialization and retry behavior."""
+"""Unit tests for worker-side indexing direct pipeline publish flow."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ indexing_service_module = importlib.import_module("backend.app.services.indexing
 
 
 @pytest.mark.asyncio
-async def test_execute_indexing_job_materializes_and_flips_active_version():
+async def test_execute_indexing_job_verifies_pipeline_and_flips_active_version():
     service = IndexingService()
     service.control_plane = MagicMock()
     service.queue_service = MagicMock()
@@ -45,17 +45,19 @@ async def test_execute_indexing_job_materializes_and_flips_active_version():
         "maxAttempts": 3,
     }
 
-    with patch.object(indexing_service_module, "load_graphrag_config", return_value=MagicMock()):
+    with patch.object(
+        indexing_service_module, "load_graphrag_config", return_value=MagicMock()
+    ):
         with patch.object(
             indexing_service_module.api,
             "build_index",
             new=AsyncMock(return_value=[MagicMock(errors=[])]),
         ):
             with patch.object(
-                indexing_service_module.serving_materialization_service,
-                "materialize_collection_version",
-                return_value={"entities": 1},
-            ) as materialize:
+                service,
+                "_verify_pipeline_output",
+                return_value={"entities": 1, "relationships": 1},
+            ) as verify_pipeline:
                 with patch.object(indexing_service_module, "apply_arrow_fix"):
                     with patch.object(indexing_service_module, "remove_arrow_fix"):
                         await service.execute_indexing_job(
@@ -64,12 +66,13 @@ async def test_execute_indexing_job_materializes_and_flips_active_version():
                             worker_id="worker-a",
                         )
 
-    materialize.assert_called_once_with(collection_id="c1", version="v1")
+    verify_pipeline.assert_called_once_with(collection_id="c1", version="v1")
     service.control_plane.set_active_version.assert_called_once_with("c1", "v1")
+    service.control_plane.upsert_artifact_manifest.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_execute_indexing_job_transitions_to_retrying_and_redispatches_on_failure():
+async def test_execute_indexing_job_transitions_to_retrying_when_pipeline_verify_fails():
     service = IndexingService()
     service.control_plane = MagicMock()
     service.queue_service = MagicMock()
@@ -109,19 +112,26 @@ async def test_execute_indexing_job_transitions_to_retrying_and_redispatches_on_
         "maxAttempts": 3,
     }
 
-    with patch.object(indexing_service_module, "load_graphrag_config", return_value=MagicMock()):
+    with patch.object(
+        indexing_service_module, "load_graphrag_config", return_value=MagicMock()
+    ):
         with patch.object(
             indexing_service_module.api,
             "build_index",
-            new=AsyncMock(return_value=[MagicMock(errors=["transient failure"])]),
+            new=AsyncMock(return_value=[MagicMock(errors=[])]),
         ):
-            with patch.object(indexing_service_module, "apply_arrow_fix"):
-                with patch.object(indexing_service_module, "remove_arrow_fix"):
-                    await service.execute_indexing_job(
-                        collection_id="c1",
-                        job_id="job-1",
-                        worker_id="worker-a",
-                    )
+            with patch.object(
+                service,
+                "_verify_pipeline_output",
+                side_effect=RuntimeError("pipeline verification failed"),
+            ):
+                with patch.object(indexing_service_module, "apply_arrow_fix"):
+                    with patch.object(indexing_service_module, "remove_arrow_fix"):
+                        await service.execute_indexing_job(
+                            collection_id="c1",
+                            job_id="job-1",
+                            worker_id="worker-a",
+                        )
 
     service.queue_service.send_indexing_job_message.assert_called_once()
     retry_call = service.control_plane.transition_indexing_job.call_args_list[-1]

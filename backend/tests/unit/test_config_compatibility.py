@@ -226,7 +226,7 @@ def test_startup_calls_compatibility_checkpoint():
     with patch(
         "backend.app.main.validate_graphrag_settings_compatibility"
     ) as mock_check:
-        with patch("backend.app.main.settings.query_context_mode", "hybrid"):
+        with patch("backend.app.main.settings.index_output_mode", "local_file"):
             anyio.run(_run_lifespan)
 
     mock_check.assert_called_once()

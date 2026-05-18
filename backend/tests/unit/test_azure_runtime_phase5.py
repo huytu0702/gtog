@@ -89,3 +89,22 @@ def test_cosmos_client_kwargs_parses_retry_status_codes(monkeypatch):
     assert kwargs["retry_read"] == 4
     assert kwargs["retry_status"] == 8
     assert kwargs["retry_on_status_codes"] == [429, 503]
+
+
+def test_cosmos_client_kwargs_disables_endpoint_discovery_when_enabled(monkeypatch):
+    _reset_runtime_caches()
+    monkeypatch.setattr(settings, "azure_cosmos_disable_endpoint_discovery", True)
+
+    kwargs = azure_runtime.cosmos_client_kwargs()
+
+    assert kwargs["enable_endpoint_discovery"] is False
+    assert kwargs["connection_mode"] == "Gateway"
+
+
+def test_cosmos_client_kwargs_sets_connection_verify(monkeypatch):
+    _reset_runtime_caches()
+    monkeypatch.setattr(settings, "azure_cosmos_connection_verify", False)
+
+    kwargs = azure_runtime.cosmos_client_kwargs()
+
+    assert kwargs["connection_verify"] is False

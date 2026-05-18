@@ -14,7 +14,7 @@ query_service_module = importlib.import_module("backend.app.services.query_servi
 def _make_service(*frames: pd.DataFrame) -> QueryService:
     service = QueryService()
     service.control_plane = MagicMock()
-    service.serving_repo = MagicMock()
+    service.pipeline_repo = MagicMock()
     service.control_plane.get_collection.return_value = {
         "collectionId": "c1",
         "activeVersion": "v1",
@@ -28,7 +28,7 @@ def _make_service(*frames: pd.DataFrame) -> QueryService:
         "relationships": frames[4] if len(frames) > 4 else pd.DataFrame(),
         "covariates": frames[5] if len(frames) > 5 else pd.DataFrame(),
     }
-    service.serving_repo.load_dataframe.side_effect = (
+    service.pipeline_repo.load_dataframe.side_effect = (
         lambda *, collection_id, version, dataset: dataset_frames[dataset]
     )
     return service
@@ -65,10 +65,10 @@ def test_normalize_community_reports_rebuilds_full_content_from_json():
 
 
 @pytest.mark.asyncio
-async def test_global_search_fails_when_serving_repo_missing():
+async def test_global_search_fails_when_pipeline_repo_missing():
     service = QueryService()
     service.control_plane = None
-    service.serving_repo = None
+    service.pipeline_repo = None
 
     with pytest.raises(ServingContextUnavailableError):
         await service.global_search("c1", "q1")

@@ -162,6 +162,10 @@ def cosmos_client_kwargs() -> dict[str, Any]:
     status_codes = _parse_status_code_csv(settings.azure_cosmos_retry_on_status_codes)
     if status_codes:
         kwargs["retry_on_status_codes"] = status_codes
+    if settings.azure_cosmos_disable_endpoint_discovery:
+        kwargs["enable_endpoint_discovery"] = False
+        kwargs["connection_mode"] = "Gateway"
+    kwargs["connection_verify"] = settings.azure_cosmos_connection_verify
     return kwargs
 
 

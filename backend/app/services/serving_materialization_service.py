@@ -8,7 +8,8 @@ import json
 import pandas as pd
 
 from ..config import settings
-from ..repositories import get_control_plane_repository, get_serving_repository
+from ..repositories import get_control_plane_repository
+from ..repositories.serving_repository import get_serving_repository
 from ..utils.helpers import _blob_file_exists, read_parquet_from_blob
 
 _REQUIRED_DATASET_FILES: dict[str, str] = {

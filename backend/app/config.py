@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     azure_cosmos_retry_read: int = 3
     azure_cosmos_retry_status: int = 9
     azure_cosmos_retry_on_status_codes: str = "429,503,408"
+    azure_cosmos_disable_endpoint_discovery: bool = False
+    azure_cosmos_connection_verify: bool = True
     azure_cosmos_database_name: str = "gtog-control"
     azure_cosmos_collections_container: str = "collections"
     azure_cosmos_documents_container: str = "documents"
@@ -86,7 +88,8 @@ class Settings(BaseSettings):
     indexing_worker_heartbeat_interval_seconds: int = 30
     indexing_worker_recovery_interval_seconds: int = 30
 
-    # Query serving mode
+    # Index/query runtime mode
+    index_output_mode: str = "cosmos_pipeline"
     query_context_mode: str = "cosmos_only"
     cloud_vector_store_type: str = "cosmosdb"
     serving_dataset_cache_max_entries: int = 96

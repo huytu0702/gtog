@@ -18,10 +18,9 @@ from .conversation_repository import (
     get_conversation_repository,
     require_conversation_repository,
 )
-from .serving_repository import (
-    CosmosServingRepository,
-    get_serving_repository,
-    require_serving_repository,
+from .pipeline_output_repository import (
+    PipelineOutputRepository,
+    get_pipeline_output_repository,
 )
 
 __all__ = [
@@ -35,11 +34,10 @@ __all__ = [
     "TERMINAL_INDEX_JOB_STATUSES",
     "CosmosControlPlaneRepository",
     "CosmosConversationRepository",
-    "CosmosServingRepository",
+    "PipelineOutputRepository",
     "get_control_plane_repository",
     "get_conversation_repository",
-    "get_serving_repository",
+    "get_pipeline_output_repository",
     "require_control_plane_repository",
     "require_conversation_repository",
-    "require_serving_repository",
 ]
