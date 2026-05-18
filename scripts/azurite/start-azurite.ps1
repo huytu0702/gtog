@@ -1,11 +1,11 @@
 param(
     [int]$WaitSeconds = 30,
-    [string]$BlobEndpoint = "http://127.0.0.1:10000/devstoreaccount1?comp=list"
+    [string]$BlobEndpoint = "http://127.0.0.1:10010/devstoreaccount1?comp=list"
 )
 
 $ErrorActionPreference = "Stop"
 
-$ConnectionString = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=<AZURITE_DEFAULT_ACCOUNT_KEY>;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;"
+$ConnectionString = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10010/devstoreaccount1;QueueEndpoint=http://127.0.0.1:10011/devstoreaccount1;"
 
 function Test-DockerAvailable {
     $previousErrorAction = $ErrorActionPreference

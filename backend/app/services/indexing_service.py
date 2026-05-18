@@ -38,6 +38,7 @@ class IndexingService:
         self.control_plane = get_control_plane_repository()
         self.pipeline_repo = get_pipeline_output_repository()
         self.queue_service = queue_service
+        self._is_local = False
         # Local mode: in-memory job state keyed by collection_id
         self._local_jobs: dict[str, dict[str, Any]] = {}
 

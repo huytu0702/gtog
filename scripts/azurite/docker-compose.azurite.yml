@@ -4,9 +4,9 @@ services:
     container_name: gtog-azurite
     restart: unless-stopped
     ports:
-      - "10000:10000"
-      - "10001:10001"
-      - "10002:10002"
+      - "10010:10000"
+      - "10011:10001"
+      - "10012:10002"
     volumes:
       - azurite-data:/data
     command:
@@ -25,7 +25,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - "wget --spider -q http://127.0.0.1:10000/devstoreaccount1?comp=list || curl -fsS http://127.0.0.1:10000/devstoreaccount1?comp=list"
+        - "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:10000/ | grep -qE '^(400|403)'"
       interval: 10s
       timeout: 5s
       retries: 6
