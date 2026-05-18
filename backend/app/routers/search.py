@@ -313,7 +313,14 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             request.query,
             _guardrail_context(collection_id, stage="agent_input"),
         )
+        logger.info(
+            "[GUARDRAIL] input check: allowed=%s action=%s reason=%s",
+            input_decision.allowed,
+            input_decision.action,
+            input_decision.reason,
+        )
         if not input_decision.allowed:
+            logger.warning("[GUARDRAIL] input BLOCKED query=%r", request.query)
             return _build_blocked_agent_response(input_decision, session_id=session_id)
 
         route_decision = await router_agent.route(
@@ -335,7 +342,16 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             search_query,
             _guardrail_context(collection_id, stage="agent_rewrite"),
         )
+        logger.info(
+            "[GUARDRAIL] rewrite check: allowed=%s action=%s reason=%s query=%r -> %r",
+            rewrite_decision.allowed,
+            rewrite_decision.action,
+            rewrite_decision.reason,
+            request.query,
+            search_query,
+        )
         if not rewrite_decision.allowed:
+            logger.warning("[GUARDRAIL] rewrite BLOCKED rewritten_query=%r", search_query)
             return _build_blocked_agent_response(rewrite_decision, session_id=session_id)
 
         result = await _run_graphrag_search(route_decision, collection_id, search_query)
@@ -348,7 +364,14 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
                 context_metadata=_build_context_metadata(result.context_data),
             ),
         )
+        logger.info(
+            "[GUARDRAIL] output check: allowed=%s action=%s reason=%s",
+            output_decision.allowed,
+            output_decision.action,
+            output_decision.reason,
+        )
         if not output_decision.allowed:
+            logger.warning("[GUARDRAIL] output BLOCKED")
             return _build_blocked_agent_response(output_decision, session_id=session_id)
 
         response_payload = output_decision.safe_response or result.response
