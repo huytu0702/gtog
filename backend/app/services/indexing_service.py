@@ -41,10 +41,6 @@ class IndexingService:
         # Local mode: in-memory job state keyed by collection_id
         self._local_jobs: dict[str, dict[str, Any]] = {}
 
-    @property
-    def _is_local(self) -> bool:
-        return settings.index_output_mode.lower() == "local_file"
-
     @staticmethod
     def _parse_time(value: str | None) -> datetime | None:
         if not value:
@@ -401,10 +397,6 @@ class IndexingService:
         )
 
         target_version = str(running_job.get("targetVersion") or "")
-        if settings.index_output_mode.lower() != "cosmos_pipeline":
-            raise RuntimeError(
-                "Worker indexing requires INDEX_OUTPUT_MODE=cosmos_pipeline."
-            )
 
         renew_task = asyncio.create_task(
             self._heartbeat_loop(

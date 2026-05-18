@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import json
-import shutil
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import UploadFile
 
@@ -21,23 +18,6 @@ from ..utils.helpers import (
 )
 
 
-def _local_meta_path(collection_dir: Path) -> Path:
-    return collection_dir / ".meta.json"
-
-
-def _load_local_meta(collection_dir: Path) -> dict:
-    meta_path = _local_meta_path(collection_dir)
-    if not meta_path.exists():
-        return {}
-    with meta_path.open() as f:
-        return json.load(f)
-
-
-def _save_local_meta(collection_dir: Path, meta: dict) -> None:
-    with _local_meta_path(collection_dir).open("w") as f:
-        json.dump(meta, f, indent=2)
-
-
 class StorageService:
     """Service for managing collection/document metadata and document content."""
 
@@ -45,15 +25,6 @@ class StorageService:
         """Initialize the storage service."""
         self.blob_client = _blob_client()
         self.control_plane = get_control_plane_repository()
-
-    @property
-    def _is_local(self) -> bool:
-        return settings.index_output_mode.lower() == "local_file"
-
-    @property
-    def _use_blob_for_docs(self) -> bool:
-        """True only when blob is configured AND we're in cosmos_pipeline mode."""
-        return self.blob_client is not None and not self._is_local
 
     def _ensure_blob_enabled(self) -> None:
         if self.blob_client is None:
@@ -103,91 +74,29 @@ class StorageService:
             uploaded_at=self._parse_iso(item.get("uploadedAt")),
         )
 
-    # ---- Local filesystem helpers ----
-
-    def _local_collections_dir(self) -> Path:
-        from ..config import settings
-        return settings.collections_dir
-
-    def _local_collection_dir(self, collection_id: str) -> Path:
-        return self._local_collections_dir() / collection_id
-
-    def _local_is_indexed(self, collection_id: str) -> bool:
-        output_dir = self._local_collection_dir(collection_id) / "output"
-        return (output_dir / "entities.parquet").exists()
-
-    def _local_count_documents(self, collection_id: str) -> int:
-        input_dir = self._local_collection_dir(collection_id) / "input"
-        if not input_dir.exists():
-            return 0
-        return sum(1 for f in input_dir.iterdir() if f.is_file())
-
-    def _local_collection_response(self, collection_id: str) -> CollectionResponse:
-        col_dir = self._local_collection_dir(collection_id)
-        meta = _load_local_meta(col_dir)
-        return CollectionResponse(
-            id=collection_id,
-            name=meta.get("name", collection_id),
-            description=meta.get("description"),
-            created_at=self._parse_iso(meta.get("created_at")),
-            document_count=self._local_count_documents(collection_id),
-            indexed=self._local_is_indexed(collection_id),
-        )
-
     # ---- Public API ----
 
     def create_collection(
         self, collection_id: str, description: str | None = None
     ) -> CollectionResponse:
         """Create a new collection."""
-        if self._is_local:
-            col_dir = self._local_collection_dir(collection_id)
-            if col_dir.exists():
-                raise ValueError(f"Collection '{collection_id}' already exists")
-            (col_dir / "input").mkdir(parents=True, exist_ok=True)
-            (col_dir / "output").mkdir(parents=True, exist_ok=True)
-            (col_dir / "cache").mkdir(parents=True, exist_ok=True)
-            meta = {
-                "name": collection_id,
-                "description": description,
-                "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-            }
-            _save_local_meta(col_dir, meta)
-            return self._local_collection_response(collection_id)
-
-        # cosmos_pipeline mode: cosmos for metadata, blob optional for doc storage
         self._ensure_control_plane_enabled()
-        col_dir = self._local_collection_dir(collection_id)
-        (col_dir / "input").mkdir(parents=True, exist_ok=True)
-        (col_dir / "output").mkdir(parents=True, exist_ok=True)
-        (col_dir / "cache").mkdir(parents=True, exist_ok=True)
-        if self._use_blob_for_docs:
-            _ensure_blob_container(collection_id)
+        self._ensure_blob_enabled()
+        _ensure_blob_container(collection_id)
         item = self.control_plane.create_collection(collection_id, description)
         return self._to_collection_response(item=item, document_count=0, indexed=False)
 
     def delete_collection(self, collection_id: str) -> bool:
         """Delete a collection and all its contents."""
-        if self._is_local:
-            col_dir = self._local_collection_dir(collection_id)
-            if not col_dir.exists():
-                raise ValueError(f"Collection '{collection_id}' not found")
-            shutil.rmtree(col_dir)
-            return True
-
         self._ensure_control_plane_enabled()
+        self._ensure_blob_enabled()
         self.control_plane.delete_collection(collection_id)
 
-        if self._use_blob_for_docs:
-            container = self.blob_client.get_container_client(
-                _collection_container(collection_id)
-            )
-            if container.exists():
-                container.delete_container()
-        else:
-            col_dir = self._local_collection_dir(collection_id)
-            if col_dir.exists():
-                shutil.rmtree(col_dir)
+        container = self.blob_client.get_container_client(
+            _collection_container(collection_id)
+        )
+        if container.exists():
+            container.delete_container()
 
         try:
             delete_search_indexes_for_collection(collection_id)
@@ -209,16 +118,6 @@ class StorageService:
 
     def list_collections(self) -> list[CollectionResponse]:
         """List all collections."""
-        if self._is_local:
-            collections_dir = self._local_collections_dir()
-            if not collections_dir.exists():
-                return []
-            result = []
-            for col_dir in sorted(collections_dir.iterdir()):
-                if col_dir.is_dir() and not col_dir.name.startswith("."):
-                    result.append(self._local_collection_response(col_dir.name))
-            return result
-
         self._ensure_control_plane_enabled()
         collections = []
         for item in self.control_plane.list_collections():
@@ -235,12 +134,6 @@ class StorageService:
 
     def get_collection(self, collection_id: str) -> CollectionResponse | None:
         """Get details about a specific collection."""
-        if self._is_local:
-            col_dir = self._local_collection_dir(collection_id)
-            if not col_dir.exists():
-                return None
-            return self._local_collection_response(collection_id)
-
         self._ensure_control_plane_enabled()
         item = self.control_plane.get_collection(collection_id)
         if item is None:
@@ -256,56 +149,22 @@ class StorageService:
         self, collection_id: str, file: UploadFile
     ) -> DocumentResponse:
         """Upload a document to collection input."""
-        if self._is_local:
-            col_dir = self._local_collection_dir(collection_id)
-            if not col_dir.exists():
-                raise ValueError(f"Collection '{collection_id}' not found")
-            content = await file.read()
-            input_dir = col_dir / "input"
-            input_dir.mkdir(parents=True, exist_ok=True)
-            filename = file.filename or "document"
-            dest = input_dir / filename
-            dest.write_bytes(content)
-            return DocumentResponse(
-                name=filename,
-                size=len(content),
-                uploaded_at=datetime.now(timezone.utc).replace(tzinfo=None),
-            )
-
         self._ensure_control_plane_enabled()
+        self._ensure_blob_enabled()
         if self.control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
         content = await file.read()
         filename = file.filename or "document"
-
-        if self._use_blob_for_docs:
-            content_sha256 = hashlib.sha256(content).hexdigest()
-            container = self.blob_client.get_container_client(
-                _collection_container(collection_id)
-            )
-            container.upload_blob(f"input/{filename}", content, overwrite=True)
-            item = self.control_plane.upsert_document(
-                collection_id=collection_id,
-                document_name=filename,
-                source_path=f"input/{filename}",
-                mime_type=file.content_type,
-                size_bytes=len(content),
-                sha256=content_sha256,
-                status="uploaded",
-            )
-            return self._to_document_response(item)
-
-        # cosmos_pipeline without blob: save locally, record in cosmos
-        col_dir = self._local_collection_dir(collection_id)
-        input_dir = col_dir / "input"
-        input_dir.mkdir(parents=True, exist_ok=True)
-        (input_dir / filename).write_bytes(content)
         content_sha256 = hashlib.sha256(content).hexdigest()
+        container = self.blob_client.get_container_client(
+            _collection_container(collection_id)
+        )
+        container.upload_blob(f"input/{filename}", content, overwrite=True)
         item = self.control_plane.upsert_document(
             collection_id=collection_id,
             document_name=filename,
-            source_path=str(input_dir / filename),
+            source_path=f"input/{filename}",
             mime_type=file.content_type,
             size_bytes=len(content),
             sha256=content_sha256,
@@ -315,25 +174,6 @@ class StorageService:
 
     def list_documents(self, collection_id: str) -> list[DocumentResponse]:
         """List all documents in a collection."""
-        if self._is_local:
-            col_dir = self._local_collection_dir(collection_id)
-            if not col_dir.exists():
-                raise ValueError(f"Collection '{collection_id}' not found")
-            input_dir = col_dir / "input"
-            if not input_dir.exists():
-                return []
-            return [
-                DocumentResponse(
-                    name=f.name,
-                    size=f.stat().st_size,
-                    uploaded_at=datetime.fromtimestamp(
-                        f.stat().st_mtime, tz=timezone.utc
-                    ).replace(tzinfo=None),
-                )
-                for f in sorted(input_dir.iterdir())
-                if f.is_file()
-            ]
-
         self._ensure_control_plane_enabled()
         if self.control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
@@ -344,34 +184,18 @@ class StorageService:
 
     def delete_document(self, collection_id: str, document_name: str) -> bool:
         """Delete a document from a collection."""
-        if self._is_local:
-            col_dir = self._local_collection_dir(collection_id)
-            if not col_dir.exists():
-                raise ValueError(f"Collection '{collection_id}' not found")
-            doc_path = col_dir / "input" / document_name
-            if not doc_path.exists():
-                raise ValueError(f"Document '{document_name}' not found")
-            doc_path.unlink()
-            return True
-
         self._ensure_control_plane_enabled()
+        self._ensure_blob_enabled()
         if self.control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        if self._use_blob_for_docs:
-            blob_container = self.blob_client.get_container_client(
-                _collection_container(collection_id)
-            )
-            blob = blob_container.get_blob_client(f"input/{document_name}")
-            if not blob.exists():
-                raise ValueError(f"Document '{document_name}' not found")
-            blob.delete_blob()
-        else:
-            col_dir = self._local_collection_dir(collection_id)
-            doc_path = col_dir / "input" / document_name
-            if not doc_path.exists():
-                raise ValueError(f"Document '{document_name}' not found")
-            doc_path.unlink()
+        blob_container = self.blob_client.get_container_client(
+            _collection_container(collection_id)
+        )
+        blob = blob_container.get_blob_client(f"input/{document_name}")
+        if not blob.exists():
+            raise ValueError(f"Document '{document_name}' not found")
+        blob.delete_blob()
 
         self.control_plane.delete_document(
             collection_id=collection_id, document_name=document_name

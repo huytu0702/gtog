@@ -250,13 +250,10 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     logger.info("Starting GraphRAG FastAPI backend...")
     bootstrap_runtime_secrets()
-    cloud_runtime = settings.index_output_mode.lower() == "cosmos_pipeline"
     validate_graphrag_settings_compatibility(
         settings.settings_yaml_path,
-        cloud_runtime=cloud_runtime,
-        effective_store_type=(
-            settings.cloud_vector_store_type.strip().lower() if cloud_runtime else None
-        ),
+        cloud_runtime=True,
+        effective_store_type=settings.cloud_vector_store_type.strip().lower(),
     )
 
     if is_cosmos_configured():
@@ -264,21 +261,17 @@ async def lifespan(app: FastAPI):
             "Using Azure Cosmos DB for control-plane metadata "
             f"(database={settings.azure_cosmos_database_name})"
         )
-    elif settings.index_output_mode.lower() == "cosmos_pipeline":
-        raise RuntimeError(
-            "INDEX_OUTPUT_MODE=cosmos_pipeline requires Azure Cosmos DB to be configured."
-        )
     else:
-        logger.warning(
-            "Azure Cosmos DB is not configured. local_file mode is active; "
-            "control-plane and pipeline-query APIs requiring Cosmos are unavailable."
+        raise RuntimeError(
+            "Azure Cosmos DB is required but not configured."
         )
 
     if settings.azure_storage_connection_string:
         logger.info("Using Azure Blob Storage for collection data")
     else:
-        settings.collections_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Storage directory: {settings.collections_dir}")
+        raise RuntimeError(
+            "AZURE_STORAGE_CONNECTION_STRING is required but not configured."
+        )
 
     auth_configuration_error = _auth_configuration_error()
     if auth_configuration_error:
@@ -289,14 +282,13 @@ async def lifespan(app: FastAPI):
     logger.info(
         "Active features: "
         "cosmos=%s | blob=%s | rate_limit=%s (backend=%s, rpm=%d) | "
-        "edge_auth=%s | index_output_mode=%s | tog_debug=%s",
+        "edge_auth=%s | tog_debug=%s",
         is_cosmos_configured(),
         bool(settings.azure_storage_connection_string or settings.azure_storage_account_name),
         settings.rate_limit_enabled,
         settings.rate_limiter_backend,
         settings.rate_limit_requests_per_minute,
         settings.require_edge_auth,
-        settings.index_output_mode,
         settings.enable_tog_debug_endpoint,
     )
 

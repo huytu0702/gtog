@@ -563,15 +563,13 @@ class ServingContextCache:
 
 On indexing completion, the worker triggers cache warm-up via `serving_materialization_service`.
 
-### Query Context Modes
+### Query Context Source
 
-The backend supports two context-loading modes (controlled by `QUERY_CONTEXT_MODE`):
+The backend loads query context from the unified **`cosmos_pipeline`** profile:
 
-
-| Mode           | Source                                               | Use Case                                      |
-| -------------- | ---------------------------------------------------- | --------------------------------------------- |
-| `cosmos_only`  | Cosmos DB containers (entities, relationships, etc.) | Production — all artifacts in managed storage |
-| `blob_parquet` | Parquet files from Azure Blob / local filesystem     | Dev / migration                               |
+- **Source:** Cosmos DB containers (entities, relationships, community reports, text units) plus vector indexes
+- **Local dev:** Cosmos DB Emulator + Azurite (Azure Blob/Queue emulator) provide identical APIs to production
+- **Production:** Managed Cosmos DB + Azure Blob Storage; reporting logs land in the `pipeline-logs` blob container
 
 
 ---
@@ -852,7 +850,7 @@ Loaded by `pydantic-settings` from environment variables or `.env` file:
 | `EDGE_ORIGIN_SECRET`             | HMAC secret for edge auth            |
 | `RATE_LIMIT_ENABLED`             | Toggle rate limiting                 |
 | `RATE_LIMIT_REQUESTS_PER_MINUTE` | Default: 120                         |
-| `QUERY_CONTEXT_MODE`             | `cosmos_only` or `blob_parquet`      |
+| `AZURE_STORAGE_CONNECTION_STRING`| Blob/queue connection (Azurite locally, real account in prod) |
 | `DEFAULT_CHAT_MODEL`             | Default LLM for backend              |
 | `DEFAULT_EMBEDDING_MODEL`        | Default embedding model              |
 | `ENABLE_TOG_DEBUG_ENDPOINT`      | Expose `GET /search/tog/debug`       |

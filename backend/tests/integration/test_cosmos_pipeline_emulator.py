@@ -94,7 +94,6 @@ def emulator_runtime_env(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setattr(settings, "azure_cosmos_endpoint", endpoint)
     monkeypatch.setattr(settings, "azure_cosmos_key", key)
     monkeypatch.setattr(settings, "azure_cosmos_database_name", db_name)
-    monkeypatch.setattr(settings, "index_output_mode", "cosmos_pipeline")
     monkeypatch.setattr(settings, "azure_use_managed_identity", False)
     monkeypatch.setattr(settings, "azure_cosmos_disable_endpoint_discovery", True)
     monkeypatch.setattr(settings, "azure_cosmos_connection_verify", False)

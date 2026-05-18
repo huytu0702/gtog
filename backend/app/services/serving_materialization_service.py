@@ -7,7 +7,6 @@ import json
 
 import pandas as pd
 
-from ..config import settings
 from ..repositories import get_control_plane_repository
 from ..repositories.serving_repository import get_serving_repository
 from ..utils.helpers import _blob_file_exists, read_parquet_from_blob
@@ -40,26 +39,10 @@ class ServingMaterializationService:
             )
 
     def _load_frame(self, collection_id: str, file_name: str) -> pd.DataFrame:
-        use_blob = bool(
-            settings.azure_storage_connection_string
-            or settings.azure_storage_account_key
-        )
-        if use_blob:
-            return read_parquet_from_blob(collection_id, f"output/{file_name}")
-
-        output_dir = settings.collections_dir / collection_id / "output"
-        return pd.read_parquet(output_dir / file_name)
+        return read_parquet_from_blob(collection_id, f"output/{file_name}")
 
     def _file_exists(self, collection_id: str, file_name: str) -> bool:
-        use_blob = bool(
-            settings.azure_storage_connection_string
-            or settings.azure_storage_account_key
-        )
-        if use_blob:
-            return _blob_file_exists(collection_id, f"output/{file_name}")
-        return (
-            settings.collections_dir / collection_id / "output" / file_name
-        ).exists()
+        return _blob_file_exists(collection_id, f"output/{file_name}")
 
     def materialize_collection_version(
         self, collection_id: str, version: str

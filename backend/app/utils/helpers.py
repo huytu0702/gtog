@@ -57,16 +57,7 @@ def _input_storage_cli_overrides(
     *,
     collection_id: str,
     conn_str: str,
-    use_blob_input: bool,
-    collection_dir: Path,
 ) -> dict[str, str]:
-    if not use_blob_input:
-        return {
-            "input.storage.type": "file",
-            "input.storage.base_dir": str(collection_dir / "input"),
-            "input.file_pattern": ".*\\.(txt|md)$",
-        }
-
     container_name = _collection_container(collection_id)
     overrides = {
         "input.storage.type": "blob",
@@ -290,11 +281,7 @@ def _vector_store_cli_overrides(
     overrides: dict[str, object] = {
         "vector_store.default_vector_store.container_name": vector_index_name,
     }
-    cloud_vector_runtime = (
-        settings.index_output_mode.lower() == "cosmos_pipeline"
-        and use_cloud_vectors
-    )
-    if not cloud_vector_runtime:
+    if not use_cloud_vectors:
         return overrides
 
     store_type = (
@@ -376,67 +363,44 @@ def load_graphrag_config(
     # on Azure AI Search Free tier (max 3 indexes/service).
     vector_index_name = _build_vector_index_name(collection_id)
 
-    storage_root = settings.collections_dir.resolve()
-    collection_dir = storage_root / collection_id
-    collection_dir.mkdir(parents=True, exist_ok=True)
-    (collection_dir / "input").mkdir(parents=True, exist_ok=True)
-
-    mode = settings.index_output_mode.lower()
-    if mode == "local_file":
-        (collection_dir / "output").mkdir(parents=True, exist_ok=True)
-        (collection_dir / "cache").mkdir(parents=True, exist_ok=True)
-        (collection_dir / "logs").mkdir(parents=True, exist_ok=True)
-
-    use_blob_input = _blob_client() is not None and settings.index_output_mode.lower() == "cosmos_pipeline"
-    if use_blob_input:
-        _ensure_blob_container(collection_id)
+    if _blob_client() is None:
+        raise ValueError(
+            "Azure Blob storage is required for cosmos_pipeline mode. "
+            "Configure AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_URL."
+        )
+    _ensure_blob_container(collection_id)
 
     cli_overrides: dict[str, object] = {
         key: cast("object", value)
         for key, value in _input_storage_cli_overrides(
             collection_id=collection_id,
             conn_str=conn_str,
-            use_blob_input=use_blob_input,
-            collection_dir=collection_dir,
         ).items()
     }
 
-    if settings.index_output_mode.lower() == "cosmos_pipeline":
-        cli_overrides.update(
-            {
-                key: cast("object", value)
-                for key, value in _cosmos_output_cli_overrides(
-                    collection_id=collection_id,
-                    version=version,
-                ).items()
-            }
-        )
-        cli_overrides.update(
-            {
-                "cache.type": "none",
-                "reporting.type": "file",
-                "reporting.base_dir": str(collection_dir / "logs"),
-            }
-        )
-        (collection_dir / "logs").mkdir(parents=True, exist_ok=True)
-    elif settings.index_output_mode.lower() == "local_file":
-        cli_overrides.update(
-            {
-                "output.type": "file",
-                "output.base_dir": str(collection_dir / "output"),
-                "cache.type": "file",
-                "cache.base_dir": str(collection_dir / "cache"),
-                "reporting.type": "file",
-                "reporting.base_dir": str(collection_dir / "logs"),
-                "vector_store.default_vector_store.db_uri": str(
-                    collection_dir / "output" / "lancedb"
-                ),
-            }
-        )
+    cli_overrides.update(
+        {
+            key: cast("object", value)
+            for key, value in _cosmos_output_cli_overrides(
+                collection_id=collection_id,
+                version=version,
+            ).items()
+        }
+    )
+    cli_overrides.update(
+        {
+            "cache.type": "none",
+            "reporting.type": "blob",
+            "reporting.container_name": _collection_container(collection_id),
+            "reporting.base_dir": "logs",
+        }
+    )
+    if conn_str:
+        cli_overrides["reporting.connection_string"] = conn_str
     else:
-        raise ValueError(
-            "INDEX_OUTPUT_MODE must be one of ['cosmos_pipeline', 'local_file']."
-        )
+        account_url = blob_account_url()
+        if account_url:
+            cli_overrides["reporting.storage_account_blob_url"] = account_url
 
     cli_overrides.update(
         _vector_store_cli_overrides(
@@ -470,88 +434,38 @@ def validate_collection_indexed(
         method or "", ["entities", "communities"]
     )
 
-    mode = settings.index_output_mode.lower()
-    if mode == "cosmos_pipeline":
-        control_plane = get_control_plane_repository()
-        pipeline_repo = get_pipeline_output_repository()
-        if control_plane is None:
-            return False, "Cosmos control-plane repository is not configured"
+    control_plane = get_control_plane_repository()
+    pipeline_repo = get_pipeline_output_repository()
+    if control_plane is None:
+        return False, "Cosmos control-plane repository is not configured"
 
-        collection = control_plane.get_collection(collection_id)
-        if collection is None:
-            return False, f"Collection '{collection_id}' not found"
+    collection = control_plane.get_collection(collection_id)
+    if collection is None:
+        return False, f"Collection '{collection_id}' not found"
 
-        version = str(collection.get("activeVersion") or "")
-        if not version:
-            return (
-                False,
-                "Collection has not been indexed yet (no active pipeline version)",
-            )
-
-        missing = [
-            dataset
-            for dataset in required_datasets
-            if not pipeline_repo.dataset_exists(
-                collection_id=collection_id,
-                version=version,
-                dataset=dataset,
-            )
-        ]
-        if missing:
-            return (
-                False,
-                "Collection active pipeline version is incomplete: "
-                + ", ".join(sorted(missing)),
-            )
-        return True, None
-
-    required_files = [f"{dataset}.parquet" for dataset in required_datasets]
-    collection_dir = settings.collections_dir / collection_id
-    output_dir = collection_dir / "output"
-    if not output_dir.exists():
-        return False, "Collection has not been indexed yet"
-    missing = [f for f in required_files if not (output_dir / f).exists()]
-    if missing:
-        return False, f"Missing indexed files: {', '.join(missing)}"
-    return True, None
-
-
-def get_search_data_paths(collection_id: str, method: str) -> dict[str, Path]:
-    """Get local parquet paths for a search method (local_file mode only)."""
-    if settings.index_output_mode.lower() != "local_file":
-        raise RuntimeError(
-            "get_search_data_paths is only available in local_file mode."
+    version = str(collection.get("activeVersion") or "")
+    if not version:
+        return (
+            False,
+            "Collection has not been indexed yet (no active pipeline version)",
         )
 
-    file_names = {
-        "entities": "entities.parquet",
-        "communities": "communities.parquet",
-        "community_reports": "community_reports.parquet",
-    }
-    if method in ["local", "drift", "tog"]:
-        file_names["text_units"] = "text_units.parquet"
-        file_names["relationships"] = "relationships.parquet"
-
-    output_dir = settings.collections_dir / collection_id / "output"
-    paths = {key: output_dir / fname for key, fname in file_names.items()}
-
-    if method == "local":
-        cov = output_dir / "covariates.parquet"
-        if cov.exists():
-            paths["covariates"] = cov
-
-    if method == "tog":
-        missing = [
-            f
-            for f in ["entities.parquet", "relationships.parquet"]
-            if not (output_dir / f).exists()
-        ]
-        if missing:
-            raise FileNotFoundError(
-                f"ToG search requires missing files: {', '.join(missing)}"
-            )
-
-    return paths
+    missing = [
+        dataset
+        for dataset in required_datasets
+        if not pipeline_repo.dataset_exists(
+            collection_id=collection_id,
+            version=version,
+            dataset=dataset,
+        )
+    ]
+    if missing:
+        return (
+            False,
+            "Collection active pipeline version is incomplete: "
+            + ", ".join(sorted(missing)),
+        )
+    return True, None
 
 
 def get_collection_info(collection_id: str) -> dict | None:

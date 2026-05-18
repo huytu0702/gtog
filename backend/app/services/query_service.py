@@ -160,44 +160,13 @@ class QueryService:
     def _load_context_from_local(
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
-        from ..config import settings
-
-        output_dir = settings.collections_dir / collection_id / "output"
-        if not output_dir.exists():
-            raise FileNotFoundError(
-                f"Collection '{collection_id}' not found or not indexed yet. "
-                f"Expected output at: {output_dir}"
-            )
-
-        required = _REQUIRED_DATASETS[method]
-        frames: dict[str, pd.DataFrame] = {}
-        for dataset in required:
-            parquet_path = output_dir / f"{dataset}.parquet"
-            if not parquet_path.exists():
-                raise ServingContextNotReadyError(
-                    f"Collection '{collection_id}' is missing indexed file: {dataset}.parquet. "
-                    "Run indexing first."
-                )
-            frame = pd.read_parquet(parquet_path)
-            if dataset == "community_reports":
-                frame = _normalize_community_reports_frame(frame)
-            frames[dataset] = frame
-
-        if method == "local":
-            covariates_path = output_dir / "covariates.parquet"
-            if covariates_path.exists():
-                covariates = pd.read_parquet(covariates_path)
-                if not covariates.empty:
-                    frames["covariates"] = covariates
-
-        return "local", frames
+        raise ServingContextUnavailableError(
+            "Local filesystem context loading is no longer supported"
+        )
 
     async def _load_context_from_pipeline(
         self, collection_id: str, method: str
     ) -> tuple[str, dict[str, pd.DataFrame]]:
-        if settings.index_output_mode.lower() == "local_file":
-            return self._load_context_from_local(collection_id, method)
-
         if self.control_plane is None or self.pipeline_repo is None:
             raise ServingContextUnavailableError(
                 "Cosmos control-plane or pipeline repository is not configured"

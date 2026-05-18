@@ -16,34 +16,10 @@ def _reset_runtime_caches() -> None:
 
 @patch("backend.app.utils.helpers._validate_shared_prompt_files")
 @patch("backend.app.utils.helpers.load_config")
-def test_load_graphrag_config_uses_local_file_output_mode(
-    mock_load_config, _mock_prompts, monkeypatch
-):
-    _reset_runtime_caches()
-    monkeypatch.setattr(settings, "index_output_mode", "local_file")
-    monkeypatch.setattr(settings, "azure_key_vault_url", "")
-    monkeypatch.setattr(settings, "cloud_vector_store_type", "azure_ai_search")
-    mock_load_config.return_value = MagicMock()
-
-    load_graphrag_config("collection-a", version="v1")
-    cli_overrides = mock_load_config.call_args.kwargs["cli_overrides"]
-
-    assert cli_overrides["output.type"] == "file"
-    assert "collection-a" in str(cli_overrides["output.base_dir"])
-    assert cli_overrides["cache.type"] == "file"
-    assert (
-        cli_overrides["vector_store.default_vector_store.container_name"]
-        == "collection-a"
-    )
-
-
-@patch("backend.app.utils.helpers._validate_shared_prompt_files")
-@patch("backend.app.utils.helpers.load_config")
 def test_load_graphrag_config_uses_cosmos_pipeline_output_mode(
     mock_load_config, _mock_prompts, monkeypatch
 ):
     _reset_runtime_caches()
-    monkeypatch.setattr(settings, "index_output_mode", "cosmos_pipeline")
     monkeypatch.setattr(settings, "azure_key_vault_url", "")
     monkeypatch.setattr(
         settings,
@@ -70,7 +46,6 @@ def test_load_graphrag_config_rejects_cosmos_pipeline_without_cosmos_auth(
     _mock_prompts, monkeypatch
 ):
     _reset_runtime_caches()
-    monkeypatch.setattr(settings, "index_output_mode", "cosmos_pipeline")
     monkeypatch.setattr(settings, "azure_key_vault_url", "")
     monkeypatch.setattr(settings, "azure_cosmos_connection_string", "")
     monkeypatch.setattr(settings, "azure_cosmos_endpoint", "")
@@ -90,7 +65,6 @@ def test_load_graphrag_config_uses_azure_ai_search_for_cloud_runtime(
     monkeypatch,
 ):
     _reset_runtime_caches()
-    monkeypatch.setattr(settings, "index_output_mode", "cosmos_pipeline")
     monkeypatch.setattr(settings, "azure_key_vault_url", "")
     monkeypatch.setattr(
         settings, "azure_cosmos_connection_string", "AccountEndpoint=https://example.documents.azure.com:443/;AccountKey=key123;"
@@ -125,7 +99,6 @@ def test_load_graphrag_config_uses_cosmos_vector_store_for_cloud_runtime(
     monkeypatch,
 ):
     _reset_runtime_caches()
-    monkeypatch.setattr(settings, "index_output_mode", "cosmos_pipeline")
     monkeypatch.setattr(settings, "azure_key_vault_url", "")
     monkeypatch.setattr(settings, "azure_cosmos_connection_string", "")
     monkeypatch.setattr(

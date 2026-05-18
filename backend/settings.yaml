@@ -57,7 +57,9 @@ models:
 
 input:
   storage:
-    type: file # or blob
+    type: blob
+    connection_string: ${AZURE_STORAGE_CONNECTION_STRING}
+    container_name: pipeline-input
     base_dir: "input"
   file_type: text # [csv, text, json]
 
@@ -79,7 +81,9 @@ cache:
   base_dir: "cache"
 
 reporting:
-  type: file # [file, blob]
+  type: blob # [file, blob]
+  connection_string: ${AZURE_STORAGE_CONNECTION_STRING}
+  container_name: pipeline-logs
   base_dir: "logs"
 
 vector_store:

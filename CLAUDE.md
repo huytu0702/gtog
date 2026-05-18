@@ -93,6 +93,9 @@ uv run poe prompt_tune <...args>
 ### Backend Development
 
 ```bash
+# Start Azurite (Azure Storage emulator) first — required for blob input/reporting
+docker compose -f scripts/azurite/docker-compose.azurite.yml up -d
+
 cd backend
 .venv\scripts\activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

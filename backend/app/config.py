@@ -31,7 +31,6 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
 
     # Storage Configuration
-    storage_root_dir: str = "./storage"
     azure_storage_connection_string: str = ""
     azure_storage_account_name: str = ""
     azure_storage_account_key: str = ""
@@ -89,8 +88,6 @@ class Settings(BaseSettings):
     indexing_worker_recovery_interval_seconds: int = 30
 
     # Index/query runtime mode
-    index_output_mode: str = "cosmos_pipeline"
-    query_context_mode: str = "cosmos_only"
     cloud_vector_store_type: str = "cosmosdb"
     serving_dataset_cache_max_entries: int = 96
     serving_cache_warm_on_index_complete: bool = True
@@ -164,7 +161,7 @@ class Settings(BaseSettings):
         if not self.azure_storage_connection_string and not self.azure_storage_account_name:
             _config_logger.warning(
                 "AZURE_STORAGE_CONNECTION_STRING (or AZURE_STORAGE_ACCOUNT_NAME) is not set. "
-                "Azure Blob Storage will be unavailable; falling back to local filesystem."
+                "Configure Azure Blob Storage (or Azurite for local dev) before running the indexing pipeline."
             )
         if not self.edge_origin_secret and self.require_edge_auth:
             _config_logger.warning(
@@ -178,15 +175,6 @@ class Settings(BaseSettings):
                 "container instances. Set RATE_LIMITER_BACKEND=redis for distributed limiting."
             )
         return self
-
-    @property
-    def collections_dir(self) -> Path:
-        """Get the collections directory path, resolved relative to backend dir."""
-        backend_dir = Path(__file__).parent.parent
-        p = Path(self.storage_root_dir)
-        if not p.is_absolute():
-            p = backend_dir / p
-        return p / "collections"
 
     @property
     def settings_yaml_path(self) -> Path:
