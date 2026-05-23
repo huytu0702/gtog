@@ -143,7 +143,7 @@ function MessageContent({ text, context }: { text: string; context: ContextLooku
         );
     }
 
-    return <div className="whitespace-pre-wrap">{parts}</div>;
+    return <div>{parts}</div>;
 }
 
 function MethodBadge({ method, webSearchTriggered }: { method: string; webSearchTriggered?: boolean }) {
