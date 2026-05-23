@@ -158,6 +158,7 @@ def cosmos_client_kwargs() -> dict[str, Any]:
         "retry_connect": settings.azure_cosmos_retry_connect,
         "retry_read": settings.azure_cosmos_retry_read,
         "retry_status": settings.azure_cosmos_retry_status,
+        "logging_enable": settings.azure_sdk_http_logging_enabled,
     }
     status_codes = _parse_status_code_csv(settings.azure_cosmos_retry_on_status_codes)
     if status_codes:

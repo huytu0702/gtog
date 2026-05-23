@@ -23,6 +23,7 @@ from .azure_runtime import (
     is_cosmos_configured,
 )
 from .config import settings
+from .logging_config import configure_logging
 from .models import HealthResponse
 from .repositories import get_control_plane_repository
 from .routers import (
@@ -38,10 +39,7 @@ from .utils import validate_graphrag_settings_compatibility, register_exception_
 from .utils.helpers import _blob_client, _search_index_client
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
+configure_logging()
 
 logger = logging.getLogger(__name__)
 

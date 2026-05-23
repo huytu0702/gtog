@@ -219,7 +219,7 @@ class IndexingService:
             job.update({"progress": 20.0, "message": "Running indexing pipeline..."})
             outputs = await api.build_index(
                 config=config,
-                verbose=True,
+                verbose=settings.graphrag_index_verbose,
                 callbacks=[NoopWorkflowCallbacks()],
             )
 
@@ -276,7 +276,7 @@ class IndexingService:
             job.update({"progress": 20.0, "message": "Running indexing pipeline..."})
             outputs = await api.build_index(
                 config=config,
-                verbose=True,
+                verbose=settings.graphrag_index_verbose,
                 callbacks=[NoopWorkflowCallbacks()],
             )
 
@@ -433,7 +433,7 @@ class IndexingService:
             )
             outputs = await api.build_index(
                 config=config,
-                verbose=True,
+                verbose=settings.graphrag_index_verbose,
                 callbacks=[NoopWorkflowCallbacks()],
             )
 

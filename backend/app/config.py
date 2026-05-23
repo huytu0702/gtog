@@ -3,15 +3,17 @@
 import logging
 from functools import cached_property
 from pathlib import Path
+from typing import Any, Literal
 
 import yaml
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 _ENV_FILE_PATH = _BACKEND_DIR / ".env"
 
 _config_logger = logging.getLogger(__name__)
+_VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
 
 
 class Settings(BaseSettings):
@@ -66,6 +68,7 @@ class Settings(BaseSettings):
     azure_cosmos_retry_on_status_codes: str = "429,503,408"
     azure_cosmos_disable_endpoint_discovery: bool = False
     azure_cosmos_connection_verify: bool = True
+    azure_sdk_http_logging_enabled: bool = False
     azure_cosmos_database_name: str = "gtog-control"
     azure_cosmos_collections_container: str = "collections"
     azure_cosmos_documents_container: str = "documents"
@@ -123,6 +126,15 @@ class Settings(BaseSettings):
     ai_guardrails_block_web_on_sensitive_query: bool = True
     ai_guardrails_return_metadata: bool = False
 
+    # Logging Configuration
+    app_log_level: Literal[
+        "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"
+    ] = "INFO"
+    azure_sdk_log_level: Literal[
+        "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"
+    ] = "WARNING"
+    graphrag_index_verbose: bool = False
+
     # Server Configuration
     host: str = "0.0.0.0"
     port: int = 8000
@@ -149,6 +161,17 @@ class Settings(BaseSettings):
         default=50,
         description="Maximum number of LRU cache entries.",
     )
+
+    @field_validator("app_log_level", "azure_sdk_log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: Any) -> str:
+        normalized = str(value).strip().upper()
+        if normalized not in _VALID_LOG_LEVELS:
+            raise ValueError(
+                "Log level must be one of: "
+                + ", ".join(sorted(_VALID_LOG_LEVELS))
+            )
+        return normalized
 
     @model_validator(mode="after")
     def _warn_missing_recommended_settings(self) -> "Settings":
