@@ -435,9 +435,6 @@ async def readiness_check():
     queue_ok, queue_detail = _check_queue_ready()
     checks["queue"] = {"ok": queue_ok, "detail": queue_detail}
 
-    search_ok, search_detail = _check_search_ready()
-    checks["search"] = {"ok": search_ok, "detail": search_detail}
-
     key_vault_ok, key_vault_detail = _check_key_vault_ready()
     checks["key_vault"] = {"ok": key_vault_ok, "detail": key_vault_detail}
 
