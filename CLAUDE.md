@@ -185,6 +185,21 @@ The project uses pytest for testing with separate test suites:
 - Tests use `.env` file for configuration (see `pytest.ini`)
 - Integration and smoke tests may require API keys in environment variables
 
+## Living Documentation
+
+These documents should be updated whenever code changes affect their scope:
+
+- **[api.md](docs/project/en/api.md)** — API endpoints, request/response formats, error codes
+- **[database_schema.md](docs/project/en/database_schema.md)** — Data models, schemas, and relationships
+- **[architecture.md](docs/project/en/architecture.md)** — System design, layers, and component interactions
+- **[index_flow.md](docs/project/en/index_flow.md)** — Document indexing pipeline and knowledge graph building
+- **[query_flow.md](docs/project/en/query_flow.md)** — Query execution, search methods (Global, Local, DRIFT, ToG)
+
+When implementing features:
+- Update relevant docs immediately after code changes
+- Keep flowcharts and diagrams synced with implementation
+- Document breaking changes and new capabilities
+
 ## File Structure Highlights
 
 ```
@@ -217,37 +232,3 @@ frontend/
     ├── components/ # React components
     └── pages/     # UI pages
 ```
-
-## Documentation Links
-
-### Core Documentation
-- [docs/index.md](docs/index.md) - Welcome to GraphRAG overview
-- [docs/get_started.md](docs/get_started.md) - Getting started guide
-- [docs/cli.md](docs/cli.md) - CLI reference
-- [docs/developing.md](docs/developing.md) - Development guide
-
-### Configuration
-- [docs/config/overview.md](docs/config/overview.md) - Configuration overview
-- [docs/config/init.md](docs/config/init.md) - Initialization guide
-- [docs/config/yaml.md](docs/config/yaml.md) - YAML configuration
-- [docs/config/env_vars.md](docs/config/env_vars.md) - Environment variables
-- [docs/config/models.md](docs/config/models.md) - Model configuration
-
-### Indexing
-- [docs/index/overview.md](docs/index/overview.md) - Indexing pipeline overview
-- [docs/index/inputs.md](docs/index/inputs.md) - Input formats
-- [docs/index/outputs.md](docs/index/outputs.md) - Output formats
-- [docs/index/methods.md](docs/index/methods.md) - Indexing methods
-- [docs/index/default_dataflow.md](docs/index/default_dataflow.md) - Default dataflow
-
-### Query & Search
-- [docs/query/overview.md](docs/query/overview.md) - Query engine overview
-- [docs/query/global_search.md](docs/query/global_search.md) - Global search
-- [docs/query/local_search.md](docs/query/local_search.md) - Local search
-- [docs/query/drift_search.md](docs/query/drift_search.md) - DRIFT search
-- [docs/query/tog_search.md](docs/query/tog_search.md) - ToG search algorithm
-- [docs/query/question_generation.md](docs/query/question_generation.md) - Question generation
-
-### ToG (Think-on-Graph)
-- [docs/tunh/tog_search_guide.md](docs/tunh/tog_search_guide.md) - ToG usage guide
-- [docs/tunh/tog-cli-guide.md](docs/tunh/tog-cli-guide.md) - ToG CLI guide
