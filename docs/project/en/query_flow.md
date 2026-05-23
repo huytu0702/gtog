@@ -12,7 +12,7 @@ The frontend exposes two modes:
 
 | Mode | Endpoint | Behavior |
 |---|---|---|
-| **Direct** | `POST /api/collections/:id/search/{global,local,drift,tog}` | User picks the method explicitly. No routing, no guardrails on input rewrite. |
+| **Direct** | `POST /api/collections/:id/search/{global,local,drift,tog}` | User picks the method explicitly. No routing or rewrite, but request/response guardrails still apply at the route level. |
 | **Agent** (default) | `POST /api/collections/:id/search/agent` (or `/stream`) | LLM routes the query to the best method, applies guardrails, may trigger web fallback, persists conversation. |
 
 ```mermaid
@@ -20,14 +20,15 @@ flowchart LR
     User[User Query] --> Mode{Mode?}
     Mode -- Manual --> Direct[Direct method<br/>global/local/drift/tog]
     Mode -- Auto Agent --> Agent[Agent pipeline]
-    Direct --> QS[QueryService dispatch]
+    Direct --> DGR[Direct route guardrails]
+    DGR --> QS[QueryService dispatch]
     Agent --> Pipeline[Guardrails →<br/>Routing →<br/>Search →<br/>Judge →<br/>Web fallback?]
     Pipeline --> QS
     QS --> LLM[LLM synthesis]
     LLM --> Resp[Response + sources]
 ```
 
-## 2. Agent Pipeline (Detailed)
+## 2. Agent Pipeline (Detailed, assuming `ai_guardrails_enabled=true`)
 
 ```mermaid
 sequenceDiagram
@@ -36,13 +37,12 @@ sequenceDiagram
     participant API as routers/search.py
     participant GR as NemoGuardrails
     participant Conv as ConversationService
-    participant Sum as SummarizationService
     participant Router as RouterAgent
     participant QS as QueryService
     participant Judge as InsufficiencyJudge
     participant Web as WebSearchService
 
-    FE->>API: POST /search/agent {query, session_id?}
+    FE->>API: POST /api/collections/{collection_id}/search/agent
     API->>GR: check_input(query)
     alt blocked
         GR-->>API: action=block, safe_response
@@ -54,9 +54,8 @@ sequenceDiagram
         Conv-->>API: (summary, recent_turns)
     end
 
-    opt history > threshold
-        API->>Sum: summarize(history, existing_summary)
-        Sum-->>API: new summary
+    opt no session_id and legacy payload enabled
+        FE->>API: conversation_history + conversation_summary
     end
 
     API->>Router: route(query, history, summary)
@@ -69,42 +68,58 @@ sequenceDiagram
     end
 
     API->>QS: dispatch(method, rewritten_query)
-    QS-->>API: SearchResponse{response, context_data, sources}
+    QS-->>API: SearchResponse{response, context_data, method}
+    API->>GR: check_output(graphrag_response)
+    alt output blocked
+        GR-->>API: action=block, safe_response
+        API-->>FE: AgentSearchResponse(method=blocked)
+    end
 
     opt insufficiency_judge_enabled
-        API->>Judge: judge(query, response, context)
+        API->>Judge: judge(query, graphrag_response, context)
         Judge-->>API: needs_web_fallback?
     end
 
     opt needs_web_fallback AND web_fallback_enabled
-        API->>GR: check_web_query(query)
-        API->>Web: search(query)
+        API->>GR: check_web_query(rewritten_query)
+        API->>Web: search(rewritten_query)
         Web-->>API: web_response + web_sources
+        API->>GR: check_output(web_response)
     end
 
-    API->>GR: check_output(response)
-    API->>Conv: append_exchange(query, response, method, ...)
-    API-->>FE: AgentSearchResponse
+    opt session_id provided
+        API->>Conv: append_exchange(query, graphrag_response, method, ...)
+    end
+
+    API-->>FE: AgentSearchResponse{response, web_response?, web_sources?}
 ```
+
+Notes:
+
+- This sequence assumes `ai_guardrails_enabled=true`, so `check_input`, `check_rewrite`, `check_output`, and `check_web_query` are active checkpoints rather than no-op passes.
+- The primary `response` in `AgentSearchResponse` is the GraphRAG answer. If web fallback runs and passes output guardrails, its synthesized answer is returned separately as `web_response` with `web_sources`.
+- In `/agent`, `check_output` now runs twice when web fallback succeeds: once for the GraphRAG answer before insufficiency judgment, and once for the synthesized `web_response` before it is attached to the final payload.
+- If the web fallback runs but its synthesized answer is blocked by output guardrails, the GraphRAG `response` is kept, `web_response` is omitted, `web_sources=[]`, and `web_search_triggered=true` still indicates that the fallback executed.
+- `SummarizationService` is not called inline during `/search/agent`. Conversation summaries are updated later inside `ConversationService.append_exchange()` after persistence, once the configured user-turn threshold is exceeded.
 
 ### Streaming variant
 
-`GET|POST /search/agent/stream` returns Server-Sent Events:
+`GET|POST /api/collections/{collection_id}/search/agent/stream` returns Server-Sent Events:
 
 | Event | Payload | When |
 |---|---|---|
-| `status` | `{step, message, method?}` | Each pipeline stage (guardrails, routing, search, judge, web) |
-| `content` | `{chunk}` | LLM token deltas during synthesis |
+| `status` | `{step, message, method?, rewritten_query?}` | Progress updates such as `routing`, `routed`, `searching`, `judging_sufficiency`, `web_searching` |
+| `content` | `{delta}` | Chunked GraphRAG response text |
 | `done` | Full `AgentSearchResponse` fields | Pipeline complete |
-| `error` | `{error}` | Unrecoverable error |
+| `error` | `{message}` | Unrecoverable error |
 
-The frontend (`CollectionChat`) consumes the stream via `fetch()` + `ReadableStream`, accumulates `content` chunks into the rendered Markdown, and shows `status` messages as a step-by-step progress UI.
+The frontend (`CollectionChat`) consumes the stream via `fetch()` + `ReadableStream`, accumulates `content.delta` chunks into the rendered Markdown, and shows `status` messages as a step-by-step progress UI.
 
 ## 3. Common Pre-Search Steps
 
-### 3.1 Guardrails (`NemoGuardrailsService`)
+### 3.1 Guardrails (`NemoGuardrailsService`, enabled path)
 
-Four checkpoints, all returning `GuardrailDecision{allowed, action, reason, safe_response, metadata}`:
+With `ai_guardrails_enabled=true`, the agent route uses four checkpoints, each returning `GuardrailDecision{allowed, action, reason, safe_response, metadata}`:
 
 ```mermaid
 flowchart LR
@@ -113,7 +128,7 @@ flowchart LR
     Rewrite --> CheckRewrite[check_rewrite]
     CheckRewrite --> Search[GraphRAG search]
     Search --> CheckOut[check_output]
-    Search --> WebQ{web fallback?}
+    CheckOut --> WebQ{web fallback?}
     WebQ -- yes --> CheckWeb[check_web_query]
 ```
 
@@ -122,7 +137,7 @@ flowchart LR
 - Secret/credential patterns (API keys, JWT shape, AWS keys)
 - Output leakage (system prompt fragments, internal IDs)
 
-**NeMo Rails** (optional, when `nemoguardrails` is installed and `AI_GUARDRAILS_CONFIG_PATH` is set): LLM-based intent and safety checks.
+**NeMo Rails** (optional, when `nemoguardrails` is installed and `AI_GUARDRAILS_CONFIG_PATH` is set): LLM-based intent and safety checks run after deterministic checks.
 
 **Modes:**
 - `shadow` — log only, never block (used during rollout).
@@ -132,13 +147,28 @@ flowchart LR
 - `open` — allow on guardrail error (default for high availability).
 - `closed` — block on error (used in stricter environments).
 
+**Checkpoint coverage in `/agent`:**
+- `check_input(query)` runs before routing.
+- `check_rewrite(original_query, rewritten_query)` runs after the router chooses a method and rewritten standalone query.
+- `check_output(graphrag_response)` runs immediately after GraphRAG search returns.
+- `check_web_query(rewritten_query)` runs before web fallback is allowed to execute.
+- `check_output(web_response)` runs after web fallback returns and before the synthesized answer is attached to `web_response`.
+
+**Checkpoint coverage in direct/manual routes:**
+- `POST /search/global`, `/local`, `/tog`, and `/drift` run `check_input(query)` before dispatching to `QueryService`.
+- Those direct routes also run `check_output(response)` after the chosen GraphRAG method returns.
+- If either direct-route check blocks, the API still returns a normal `SearchResponse` with the original `method` and a safe canned `response`.
+- `POST /search/web` runs `check_web_query(query)` before Tavily search and `check_output(response)` after LLM synthesis.
+
 ### 3.2 Conversation context
 
 If `session_id` is provided, the API loads:
 - `summary` — running summary of older turns.
 - `recent_turns` — up to `conversation_recent_user_turns` (default 3) most recent user/assistant pairs.
 
-When the user-turn count exceeds `conversation_summarize_user_turn_threshold` (default 8), `SummarizationService.summarize()` compresses older turns into a new summary, retaining only the last N pairs verbatim.
+If `session_id` is not provided and `conversation_legacy_payload_enabled=true`, the client may send `conversation_history` and `conversation_summary` directly in the request body.
+
+When the stored session's user-turn count exceeds `conversation_summarize_user_turn_threshold` (default 8), `ConversationService.append_exchange()` calls `SummarizationService.summarize()` after persistence and updates the session summary, retaining only the most recent turns verbatim for future prompts.
 
 ### 3.3 Routing (`RouterAgent`)
 
@@ -361,7 +391,9 @@ flowchart LR
 **Web search** (`WebSearchService`):
 - Tavily API → results.
 - LLM synthesis using `prompts/web_synthesis_prompt.txt`.
-- Returns `WebSearchResult{response, sources}` which is appended to the agent response as `web_response` and `web_sources`.
+- Returns `WebSearchResult{response, sources}`.
+- In agent mode, the synthesized `response` is output-checked before it is appended as `web_response`.
+- If that second output check blocks, the fallback still counts as executed, but `web_response` is omitted from the final `AgentSearchResponse`.
 
 ## 6. Dataset Caching
 
@@ -415,10 +447,10 @@ Datasets used in citations:
 
 The frontend (`CollectionChat`) parses these tokens and renders them as colored badges with hover tooltips showing the entity/report description.
 
-For agent-routed responses, sources are also returned as a structured list:
+For agent-routed responses, `sources` is currently returned as an empty list, while web fallback citations (when present and allowed) are returned separately in `web_sources`:
 
 ```typescript
-sources: Array<{
+web_sources: Array<{
   id: number;
   title: string;
   url?: string;

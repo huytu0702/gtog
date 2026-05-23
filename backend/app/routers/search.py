@@ -21,6 +21,7 @@ from ..models import (
     DriftSearchRequest,
     GlobalSearchRequest,
     LocalSearchRequest,
+    SearchMethod,
     SearchResponse,
     SummarizeRequest,
     SummarizeResponse,
@@ -79,12 +80,17 @@ def _raise_for_unknown(err: Exception) -> None:
 async def global_search(collection_id: str, request: GlobalSearchRequest):
     """Perform a global search on a collection."""
     try:
-        result = await query_service.global_search(
+        result = await _guardrailed_direct_search(
             collection_id=collection_id,
             query=request.query,
-            community_level=request.community_level,
-            dynamic_community_selection=request.dynamic_community_selection,
-            response_type=request.response_type,
+            method=SearchMethod.GLOBAL,
+            search_call=lambda: query_service.global_search(
+                collection_id=collection_id,
+                query=request.query,
+                community_level=request.community_level,
+                dynamic_community_selection=request.dynamic_community_selection,
+                response_type=request.response_type,
+            ),
         )
         logger.info("Global search completed for collection %s", collection_id)
         return result
@@ -97,11 +103,16 @@ async def global_search(collection_id: str, request: GlobalSearchRequest):
 async def local_search(collection_id: str, request: LocalSearchRequest):
     """Perform a local search on a collection."""
     try:
-        result = await query_service.local_search(
+        result = await _guardrailed_direct_search(
             collection_id=collection_id,
             query=request.query,
-            community_level=request.community_level,
-            response_type=request.response_type,
+            method=SearchMethod.LOCAL,
+            search_call=lambda: query_service.local_search(
+                collection_id=collection_id,
+                query=request.query,
+                community_level=request.community_level,
+                response_type=request.response_type,
+            ),
         )
         logger.info("Local search completed for collection %s", collection_id)
         return result
@@ -114,9 +125,14 @@ async def local_search(collection_id: str, request: LocalSearchRequest):
 async def tog_search(collection_id: str, request: ToGSearchRequest):
     """Perform a ToG (Tree-of-Graph) search on a collection."""
     try:
-        result = await query_service.tog_search(
+        result = await _guardrailed_direct_search(
             collection_id=collection_id,
             query=request.query,
+            method=SearchMethod.TOG,
+            search_call=lambda: query_service.tog_search(
+                collection_id=collection_id,
+                query=request.query,
+            ),
         )
         logger.info("ToG search completed for collection %s", collection_id)
         return result
@@ -145,11 +161,16 @@ async def get_tog_entities(collection_id: str):
 async def drift_search(collection_id: str, request: DriftSearchRequest):
     """Perform a DRIFT search on a collection."""
     try:
-        result = await query_service.drift_search(
+        result = await _guardrailed_direct_search(
             collection_id=collection_id,
             query=request.query,
-            community_level=request.community_level,
-            response_type=request.response_type,
+            method=SearchMethod.DRIFT,
+            search_call=lambda: query_service.drift_search(
+                collection_id=collection_id,
+                query=request.query,
+                community_level=request.community_level,
+                response_type=request.response_type,
+            ),
         )
         logger.info("DRIFT search completed for collection %s", collection_id)
         return result
@@ -202,8 +223,106 @@ def _build_blocked_agent_response(
     )
 
 
+def _build_blocked_search_response(
+    *,
+    query: str,
+    method: SearchMethod,
+    decision: GuardrailDecision,
+) -> SearchResponse:
+    return SearchResponse(
+        query=query,
+        response=decision.safe_response or "Request blocked by AI guardrails.",
+        context_data={"guardrail": decision.metadata}
+        if settings.ai_guardrails_return_metadata
+        else None,
+        method=method,
+    )
+
+
 def _guardrail_context(collection_id: str, **metadata: Any) -> dict[str, Any]:
     return {"collection_id": collection_id, **metadata}
+
+
+async def _guardrailed_direct_search(
+    *,
+    collection_id: str,
+    query: str,
+    method: SearchMethod,
+    search_call,
+) -> SearchResponse:
+    method_name = method.value
+    input_decision = await nemo_guardrails_service.check_input(
+        query,
+        _guardrail_context(collection_id, stage=f"direct_{method_name}_input"),
+    )
+    logger.info(
+        "[GUARDRAIL] direct %s input check: allowed=%s action=%s reason=%s",
+        method_name,
+        input_decision.allowed,
+        input_decision.action,
+        input_decision.reason,
+    )
+    if not input_decision.allowed:
+        logger.warning("[GUARDRAIL] direct %s input BLOCKED query=%r", method_name, query)
+        return _build_blocked_search_response(
+            query=query,
+            method=method,
+            decision=input_decision,
+        )
+
+    result = await search_call()
+    output_decision = await nemo_guardrails_service.check_output(
+        _normalize_response_text(result.response),
+        _guardrail_context(
+            collection_id,
+            stage=f"direct_{method_name}_output",
+            context_metadata=_build_context_metadata(result.context_data),
+        ),
+    )
+    logger.info(
+        "[GUARDRAIL] direct %s output check: allowed=%s action=%s reason=%s",
+        method_name,
+        output_decision.allowed,
+        output_decision.action,
+        output_decision.reason,
+    )
+    if not output_decision.allowed:
+        logger.warning("[GUARDRAIL] direct %s output BLOCKED", method_name)
+        return _build_blocked_search_response(
+            query=query,
+            method=method,
+            decision=output_decision,
+        )
+
+    return SearchResponse(
+        query=result.query,
+        response=output_decision.safe_response or result.response,
+        context_data=result.context_data,
+        method=result.method,
+    )
+
+
+async def _guardrailed_web_result(
+    *,
+    collection_id: str,
+    response: Any,
+    context_stage: str,
+) -> tuple[GuardrailDecision, Any | None]:
+    output_decision = await nemo_guardrails_service.check_output(
+        _normalize_response_text(response),
+        _guardrail_context(collection_id, stage=context_stage),
+    )
+    logger.info(
+        "[GUARDRAIL] %s output check: allowed=%s action=%s reason=%s",
+        context_stage,
+        output_decision.allowed,
+        output_decision.action,
+        output_decision.reason,
+    )
+    if not output_decision.allowed:
+        logger.warning("[GUARDRAIL] %s output BLOCKED", context_stage)
+        return output_decision, None
+    return output_decision, output_decision.safe_response or response
 
 
 async def _should_trigger_web_fallback(
@@ -376,6 +495,9 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
 
         response_payload = output_decision.safe_response or result.response
         web_result = None
+        web_response_payload = None
+        web_sources_payload: list[dict[str, Any]] = []
+        web_search_triggered = False
         should_fallback = await _should_trigger_web_fallback(
             original_query=request.query,
             search_query=search_query,
@@ -391,7 +513,23 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             if web_decision.allowed:
                 logger.info("LLM judge marked GraphRAG response insufficient, triggering web fallback")
                 try:
+                    web_search_triggered = True
                     web_result = await web_search_service.search(search_query)
+                    _, guarded_web_response = await _guardrailed_web_result(
+                        collection_id=collection_id,
+                        response=web_result.response,
+                        context_stage="agent_web_output",
+                    )
+                    if guarded_web_response is None:
+                        logger.info(
+                            "Suppressing blocked web fallback output for collection %s",
+                            collection_id,
+                        )
+                    else:
+                        web_response_payload = guarded_web_response
+                        web_sources_payload = [
+                            s.model_dump() for s in web_result.sources
+                        ]
                 except Exception:
                     logger.exception("Web search fallback failed")
             else:
@@ -414,9 +552,9 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             response=response_payload,
             sources=[],
             context_data=result.context_data,
-            web_response=web_result.response if web_result else None,
-            web_sources=[s.model_dump() for s in web_result.sources] if web_result else [],
-            web_search_triggered=web_result is not None,
+            web_response=web_response_payload,
+            web_sources=web_sources_payload,
+            web_search_triggered=web_search_triggered,
             session_id=session_id,
         )
 
@@ -437,6 +575,12 @@ async def web_search(collection_id: str, request: WebSearchRequest):
             request.query,
             _guardrail_context(collection_id, stage="direct_web"),
         )
+        logger.info(
+            "[GUARDRAIL] direct web query check: allowed=%s action=%s reason=%s",
+            web_decision.allowed,
+            web_decision.action,
+            web_decision.reason,
+        )
         if not web_decision.allowed:
             return {
                 "query": request.query,
@@ -446,9 +590,10 @@ async def web_search(collection_id: str, request: WebSearchRequest):
             }
 
         result = await web_search_service.search(request.query)
-        output_decision = await nemo_guardrails_service.check_output(
-            _normalize_response_text(result.response),
-            _guardrail_context(collection_id, stage="direct_web_output"),
+        output_decision, guarded_web_response = await _guardrailed_web_result(
+            collection_id=collection_id,
+            response=result.response,
+            context_stage="direct_web_output",
         )
         if not output_decision.allowed:
             return {
@@ -460,7 +605,7 @@ async def web_search(collection_id: str, request: WebSearchRequest):
 
         return {
             "query": request.query,
-            "response": output_decision.safe_response or result.response,
+            "response": guarded_web_response,
             "sources": [s.model_dump() for s in result.sources],
             "method": "web",
         }
@@ -632,6 +777,9 @@ def _build_agent_stream_response(
             }
 
             web_result = None
+            web_response_payload = None
+            web_sources_payload: list[dict[str, Any]] = []
+            web_search_triggered = False
             should_fallback = False
             if output_decision.allowed:
                 should_fallback = await _should_trigger_web_fallback(
@@ -656,7 +804,23 @@ def _build_agent_stream_response(
                         }),
                     }
                     try:
+                        web_search_triggered = True
                         web_result = await web_search_service.search(search_query)
+                        _, guarded_web_response = await _guardrailed_web_result(
+                            collection_id=collection_id,
+                            response=web_result.response,
+                            context_stage="agent_stream_web_output",
+                        )
+                        if guarded_web_response is None:
+                            logger.info(
+                                "Suppressing blocked SSE web fallback output for collection %s",
+                                collection_id,
+                            )
+                        else:
+                            web_response_payload = guarded_web_response
+                            web_sources_payload = [
+                                s.model_dump() for s in web_result.sources
+                            ]
                     except Exception:
                         logger.exception("Web search fallback failed in SSE")
                 else:
@@ -682,9 +846,9 @@ def _build_agent_stream_response(
                     "router_reasoning": route_decision.reasoning,
                     "context_data": result.context_data,
                     "session_id": session_id,
-                    "web_search_triggered": web_result is not None,
-                    "web_response": web_result.response if web_result else None,
-                    "web_sources": [s.model_dump() for s in web_result.sources] if web_result else [],
+                    "web_search_triggered": web_search_triggered,
+                    "web_response": web_response_payload,
+                    "web_sources": web_sources_payload,
                 }),
             }
 

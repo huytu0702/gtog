@@ -271,7 +271,7 @@ Canonical job document by ID (any collection).
 
 ### Direct search methods
 
-User-selected method, no routing or guardrails on rewrite. Common shape:
+User-selected method, no routing or rewrite. Route-level guardrails still apply to the request and returned answer. Common shape:
 
 | Endpoint | Method | Request body |
 |---|---|---|
@@ -290,6 +290,8 @@ All return `SearchResponse`:
   "method": "global"
 }
 ```
+
+If input or output guardrails block a direct/manual route, the API still returns `SearchResponse` with the original `method` and a safe canned `response`.
 
 #### `POST /search/global`
 
@@ -394,9 +396,7 @@ Non-streaming variant.
   "router_reasoning": "Multi-hop entity question — ToG fits.",
   "rewritten_query": "Who founded Microsoft?",
   "response": "Bill Gates and Paul Allen founded Microsoft in 1975 [Data: Entities (12, 47)].",
-  "sources": [
-    { "id": 1, "title": "founding-story.md", "text_unit_id": "tu_..." }
-  ],
+  "sources": [],
   "context_data": { "...": "..." },
   "session_id": "sess_abc123",
   "web_response": null,
@@ -405,13 +405,15 @@ Non-streaming variant.
 }
 ```
 
-When the input is blocked by guardrails, `method_used="blocked"` and `response` contains a safe canned response.
+When the input, rewrite, or primary GraphRAG output is blocked by guardrails, `method_used="blocked"` and `response` contains a safe canned response.
+
+When web fallback runs, `response` remains the GraphRAG answer. The synthesized web supplement is returned separately in `web_response` and `web_sources` only if it also passes output guardrails.
 
 #### `GET|POST /api/collections/{collection_id}/search/agent/stream`
 
 Streaming variant. Returns `text/event-stream` (SSE).
 
-**GET query params** (used by EventSource): `query`, `session_id?`, `summary?`, `history?` (URL-encoded JSON).
+**GET query params** (used by EventSource): `query`, `session_id?`.
 
 **POST body:** same as `/search/agent` (with `stream=true`).
 
@@ -419,16 +421,22 @@ Streaming variant. Returns `text/event-stream` (SSE).
 
 ```
 event: status
-data: {"step":"guardrails_input","message":"Checking input"}
+data: {"step":"routing","message":"Analyzing query..."}
 
 event: status
-data: {"step":"routing","method":"tog","message":"Routed to ToG"}
+data: {"step":"routed","method":"tog","rewritten_query":"Who founded Microsoft?","message":"Using TOG search"}
+
+event: status
+data: {"step":"searching","message":"Searching..."}
 
 event: content
-data: {"chunk":"Bill Gates"}
+data: {"delta":"Bill Gates"}
 
 event: content
-data: {"chunk":" and Paul Allen..."}
+data: {"delta":" and Paul Allen..."}
+
+event: status
+data: {"step":"judging_sufficiency","message":"Checking if indexed data is sufficient..."}
 
 event: done
 data: {
@@ -436,7 +444,7 @@ data: {
   "router_reasoning":"...",
   "rewritten_query":"...",
   "response":"...full text...",
-  "sources":[...],
+  "sources":[],
   "context_data":{...},
   "session_id":"sess_abc123",
   "web_response":null,
@@ -445,10 +453,12 @@ data: {
 }
 ```
 
+If web fallback runs but its synthesized answer is blocked by output guardrails, the `done` payload may still show `web_search_triggered:true` while `web_response:null` and `web_sources:[]`.
+
 On error:
 ```
 event: error
-data: {"error":"upstream LLM timeout"}
+data: {"message":"Internal error while processing stream."}
 ```
 
 #### `POST /api/collections/{collection_id}/search/agent/summarize`
@@ -479,7 +489,7 @@ Compress a conversation history into a running summary (used proactively by the 
 
 #### `POST /api/collections/{collection_id}/search/web`
 
-Direct web search (no GraphRAG). Useful for testing the Tavily integration.
+Direct web search (no GraphRAG). Useful for testing the Tavily integration. This route runs `check_web_query(query)` before Tavily search and `check_output(response)` after LLM synthesis.
 
 **Request — `WebSearchRequest`:**
 ```json
@@ -493,9 +503,12 @@ Direct web search (no GraphRAG). Useful for testing the Tavily integration.
   "response": "Synthesized answer...",
   "sources": [
     { "id": 1, "title": "...", "url": "https://..." }
-  ]
+  ],
+  "method": "web"
 }
 ```
+
+If either the web query or synthesized web answer is blocked by guardrails, the route still returns HTTP 200 with the same response shape, but `response` becomes the safe canned answer and `sources` is empty.
 
 ## 7. Conversation Sessions
 
@@ -675,4 +688,3 @@ while (true) {
 - [query_flow.md](query_flow.md) — Behavior behind `/search/*` endpoints
 - [index_flow.md](index_flow.md) — Behavior behind `/index` endpoints
 - [database_schema.md](database_schema.md) — Persistence model behind these endpoints
-

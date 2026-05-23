@@ -234,13 +234,15 @@ sequenceDiagram
     API->>GR: check_rewrite(query, rewritten)
     API->>Q: dispatch to chosen method
     Q-->>API: response + context_data
-    API->>Judge: judge(response)
+    API->>GR: check_output(graphrag_response)
+    API->>Judge: judge(graphrag_response)
     Judge-->>API: sufficient? needs_web?
     alt needs web fallback
-        API->>Web: search(query)
-        Web-->>API: web_response + sources
+        API->>GR: check_web_query(rewritten_query)
+        API->>Web: search(rewritten_query)
+        Web-->>API: web_response + web_sources
+        API->>GR: check_output(web_response)
     end
-    API->>GR: check_output(response)
     API->>Conv: append_exchange(...)
     API-->>FE: AgentSearchResponse (or SSE stream)
 ```
