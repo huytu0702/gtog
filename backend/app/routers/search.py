@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -186,7 +187,7 @@ def _normalize_response_text(response: Any) -> str:
     if isinstance(response, str):
         return response
     try:
-        return json.dumps(response)
+        return json.dumps(response, ensure_ascii=False)
     except Exception:
         return str(response)
 
@@ -200,6 +201,28 @@ def _build_context_metadata(context_data: dict | None) -> str:
         for key, value in context_data.items()
     }
     return json.dumps(summary)
+
+
+_REFUSAL_PATTERNS = (
+    re.compile(r"^mình không thể hỗ trợ yêu cầu đó(?:\b|[.!?])"),
+    re.compile(r"^xin lỗi\s*,?\s*nhưng tôi không thể(?:\b|[.!?])"),
+    re.compile(r"^i\s*(?:am|['’]m)?\s*sorry\s*,?\s*but\s*i\s*can(?:not|['’]t)\s*assist\s*with\s*that(?:\b|[.!?])"),
+    re.compile(r"^i\s*can(?:not|['’]t)\s*(?:assist|help)\s*with\s*that(?:\s*request)?(?:\b|[.!?])"),
+)
+
+
+def _normalize_guardrail_text(text: str) -> str:
+    normalized = text.lower().replace("’", "'").replace("`", "'")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _is_refusal_response(response: Any) -> bool:
+    text = _normalize_response_text(response)
+    if not text:
+        return False
+    normalized_text = _normalize_guardrail_text(text)
+    return any(pattern.search(normalized_text) for pattern in _REFUSAL_PATTERNS)
 
 
 def _build_blocked_agent_response(
@@ -494,17 +517,25 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
             return _build_blocked_agent_response(output_decision, session_id=session_id)
 
         response_payload = output_decision.safe_response or result.response
+        is_refusal_response = _is_refusal_response(response_payload)
         web_result = None
         web_response_payload = None
         web_sources_payload: list[dict[str, Any]] = []
         web_search_triggered = False
-        should_fallback = await _should_trigger_web_fallback(
-            original_query=request.query,
-            search_query=search_query,
-            method_used=route_decision.method,
-            graphrag_response=response_payload,
-            context_data=result.context_data,
-        )
+        should_fallback = False
+        if not is_refusal_response:
+            should_fallback = await _should_trigger_web_fallback(
+                original_query=request.query,
+                search_query=search_query,
+                method_used=route_decision.method,
+                graphrag_response=response_payload,
+                context_data=result.context_data,
+            )
+        else:
+            logger.info(
+                "Skipping web fallback because GraphRAG response is a refusal for collection %s",
+                collection_id,
+            )
         if should_fallback:
             web_decision = await nemo_guardrails_service.check_web_query(
                 search_query,
@@ -544,6 +575,11 @@ async def agent_search(collection_id: str, request: AgentSearchRequest):
                 rewritten_query=route_decision.rewritten_query,
                 method_used=route_decision.method,
             )
+
+        if is_refusal_response:
+            web_response_payload = None
+            web_sources_payload = []
+            web_search_triggered = False
 
         return AgentSearchResponse(
             method_used=route_decision.method,
@@ -767,27 +803,32 @@ def _build_agent_stream_response(
                     }),
                 }
 
-            # LLM sufficiency judgment before optional web fallback
-            yield {
-                "event": "status",
-                "data": json.dumps({
-                    "step": "judging_sufficiency",
-                    "message": "Checking if indexed data is sufficient...",
-                }),
-            }
-
             web_result = None
             web_response_payload = None
             web_sources_payload: list[dict[str, Any]] = []
             web_search_triggered = False
             should_fallback = False
-            if output_decision.allowed:
+            is_refusal_response = _is_refusal_response(response_payload)
+            if output_decision.allowed and not is_refusal_response:
+                # LLM sufficiency judgment before optional web fallback
+                yield {
+                    "event": "status",
+                    "data": json.dumps({
+                        "step": "judging_sufficiency",
+                        "message": "Checking if indexed data is sufficient...",
+                    }),
+                }
                 should_fallback = await _should_trigger_web_fallback(
                     original_query=request.query,
                     search_query=search_query,
                     method_used=route_decision.method,
                     graphrag_response=response_payload,
                     context_data=result.context_data,
+                )
+            elif is_refusal_response:
+                logger.info(
+                    "Skipping SSE web fallback because GraphRAG response is a refusal for collection %s",
+                    collection_id,
                 )
             if should_fallback:
                 web_decision = await nemo_guardrails_service.check_web_query(
@@ -825,6 +866,11 @@ def _build_agent_stream_response(
                         logger.exception("Web search fallback failed in SSE")
                 else:
                     logger.info("AI guardrail blocked SSE web fallback for collection %s", collection_id)
+
+            if is_refusal_response:
+                web_response_payload = None
+                web_sources_payload = []
+                web_search_triggered = False
 
             if session_id:
                 await conversation_service.append_exchange(
