@@ -17,11 +17,6 @@ param(
     [string]$JobEventsContainer       = "jobEvents",
     [string]$ArtifactManifestContainer = "artifactManifest",
 
-    # Vector store containers — match embeddings_schema keys in settings.yaml (partition key: /id)
-    [string]$VectorEntityContainer    = "entity.description",
-    [string]$VectorCommunityContainer = "community.full_content",
-    [string]$VectorTextUnitContainer  = "text_unit.text",
-    [int]   $VectorDimension         = 3072
 )
 
 $ErrorActionPreference = "Stop"
@@ -139,21 +134,24 @@ Invoke-Az "storage", "queue", "create",
 # CosmosDB account — serverless + NoSQL vector search
 # ---------------------------------------------------------------------------
 
-function Test-CosmosIsServerless {
+function Test-CosmosHasRequiredCapabilities {
     $caps = & az cosmosdb show `
         --name $CosmosAccount `
         --resource-group $ResourceGroup `
         --query "capabilities[].name" `
         --output tsv 2>$null
-    return ($caps -split "`r?`n" | Where-Object { $_ -eq "EnableServerless" }).Count -gt 0
+    $capList = $caps -split "`r?`n"
+    $isServerless = ($capList | Where-Object { $_ -eq "EnableServerless" }).Count -gt 0
+    $hasVectorSearch = ($capList | Where-Object { $_ -eq "EnableNoSQLVectorSearch" }).Count -gt 0
+    return $isServerless -and $hasVectorSearch
 }
 
 Write-Host ">>> Ensuring Cosmos DB account: $CosmosAccount (serverless + vector search)"
 if (Test-Az "cosmosdb", "show", "--name", $CosmosAccount, "--resource-group", $ResourceGroup) {
-    if (-not (Test-CosmosIsServerless)) {
-        throw "Cosmos DB account '$CosmosAccount' exists but is NOT serverless. Capacity mode cannot be changed in place."
+    if (-not (Test-CosmosHasRequiredCapabilities)) {
+        throw "Cosmos DB account '$CosmosAccount' exists but is missing required capabilities (EnableServerless, EnableNoSQLVectorSearch)."
     }
-    Write-Host "    Account already exists and is configured for serverless."
+    Write-Host "    Account already exists and has required serverless + vector capabilities."
 } else {
     Invoke-Az "cosmosdb", "create",
         "--name", $CosmosAccount,
@@ -213,70 +211,6 @@ function Ensure-ControlContainer {
 }
 
 # ---------------------------------------------------------------------------
-# Helper: vector store container (partition key: /id, diskANN)
-# ---------------------------------------------------------------------------
-
-function Ensure-VectorContainer {
-    param([string]$Name, [int]$Dimension)
-
-    if (Test-Az "cosmosdb", "sql", "container", "show",
-        "--account-name", $CosmosAccount,
-        "--resource-group", $ResourceGroup,
-        "--database-name", $CosmosDatabase,
-        "--name", $Name) {
-        Write-Host "    Vector container '$Name' already exists."
-        return
-    }
-
-    $vectorEmbeddingPolicy = @{
-        vectorEmbeddings = @(
-            @{
-                path             = "/vector"
-                dataType         = "float32"
-                distanceFunction = "cosine"
-                dimensions       = $Dimension
-            }
-        )
-    } | ConvertTo-Json -Depth 5
-
-    $indexingPolicy = @{
-        indexingMode   = "consistent"
-        automatic      = $true
-        includedPaths  = @(@{ path = "/*" })
-        excludedPaths  = @(
-            @{ path = "/_etag/?" },
-            @{ path = "/vector/*" }
-        )
-        vectorIndexes  = @(
-            @{ path = "/vector"; type = "diskANN" }
-        )
-    } | ConvertTo-Json -Depth 5
-
-    $vectorEmbeddingFile = Join-Path $env:TEMP ("cosmos-vector-embeddings-{0}.json" -f ([Guid]::NewGuid().ToString("N")))
-    $indexingPolicyFile = Join-Path $env:TEMP ("cosmos-index-policy-{0}.json" -f ([Guid]::NewGuid().ToString("N")))
-
-    try {
-        Set-Content -Path $vectorEmbeddingFile -Value $vectorEmbeddingPolicy -Encoding utf8
-        Set-Content -Path $indexingPolicyFile -Value $indexingPolicy -Encoding utf8
-
-        Invoke-Az "cosmosdb", "sql", "container", "create",
-            "--account-name", $CosmosAccount,
-            "--resource-group", $ResourceGroup,
-            "--database-name", $CosmosDatabase,
-            "--name", $Name,
-            "--partition-key-path", "/id",
-            "--vector-embeddings", "@$vectorEmbeddingFile",
-            "--idx", "@$indexingPolicyFile",
-            "--output", "none" | Out-Null
-
-        Write-Host "    Created vector container '$Name' (dim=$Dimension, diskANN)."
-    } finally {
-        if (Test-Path $vectorEmbeddingFile) { Remove-Item $vectorEmbeddingFile -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $indexingPolicyFile) { Remove-Item $indexingPolicyFile -Force -ErrorAction SilentlyContinue }
-    }
-}
-
-# ---------------------------------------------------------------------------
 # Control-plane containers
 # ---------------------------------------------------------------------------
 
@@ -288,13 +222,10 @@ Ensure-ControlContainer $JobEventsContainer
 Ensure-ControlContainer $ArtifactManifestContainer
 
 # ---------------------------------------------------------------------------
-# Vector store containers (match embeddings_schema keys in settings.yaml)
+# Vector store containers
 # ---------------------------------------------------------------------------
 
-Write-Host ">>> Ensuring vector store containers (partition key: /id, dim=$VectorDimension, diskANN)"
-Ensure-VectorContainer $VectorEntityContainer    $VectorDimension
-Ensure-VectorContainer $VectorCommunityContainer $VectorDimension
-Ensure-VectorContainer $VectorTextUnitContainer  $VectorDimension
+Write-Host ">>> Skipping vector container provisioning (created on-demand during indexing per collection)"
 
 # ---------------------------------------------------------------------------
 # Output

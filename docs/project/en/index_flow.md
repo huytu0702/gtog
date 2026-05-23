@@ -301,6 +301,7 @@ In **cosmos_pipeline mode** (this deployment), all pipeline datasets for one ind
 | `pipeline-{collection}-{version}` | `/id` | Pipeline datasets as parquet payloads — one Cosmos document per dataset (`entities.parquet`, `relationships.parquet`, `text_units.parquet`, `communities.parquet`, `community_reports.parquet`, `covariates.parquet`) |
 | `artifactManifest` | `/collectionId` | Row counts + checksum per `(collection, version)` after verification |
 | `collections` | `/collectionId` | Active version pointer per collection (`activeVersion`) |
+| `vec-{collection}-{version}-{embedding}` | `/id` | On-demand Cosmos vector containers populated during indexing for ANN retrieval (`entity.description`, `community.full_content`, `text_unit.text`, etc.) |
 
 The query layer reads `collections.activeVersion` for the collection, then loads from the matching `pipeline-{collection}-{version}` container.
 
@@ -345,7 +346,7 @@ flowchart TB
 
 **Backoff:** exponential with jitter, capped at `AZURE_STORAGE_QUEUE_VISIBILITY_TIMEOUT_SECONDS` (300s default).
 
-**Idempotency:** each indexing run targets a fresh `pipeline-{collection}-{version}` container (version = first 16 chars of `jobId`). Only after `_verify_pipeline_output` succeeds does `set_active_version` swap the pointer in the `versions` container, so a retry from scratch writes a clean container without affecting the currently-served version.
+**Idempotency:** each indexing run targets a fresh `pipeline-{collection}-{version}` container (version = first 16 chars of `jobId`) and version-scoped vector namespaces (`vec-{collection}-{version}-*`). Only after `_verify_pipeline_output` succeeds does `set_active_version` swap the pointer in the `collections` container (`activeVersion`), so a retry from scratch writes a clean version without affecting the currently-served one.
 
 ## 10. Cache & Update Strategy
 

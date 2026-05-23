@@ -262,7 +262,7 @@ sequenceDiagram
 - **Backend**: `ca-gtog-api-prod` (Azure Container Apps) — Easy Auth `AllowAnonymous`, backend enforces auth via `REQUIRE_PLATFORM_AUTH=true`.
 - **Public hostnames**: `app.gtog.id.vn` (frontend), `api.gtog.id.vn` (API).
 - **Worker**: Same image as API, runs `python -m app.worker` to consume the indexing queue.
-| **Storage** | Azure Blob (raw documents in `pipeline-input` container), Cosmos DB (control plane + pipeline output + conversations), Storage Queue (jobs). |
+| **Storage** | Azure Blob (raw documents in `pipeline-input` container), Cosmos DB (control plane + pipeline output + conversations + on-demand vector containers `vec-{collection}-{version}-{embedding}`), Storage Queue (jobs). |
 
 ## 10. Cross-Cutting Concerns
 

@@ -21,7 +21,7 @@ flowchart LR
         C3[indexingJobs]
         C4[jobEvents]
         C5[artifactManifest]
-        C6[versions / activeVersion]
+        C6[collections.activeVersion]
     end
 
     subgraph PP["Cosmos DB — Pipeline Output Plane (per collection × version)"]
@@ -55,10 +55,11 @@ flowchart LR
 
 **Database:** `AZURE_COSMOS_DATABASE_NAME` (default `gtog-control`).
 
-**Two kinds of containers** live in this database:
+**Three kinds of containers** live in this database:
 
 1. **Control + conversation containers** — fixed names, partition key `/collectionId`. They store collection metadata, documents, indexing jobs, conversation sessions and turns.
 2. **Pipeline output containers** — one container *per collection × version*, named `pipeline-{collection}-{version}` (sanitized, ≤128 chars), partition key `/id`. They are created by `CosmosDBPipelineStorage` during an indexing run and hold the parquet payloads of all GraphRAG datasets.
+3. **Vector containers (Cosmos vector store)** — created on-demand during indexing, named `vec-{collection}-{version}-{embedding}` (sanitized, ≤128 chars), partition key `/id`.
 
 ```mermaid
 erDiagram
@@ -170,7 +171,7 @@ One document per `(collectionId, version, artifactName)` recording row counts of
 
 `covariates` is included only when the dataset exists. The other five datasets are required and indexing fails if any is missing.
 
-### `versions` (active version pointer)
+### `collections` active version fields
 
 Tracks which version is currently served per collection. Written by `control_plane.set_active_version(...)` at the very end of a successful run, after manifest upsert. The query layer reads this to discover which `pipeline-{collection}-{version}` container to load.
 
@@ -208,6 +209,20 @@ flowchart LR
 **Why one container per version:** atomic publish. The new run writes a fresh container; only after `_verify_pipeline_output` succeeds does the control plane swap `collections.activeVersion` to point at it. Old versions stay readable until cleaned up.
 
 **Datasets and their schema:** the parquet payload of each dataset matches the GraphRAG core data model (`graphrag.data_model.*`). See section 5 for column-level detail.
+
+## 4.1 Vector Containers (Cosmos vector store)
+
+Vector containers are created during indexing (not pre-provisioned by DB scripts), with version-scoped names:
+
+- `vec-{collection}-{version}-entity-description`
+- `vec-{collection}-{version}-community-full-content`
+- `vec-{collection}-{version}-text-unit-text`
+- (optional by config) `vec-{collection}-{version}-relationship-description`
+
+These containers are used for ANN similarity retrieval and are separate from the pipeline artifact container. Query flow uses both:
+
+1. vector search from `vec-*` containers to fetch candidates,
+2. then hydration from the active `pipeline-{collection}-{version}` datasets.
 
 ## 5. Pipeline Dataset Schemas (parquet payloads)
 

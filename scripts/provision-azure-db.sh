@@ -20,13 +20,6 @@ INDEXING_JOBS_CONTAINER="${INDEXING_JOBS_CONTAINER:-indexingJobs}"
 JOB_EVENTS_CONTAINER="${JOB_EVENTS_CONTAINER:-jobEvents}"
 ARTIFACT_MANIFEST_CONTAINER="${ARTIFACT_MANIFEST_CONTAINER:-artifactManifest}"
 
-# Vector store containers (partition key: /id, vector dimension: 3072)
-# Names match embeddings_schema keys in settings.yaml
-VECTOR_ENTITY_CONTAINER="entity.description"
-VECTOR_COMMUNITY_CONTAINER="community.full_content"
-VECTOR_TEXT_UNIT_CONTAINER="text_unit.text"
-VECTOR_DIMENSION=3072
-
 BLOB_CONTAINERS=("pipeline-input" "pipeline-logs")
 QUEUE_NAMES=("indexing-jobs")
 
@@ -85,7 +78,7 @@ done
 # CosmosDB account — serverless + NoSQL vector search
 # ---------------------------------------------------------------------------
 
-cosmos_account_is_serverless() {
+cosmos_account_has_required_capabilities() {
   local capabilities
   capabilities="$(
     az cosmosdb show \
@@ -94,15 +87,15 @@ cosmos_account_is_serverless() {
       --query "capabilities[].name" \
       --output tsv 2>/dev/null || true
   )"
-  [[ "${capabilities}" == *"EnableServerless"* ]]
+  [[ "${capabilities}" == *"EnableServerless"* ]] && [[ "${capabilities}" == *"EnableNoSQLVectorSearch"* ]]
 }
 
 echo ">>> Ensuring Cosmos DB account: ${COSMOS_ACCOUNT} (serverless + vector search)"
 if az cosmosdb show --name "${COSMOS_ACCOUNT}" --resource-group "${RESOURCE_GROUP}" --output none 2>/dev/null; then
-  if cosmos_account_is_serverless; then
-    echo "    Cosmos DB account already exists and is configured for serverless."
+  if cosmos_account_has_required_capabilities; then
+    echo "    Cosmos DB account already exists and has required serverless + vector capabilities."
   else
-    echo "ERROR: Cosmos DB account '${COSMOS_ACCOUNT}' exists but is NOT serverless. Capacity mode cannot be changed in place." >&2
+    echo "ERROR: Cosmos DB account '${COSMOS_ACCOUNT}' is missing required capabilities (EnableServerless, EnableNoSQLVectorSearch)." >&2
     exit 1
   fi
 else
@@ -164,70 +157,6 @@ ensure_control_container() {
 }
 
 # ---------------------------------------------------------------------------
-# Helper: create a vector-search container (partition key: /id, diskANN index)
-# ---------------------------------------------------------------------------
-# Vector embedding policy and indexing policy are passed as inline JSON.
-# diskANN index requires the NoSQL Vector Search capability enabled above.
-
-ensure_vector_container() {
-  local container_name="$1"
-  local dimension="$2"
-
-  if az cosmosdb sql container show \
-    --account-name "${COSMOS_ACCOUNT}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --database-name "${COSMOS_DATABASE}" \
-    --name "${container_name}" \
-    --output none 2>/dev/null; then
-    echo "    Vector container '${container_name}' already exists."
-    return 0
-  fi
-
-  local vector_embedding_policy
-  vector_embedding_policy=$(cat <<EOF
-{
-  "vectorEmbeddings": [
-    {
-      "path": "/vector",
-      "dataType": "float32",
-      "distanceFunction": "cosine",
-      "dimensions": ${dimension}
-    }
-  ]
-}
-EOF
-)
-
-  local indexing_policy
-  indexing_policy=$(cat <<EOF
-{
-  "indexingMode": "consistent",
-  "automatic": true,
-  "includedPaths": [{"path": "/*"}],
-  "excludedPaths": [
-    {"path": "/_etag/?"},
-    {"path": "/vector/*"}
-  ],
-  "vectorIndexes": [
-    {"path": "/vector", "type": "diskANN"}
-  ]
-}
-EOF
-)
-
-  az cosmosdb sql container create \
-    --account-name "${COSMOS_ACCOUNT}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --database-name "${COSMOS_DATABASE}" \
-    --name "${container_name}" \
-    --partition-key-path "/id" \
-    --vector-embeddings "${vector_embedding_policy}" \
-    --idx "${indexing_policy}" \
-    --output none
-  echo "    Created vector container '${container_name}' (dim=${dimension}, diskANN)."
-}
-
-# ---------------------------------------------------------------------------
 # Control-plane containers
 # ---------------------------------------------------------------------------
 
@@ -239,13 +168,10 @@ ensure_control_container "${JOB_EVENTS_CONTAINER}"
 ensure_control_container "${ARTIFACT_MANIFEST_CONTAINER}"
 
 # ---------------------------------------------------------------------------
-# Vector store containers (match embeddings_schema keys in settings.yaml)
+# Vector store containers
 # ---------------------------------------------------------------------------
 
-echo ">>> Ensuring vector store containers (partition key: /id, dim=${VECTOR_DIMENSION}, diskANN)"
-ensure_vector_container "${VECTOR_ENTITY_CONTAINER}"    "${VECTOR_DIMENSION}"
-ensure_vector_container "${VECTOR_COMMUNITY_CONTAINER}" "${VECTOR_DIMENSION}"
-ensure_vector_container "${VECTOR_TEXT_UNIT_CONTAINER}" "${VECTOR_DIMENSION}"
+echo ">>> Skipping vector container provisioning (created on-demand during indexing per collection)"
 
 # ---------------------------------------------------------------------------
 # Output

@@ -224,13 +224,13 @@ def _normalize_litellm_model_config(config: GraphRagConfig) -> None:
 
 
 def _build_vector_index_name(collection_id: str, version: str | None = None) -> str:
-    """Build an Azure AI Search-safe index name for collection/version isolation."""
-    base = collection_id if version is None else f"{collection_id}-{version}"
+    """Build a version-aware vector namespace with a stable collection prefix."""
+    base = f"vec-{collection_id}" if version is None else f"vec-{collection_id}-{version}"
     normalized = re.sub(r"[^a-z0-9-]", "-", base.lower())
     normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
 
     if not normalized:
-        normalized = "gtog-index"
+        normalized = "vec-default"
     if len(normalized) <= 128:
         return normalized
 

@@ -18,9 +18,9 @@ def test_bash_db_provision_script_uses_serverless_cosmos_contract() -> None:
 
     assert 'LOCATION="${LOCATION:-southeastasia}"' in content
     assert "EnableServerless" in content
+    assert "EnableNoSQLVectorSearch" in content
     assert "--capabilities EnableServerless" in content
-    assert "exists but is NOT serverless" in content
-    assert "Capacity mode cannot be changed in place" in content
+    assert "missing required capabilities" in content
     assert "--max-throughput" not in content
 
 
@@ -29,10 +29,9 @@ def test_powershell_db_provision_script_uses_serverless_cosmos_contract() -> Non
 
     assert '[string]$Location         = "southeastasia"' in content
     assert "EnableServerless" in content
+    assert "EnableNoSQLVectorSearch" in content
     assert "--capabilities" in content
-    assert "EnableServerless" in content
-    assert "exists but is NOT serverless" in content
-    assert "Capacity mode cannot be changed in place" in content
+    assert "missing required capabilities" in content
     assert "--max-throughput" not in content
 
 
@@ -108,3 +107,23 @@ def test_powershell_db_provision_script_does_not_define_or_create_serving_contai
     assert "AZURE_COSMOS_COMMUNITIES_CONTAINER" not in content
     assert "AZURE_COSMOS_COMMUNITY_REPORTS_CONTAINER" not in content
     assert "AZURE_COSMOS_COVARIATES_CONTAINER" not in content
+
+
+def test_bash_db_provision_script_does_not_preprovision_vector_containers() -> None:
+    content = BASH_SCRIPT.read_text(encoding="utf-8")
+
+    assert "VECTOR_ENTITY_CONTAINER" not in content
+    assert "VECTOR_COMMUNITY_CONTAINER" not in content
+    assert "VECTOR_TEXT_UNIT_CONTAINER" not in content
+    assert "ensure_vector_container" not in content
+    assert "created on-demand during indexing per collection" in content
+
+
+def test_powershell_db_provision_script_does_not_preprovision_vector_containers() -> None:
+    content = POWERSHELL_SCRIPT.read_text(encoding="utf-8")
+
+    assert "$VectorEntityContainer" not in content
+    assert "$VectorCommunityContainer" not in content
+    assert "$VectorTextUnitContainer" not in content
+    assert "Ensure-VectorContainer" not in content
+    assert "created on-demand during indexing per collection" in content
