@@ -20,14 +20,6 @@ INDEXING_JOBS_CONTAINER="${INDEXING_JOBS_CONTAINER:-indexingJobs}"
 JOB_EVENTS_CONTAINER="${JOB_EVENTS_CONTAINER:-jobEvents}"
 ARTIFACT_MANIFEST_CONTAINER="${ARTIFACT_MANIFEST_CONTAINER:-artifactManifest}"
 
-# Serving containers (partition key: /collectionId)
-ENTITIES_CONTAINER="${ENTITIES_CONTAINER:-entities}"
-RELATIONSHIPS_CONTAINER="${RELATIONSHIPS_CONTAINER:-relationships}"
-TEXT_UNITS_CONTAINER="${TEXT_UNITS_CONTAINER:-textUnits}"
-COMMUNITIES_CONTAINER="${COMMUNITIES_CONTAINER:-communities}"
-COMMUNITY_REPORTS_CONTAINER="${COMMUNITY_REPORTS_CONTAINER:-communityReports}"
-COVARIATES_CONTAINER="${COVARIATES_CONTAINER:-covariates}"
-
 # Vector store containers (partition key: /id, vector dimension: 3072)
 # Names match embeddings_schema keys in settings.yaml
 VECTOR_ENTITY_CONTAINER="entity.description"
@@ -236,7 +228,7 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Control-plane + serving containers
+# Control-plane containers
 # ---------------------------------------------------------------------------
 
 echo ">>> Ensuring control-plane containers (partition key: /collectionId)"
@@ -245,14 +237,6 @@ ensure_control_container "${DOCUMENTS_CONTAINER}"
 ensure_control_container "${INDEXING_JOBS_CONTAINER}"
 ensure_control_container "${JOB_EVENTS_CONTAINER}"
 ensure_control_container "${ARTIFACT_MANIFEST_CONTAINER}"
-
-echo ">>> Ensuring serving containers (partition key: /collectionId)"
-ensure_control_container "${ENTITIES_CONTAINER}"
-ensure_control_container "${RELATIONSHIPS_CONTAINER}"
-ensure_control_container "${TEXT_UNITS_CONTAINER}"
-ensure_control_container "${COMMUNITIES_CONTAINER}"
-ensure_control_container "${COMMUNITY_REPORTS_CONTAINER}"
-ensure_control_container "${COVARIATES_CONTAINER}"
 
 # ---------------------------------------------------------------------------
 # Vector store containers (match embeddings_schema keys in settings.yaml)
@@ -290,12 +274,6 @@ echo "AZURE_COSMOS_DOCUMENTS_CONTAINER=\"${DOCUMENTS_CONTAINER}\""
 echo "AZURE_COSMOS_INDEXING_JOBS_CONTAINER=\"${INDEXING_JOBS_CONTAINER}\""
 echo "AZURE_COSMOS_JOB_EVENTS_CONTAINER=\"${JOB_EVENTS_CONTAINER}\""
 echo "AZURE_COSMOS_ARTIFACT_MANIFEST_CONTAINER=\"${ARTIFACT_MANIFEST_CONTAINER}\""
-echo "AZURE_COSMOS_ENTITIES_CONTAINER=\"${ENTITIES_CONTAINER}\""
-echo "AZURE_COSMOS_RELATIONSHIPS_CONTAINER=\"${RELATIONSHIPS_CONTAINER}\""
-echo "AZURE_COSMOS_TEXT_UNITS_CONTAINER=\"${TEXT_UNITS_CONTAINER}\""
-echo "AZURE_COSMOS_COMMUNITIES_CONTAINER=\"${COMMUNITIES_CONTAINER}\""
-echo "AZURE_COSMOS_COMMUNITY_REPORTS_CONTAINER=\"${COMMUNITY_REPORTS_CONTAINER}\""
-echo "AZURE_COSMOS_COVARIATES_CONTAINER=\"${COVARIATES_CONTAINER}\""
 echo
 echo "Retrieve secret values separately (do not commit to git):"
 echo "  az storage account keys list --account-name ${STORAGE_ACCOUNT} --resource-group ${RESOURCE_GROUP} --query \"[0].value\" -o tsv"

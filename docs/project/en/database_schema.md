@@ -205,7 +205,7 @@ flowchart LR
     end
 ```
 
-**Why one container per version:** atomic publish. The new run writes a fresh container; only after `_verify_pipeline_output` succeeds does the control plane swap `versions.activeVersion` to point at it. Old versions stay readable until cleaned up.
+**Why one container per version:** atomic publish. The new run writes a fresh container; only after `_verify_pipeline_output` succeeds does the control plane swap `collections.activeVersion` to point at it. Old versions stay readable until cleaned up.
 
 **Datasets and their schema:** the parquet payload of each dataset matches the GraphRAG core data model (`graphrag.data_model.*`). See section 5 for column-level detail.
 

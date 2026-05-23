@@ -75,12 +75,6 @@ class Settings(BaseSettings):
     azure_cosmos_indexing_jobs_container: str = "indexingJobs"
     azure_cosmos_job_events_container: str = "jobEvents"
     azure_cosmos_artifact_manifest_container: str = "artifactManifest"
-    azure_cosmos_entities_container: str = "entities"
-    azure_cosmos_relationships_container: str = "relationships"
-    azure_cosmos_text_units_container: str = "textUnits"
-    azure_cosmos_communities_container: str = "communities"
-    azure_cosmos_community_reports_container: str = "communityReports"
-    azure_cosmos_covariates_container: str = "covariates"
     azure_cosmos_conversation_sessions_container: str = "conversationSessions"
     azure_cosmos_conversation_turns_container: str = "conversationTurns"
 

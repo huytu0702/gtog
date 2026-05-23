@@ -1,7 +1,7 @@
 models:
   - type: main
     engine: openai
-    model: gpt-5.4-mini
+    model: gpt-4o-mini
 
 rails:
   input:
@@ -13,6 +13,7 @@ rails:
 
 prompts:
   - task: self_check_input
+    output_parser: is_content_safe
     content: |
       Check whether the user message should be blocked for this GraphRAG assistant.
 
@@ -27,6 +28,7 @@ prompts:
       Question: Should this user message be blocked? Answer only Yes or No.
       Answer:
   - task: self_check_output
+    output_parser: is_content_safe
     content: |
       Check whether the assistant response should be blocked for this GraphRAG assistant.
 

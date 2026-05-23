@@ -17,14 +17,6 @@ param(
     [string]$JobEventsContainer       = "jobEvents",
     [string]$ArtifactManifestContainer = "artifactManifest",
 
-    # Serving containers (partition key: /collectionId)
-    [string]$EntitiesContainer        = "entities",
-    [string]$RelationshipsContainer   = "relationships",
-    [string]$TextUnitsContainer       = "textUnits",
-    [string]$CommunitiesContainer     = "communities",
-    [string]$CommunityReportsContainer = "communityReports",
-    [string]$CovariatesContainer      = "covariates",
-
     # Vector store containers — match embeddings_schema keys in settings.yaml (partition key: /id)
     [string]$VectorEntityContainer    = "entity.description",
     [string]$VectorCommunityContainer = "community.full_content",
@@ -285,7 +277,7 @@ function Ensure-VectorContainer {
 }
 
 # ---------------------------------------------------------------------------
-# Control-plane + serving containers
+# Control-plane containers
 # ---------------------------------------------------------------------------
 
 Write-Host ">>> Ensuring control-plane containers (partition key: /collectionId)"
@@ -294,14 +286,6 @@ Ensure-ControlContainer $DocumentsContainer
 Ensure-ControlContainer $IndexingJobsContainer
 Ensure-ControlContainer $JobEventsContainer
 Ensure-ControlContainer $ArtifactManifestContainer
-
-Write-Host ">>> Ensuring serving containers (partition key: /collectionId)"
-Ensure-ControlContainer $EntitiesContainer
-Ensure-ControlContainer $RelationshipsContainer
-Ensure-ControlContainer $TextUnitsContainer
-Ensure-ControlContainer $CommunitiesContainer
-Ensure-ControlContainer $CommunityReportsContainer
-Ensure-ControlContainer $CovariatesContainer
 
 # ---------------------------------------------------------------------------
 # Vector store containers (match embeddings_schema keys in settings.yaml)
@@ -338,12 +322,6 @@ Write-Host "AZURE_COSMOS_DOCUMENTS_CONTAINER=`"$DocumentsContainer`""
 Write-Host "AZURE_COSMOS_INDEXING_JOBS_CONTAINER=`"$IndexingJobsContainer`""
 Write-Host "AZURE_COSMOS_JOB_EVENTS_CONTAINER=`"$JobEventsContainer`""
 Write-Host "AZURE_COSMOS_ARTIFACT_MANIFEST_CONTAINER=`"$ArtifactManifestContainer`""
-Write-Host "AZURE_COSMOS_ENTITIES_CONTAINER=`"$EntitiesContainer`""
-Write-Host "AZURE_COSMOS_RELATIONSHIPS_CONTAINER=`"$RelationshipsContainer`""
-Write-Host "AZURE_COSMOS_TEXT_UNITS_CONTAINER=`"$TextUnitsContainer`""
-Write-Host "AZURE_COSMOS_COMMUNITIES_CONTAINER=`"$CommunitiesContainer`""
-Write-Host "AZURE_COSMOS_COMMUNITY_REPORTS_CONTAINER=`"$CommunityReportsContainer`""
-Write-Host "AZURE_COSMOS_COVARIATES_CONTAINER=`"$CovariatesContainer`""
 Write-Host ""
 Write-Host "Retrieve secret values separately (do not commit to git):"
 Write-Host "  az storage account keys list --account-name $StorageAccount --resource-group $ResourceGroup --query '[0].value' -o tsv"

@@ -24,7 +24,7 @@ graph LR
     G --> H[Workflow steps<br/>1..N]
     H --> I[Pipeline datasets in<br/>pipeline-{collection}-{version}<br/>Cosmos container]
     I --> V[Verify row counts +<br/>upsert artifactManifest]
-    V --> P[set_active_version<br/>in versions container]
+    V --> P[set_active_version<br/>in collections container]
     P --> J[Cosmos: status=completed]
     F -. failure .-> K[Retry up to<br/>max_attempts]
     K --> J2[status=failed]
@@ -300,9 +300,9 @@ In **cosmos_pipeline mode** (this deployment), all pipeline datasets for one ind
 |---|---|---|
 | `pipeline-{collection}-{version}` | `/id` | Pipeline datasets as parquet payloads — one Cosmos document per dataset (`entities.parquet`, `relationships.parquet`, `text_units.parquet`, `communities.parquet`, `community_reports.parquet`, `covariates.parquet`) |
 | `artifactManifest` | `/collectionId` | Row counts + checksum per `(collection, version)` after verification |
-| `versions` | `/collectionId` | Active version pointer per collection |
+| `collections` | `/collectionId` | Active version pointer per collection (`activeVersion`) |
 
-The query layer reads `versions.activeVersion` for the collection, then loads from the matching `pipeline-{collection}-{version}` container.
+The query layer reads `collections.activeVersion` for the collection, then loads from the matching `pipeline-{collection}-{version}` container.
 
 > File-backed development is not supported in this deployment — `settings.yaml` pins `output.type: cosmosdb`. The GraphRAG core supports `file` and `blob` modes, but they are not used here.
 

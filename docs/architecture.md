@@ -187,8 +187,7 @@ backend/app/
     ├── indexing_service.py           # Job lifecycle management
     ├── queue_service.py              # Azure Storage Queue client
     ├── conversation_service.py       # Session + turn persistence to Cosmos
-    ├── serving_context_cache.py      # LRU cache — loaded graph frames per collection
-    ├── serving_materialization_service.py  # Parquet/Cosmos frame hydration
+    ├── serving_context_cache.py      # LRU cache — loaded pipeline datasets per collection
     ├── router_agent.py               # LLM-based query routing + rewriting
     ├── summarization_service.py      # Conversation history compression
     ├── web_search.py                 # Tavily-backed web search
@@ -238,8 +237,7 @@ worker.py
         ├── requeue_recoverable_jobs()       # recover stale/crashed jobs
         ├── queue_service.receive_messages() # poll Azure Storage Queue
         ├── control_plane.acquire_indexing_job_lease()
-        ├── indexing_service.run_indexing()  # calls graphrag.api.index()
-        └── serving_materialization_service  # warm serving cache on completion
+        └── indexing_service.execute_indexing_job()  # verify pipeline output + publish activeVersion
 ```
 
 The worker uses a **lease pattern** — it acquires a time-limited lease before processing to prevent duplicate execution across replicas.
@@ -520,10 +518,10 @@ Worker.receive_messages()
   └─────┬──────┘
         │
   ┌─────▼──────┐
-  │ Completed  │ Artifacts written to Blob
+  │ Completed  │ Datasets verified in pipeline-{collection}-{version}
   └─────┬──────┘
         │
-  serving_materialization_service.warm_cache()
+  set collections.activeVersion
         │
   Search immediately available
 ```
@@ -552,7 +550,7 @@ Each factory function:
 
 ### Serving Context Cache
 
-The backend maintains an **LRU cache** of loaded graph frames (entities, relationships, community reports, text units) per collection. This avoids re-reading Parquet files on every query.
+The backend maintains an **LRU cache** of loaded graph frames (entities, relationships, community reports, text units) per collection/version. This avoids re-loading pipeline datasets on every query.
 
 ```python
 class ServingContextCache:
@@ -561,13 +559,13 @@ class ServingContextCache:
     # Keyed by: (collection_id, method, version)
 ```
 
-On indexing completion, the worker triggers cache warm-up via `serving_materialization_service`.
+On indexing completion, the worker invalidates cache and may warm pipeline context via `query_service._load_context_from_pipeline(...)`.
 
 ### Query Context Source
 
-The backend loads query context from the unified **`cosmos_pipeline`** profile:
+The backend loads query context from per-version pipeline containers:
 
-- **Source:** Cosmos DB containers (entities, relationships, community reports, text units) plus vector indexes
+- **Source:** Cosmos DB `pipeline-{collection}-{version}` datasets selected by `collections.activeVersion`
 - **Local dev:** Cosmos DB Emulator + Azurite (Azure Blob/Queue emulator) provide identical APIs to production
 - **Production:** Managed Cosmos DB + Azure Blob Storage; reporting logs land in the `pipeline-logs` blob container
 
@@ -587,11 +585,10 @@ User uploads files via Frontend
   → Job ID enqueued in Azure Storage Queue
   → Worker dequeues, acquires lease
   → graphrag.api.index() runs the full pipeline
-  → Parquet artifacts written to Blob
-  → Entity/relationship data written to Cosmos DB containers
+  → Pipeline datasets written to Cosmos DB container pipeline-{collection}-{version}
   → Vector embeddings written to Cosmos DB (vector index)
+  → Worker verifies required datasets and flips collections.activeVersion
   → Worker marks job "completed" in Cosmos DB
-  → Serving cache warmed
   → Frontend polls GET .../index/jobs/{id} until completed
 ```
 
@@ -601,7 +598,7 @@ User uploads files via Frontend
 User types query in Frontend → selects "ToG" method
   → POST /api/collections/{id}/search/tog
   → Backend: query_service.tog_search(collection_id, query)
-  → Serving cache: load entities + relationships (Cosmos or Parquet)
+  → Pipeline context cache: load entities + relationships from active pipeline container
   → graphrag.api.tog_search(config, entities, relationships, query)
   → ToGSearch.search(query)
       ├── GraphExplorer.find_starting_entities_semantic(query)  [embedding lookup]
@@ -709,21 +706,17 @@ User types query → selects "Agent" mode
 ### Cosmos DB Schema
 
 
-| Container              | Content                                        |
-| ---------------------- | ---------------------------------------------- |
-| `collections`          | Collection metadata                            |
-| `documents`            | Document records per collection                |
-| `indexingJobs`         | Job lifecycle records                          |
-| `jobEvents`            | Job event log                                  |
-| `artifactManifest`     | Index artifact version tracking                |
-| `entities`             | Extracted entities (query-time context source) |
-| `relationships`        | Extracted relationships                        |
-| `textUnits`            | Document chunks                                |
-| `communities`          | Leiden community records                       |
-| `communityReports`     | LLM community summaries                        |
-| `covariates`           | Entity claims                                  |
-| `conversationSessions` | Multi-turn session metadata                    |
-| `conversationTurns`    | Individual Q&A turns                           |
+| Container pattern      | Content                                                             |
+| ---------------------- | ------------------------------------------------------------------- |
+| `collections`          | Collection metadata + `activeVersion`                              |
+| `documents`            | Document records per collection                                     |
+| `indexingJobs`         | Job lifecycle records                                               |
+| `jobEvents`            | Job event log                                                       |
+| `artifactManifest`     | Artifact verification metadata (e.g. `pipeline-datasets`)          |
+| `pipeline-{c}-{v}`     | Versioned GraphRAG datasets (`entities`, `relationships`, etc.)     |
+| `conversationSessions` | Multi-turn session metadata                                         |
+| `conversationTurns`    | Individual Q&A turns                                                |
+| vector containers      | Cosmos vector indexes (`entity.description`, `text_unit.text`, ...) |
 
 
 ### Observability
