@@ -8,6 +8,7 @@ from ..models import SearchMethod, SearchResponse
 from ..utils import load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
+    _build_tog_entity_sources_map,
     _build_tog_relationships_context,
     _build_tog_sources_context,
     _detach_query_log,
@@ -77,6 +78,11 @@ async def run_tog_search(
         context_data=serialized,
         relationships=relationships,
     )
+    entity_sources, ambiguous_entities = _build_tog_entity_sources_map(
+        entity_names=known_entity_names,
+        entities=entities,
+        text_units=frames["text_units"],
+    )
     sources = _build_tog_sources_context(
         entity_names=known_entity_names,
         entities=entities,
@@ -101,6 +107,8 @@ async def run_tog_search(
             context_data=serialized,
             dataset_order=["sources", "entities", "relationships"],
             entity_names=known_entity_names,
+            entity_sources=entity_sources,
+            ambiguous_entities=ambiguous_entities,
         )
 
     return SearchResponse(

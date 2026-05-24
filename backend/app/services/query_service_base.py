@@ -300,35 +300,91 @@ def _coerce_text_unit_ids(value: Any) -> list[str]:
     return [_non_empty_text(value)]
 
 
-def _build_tog_sources_context(
+def _build_tog_entity_sources_map(
     *,
     entity_names: set[str],
     entities: pd.DataFrame,
     text_units: pd.DataFrame,
-) -> dict[str, dict[str, str]]:
+) -> tuple[dict[str, list[str]], set[str]]:
     if not entity_names or entities.empty or text_units.empty:
-        return {}
+        return {}, set()
     if "text_unit_ids" not in entities.columns or "id" not in text_units.columns:
-        return {}
+        return {}, set()
 
-    entity_name_lookup = {name.casefold() for name in entity_names}
+    entity_name_lookup = {name.casefold(): name for name in entity_names}
+    available_text_unit_ids = {
+        _non_empty_text(row.get("id"))
+        for _, row in text_units.iterrows()
+        if _non_empty_text(row.get("id"))
+    }
     name_column = _preferred_entity_name_column(entities)
     candidate_columns = [
         col
         for col in (name_column, "title", "name", "entity")
         if col in entities.columns
     ]
-    text_unit_ids: list[str] = []
+    entity_sources: dict[str, list[str]] = {}
+    entity_match_counts: dict[str, int] = {}
 
     for _, row in entities.iterrows():
-        row_names = {
-            _non_empty_text(row.get(column)).casefold() for column in candidate_columns
-        }
-        if not row_names.intersection(entity_name_lookup):
+        matched_names = [
+            entity_name_lookup[row_name]
+            for row_name in {
+                _non_empty_text(row.get(column)).casefold()
+                for column in candidate_columns
+                if _non_empty_text(row.get(column))
+            }
+            if row_name in entity_name_lookup
+        ]
+        if not matched_names:
             continue
-        text_unit_ids.extend(_coerce_text_unit_ids(row.get("text_unit_ids")))
 
-    wanted_ids = set(dict.fromkeys(text_unit_ids))
+        text_unit_ids = [
+            text_unit_id
+            for text_unit_id in _coerce_text_unit_ids(row.get("text_unit_ids"))
+            if text_unit_id in available_text_unit_ids
+        ]
+
+        for matched_name in matched_names:
+            entity_match_counts[matched_name] = entity_match_counts.get(matched_name, 0) + 1
+            if not text_unit_ids:
+                continue
+            existing_ids = entity_sources.get(matched_name, [])
+            entity_sources[matched_name] = list(
+                dict.fromkeys([*existing_ids, *text_unit_ids])
+            )
+
+    ambiguous_entities = {
+        entity_name
+        for entity_name, count in entity_match_counts.items()
+        if count > 1
+    }
+    for ambiguous_entity in ambiguous_entities:
+        entity_sources.pop(ambiguous_entity, None)
+
+    return entity_sources, ambiguous_entities
+
+
+
+def _build_tog_sources_context(
+    *,
+    entity_names: set[str],
+    entities: pd.DataFrame,
+    text_units: pd.DataFrame,
+) -> dict[str, dict[str, str]]:
+    entity_sources, _ = _build_tog_entity_sources_map(
+        entity_names=entity_names,
+        entities=entities,
+        text_units=text_units,
+    )
+    if not entity_sources:
+        return {}
+
+    wanted_ids = {
+        text_unit_id
+        for text_unit_ids in entity_sources.values()
+        for text_unit_id in text_unit_ids
+    }
     sources: dict[str, dict[str, str]] = {}
     for _, row in text_units.iterrows():
         text_unit_id = _non_empty_text(row.get("id"))
@@ -467,6 +523,11 @@ _CITATION_DATASET_ALIASES: dict[str, tuple[str, ...]] = {
     "relationships": ("relationships",),
     "claims": ("claims",),
 }
+_CITATION_ALIAS_TO_DATASET: dict[str, str] = {
+    alias.casefold(): dataset
+    for dataset, aliases in _CITATION_DATASET_ALIASES.items()
+    for alias in aliases
+}
 _CITATION_DATASET_LABELS: dict[str, str] = {
     "sources": "Sources",
     "reports": "Reports",
@@ -526,8 +587,35 @@ def _parse_structured_citation_entries(inner: str) -> dict[str, str]:
         values = _non_empty_text(match.group(2))
         if not label or not values:
             continue
-        entries[label] = values
+        dataset = _CITATION_ALIAS_TO_DATASET.get(label.casefold())
+        canonical_label = _CITATION_DATASET_LABELS.get(dataset, label)
+        entries[canonical_label] = values
     return entries
+
+
+
+def _parse_citation_value_list(value: str) -> list[str]:
+    return [item for item in (_non_empty_text(part) for part in value.split(",")) if item]
+
+
+
+def _relationship_keys_for_entities(
+    relationship_keys: Iterable[str],
+    entity_names: set[str],
+) -> list[str]:
+    if not entity_names:
+        return []
+
+    entity_keys = {entity_name.casefold() for entity_name in entity_names}
+    matched_keys: list[str] = []
+    for relationship_key in relationship_keys:
+        parts = relationship_key.split("|", 2)
+        if len(parts) != 3:
+            continue
+        source, _, target = parts
+        if source.casefold() in entity_keys and target.casefold() in entity_keys:
+            matched_keys.append(relationship_key)
+    return list(dict.fromkeys(matched_keys))
 
 
 
@@ -537,28 +625,94 @@ def _normalize_context_citations(
     context_data: dict[str, Any] | None,
     dataset_order: list[str],
     entity_names: set[str] | None = None,
+    entity_sources: dict[str, list[str]] | None = None,
+    ambiguous_entities: set[str] | None = None,
 ) -> str:
     if not text or not context_data:
         return text
 
-    del dataset_order
     name_map = {name.casefold(): name for name in entity_names or set()}
-    if not name_map:
-        return text
+
+    relationship_context = context_data.get("Relationships")
+    relationship_keys = (
+        list(relationship_context.keys()) if isinstance(relationship_context, dict) else []
+    )
 
     def _rewrite(match: re.Match) -> str:
         inner = _non_empty_text(match.group(1))
         entries = _parse_structured_citation_entries(inner)
+
         if entries:
+            entity_values = entries.get("Entities")
+            if not entity_values or not name_map:
+                ordered_entry_labels = [
+                    _CITATION_DATASET_LABELS[dataset]
+                    for dataset in dataset_order
+                    if _CITATION_DATASET_LABELS[dataset] in entries
+                ] + [
+                    label
+                    for label in entries
+                    if label not in {
+                        _CITATION_DATASET_LABELS[dataset]
+                        for dataset in dataset_order
+                    }
+                ]
+                rendered_entries = "; ".join(
+                    f"{label} ({entries[label]})" for label in ordered_entry_labels
+                )
+                return f"[Data: {rendered_entries}]"
+            raw_entity_names = _parse_citation_value_list(entity_values)
+        else:
+            if not name_map:
+                return match.group(0)
+            raw_entity_names = _parse_citation_value_list(inner)
+
+        matched_names = [
+            name_map.get(raw_entity_name.casefold(), "")
+            for raw_entity_name in raw_entity_names
+        ]
+        if not matched_names or not all(matched_names):
             return match.group(0)
 
-        raw_names = [_non_empty_text(value) for value in inner.split(",")]
-        matched_names = [
-            name_map.get(raw_name.casefold(), "") for raw_name in raw_names if raw_name
-        ]
-        if matched_names and all(matched_names):
-            return f"[Data: Entities ({', '.join(matched_names)})]"
-        return match.group(0)
+        entries["Entities"] = ", ".join(matched_names)
+        cited_entities = list(dict.fromkeys(matched_names))
+        ambiguous_entity_names = ambiguous_entities or set()
+        should_enrich = not any(
+            entity_name in ambiguous_entity_names for entity_name in cited_entities
+        )
+
+        if should_enrich and "Sources" not in entries and entity_sources:
+            source_ids = [
+                source_id
+                for entity_name in cited_entities
+                for source_id in entity_sources.get(entity_name, [])
+            ]
+            formatted_source_ids = _format_citation_identifier_list(source_ids)
+            if formatted_source_ids:
+                entries["Sources"] = formatted_source_ids
+
+        if should_enrich and "Relationships" not in entries:
+            relationship_ids = _relationship_keys_for_entities(
+                relationship_keys,
+                set(cited_entities),
+            )
+            formatted_relationship_ids = _format_citation_identifier_list(
+                relationship_ids
+            )
+            if formatted_relationship_ids:
+                entries["Relationships"] = formatted_relationship_ids
+
+        ordered_entry_labels = [
+            _CITATION_DATASET_LABELS[dataset]
+            for dataset in dataset_order
+            if _CITATION_DATASET_LABELS[dataset] in entries
+        ] + [label for label in entries if label not in {
+            _CITATION_DATASET_LABELS[dataset] for dataset in dataset_order
+        }]
+        rendered_entries = "; ".join(
+            f"{label} ({entries[label]})" for label in ordered_entry_labels
+        )
+        return f"[Data: {rendered_entries}]"
 
     return _CITATION_BLOCK_RE.sub(_rewrite, text)
 
