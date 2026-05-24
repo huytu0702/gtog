@@ -11,6 +11,13 @@ from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFo
 from azure.cosmos.partition_key import PartitionKey
 from azure.identity import DefaultAzureCredential
 
+from ..azure_runtime import (
+    cosmos_account_url,
+    cosmos_client_kwargs,
+    is_managed_identity_enabled,
+    resolve_cosmos_connection_string,
+)
+from ..config import settings
 from graphrag.data_model.types import TextEmbedder
 from graphrag.vector_stores.base import (
     BaseVectorStore,
@@ -33,6 +40,72 @@ _SUPPORTED_EMBEDDING_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("community-full_content", "community.full_content"),
     ("text_unit-text", "text_unit.text"),
 )
+
+
+def delete_collection_vector_documents(collection_id: str) -> int:
+    database_name = settings.azure_cosmos_database_name.strip()
+    if not database_name:
+        raise ValueError("AZURE_COSMOS_DATABASE_NAME is required for vector cleanup.")
+
+    connection_string = resolve_cosmos_connection_string()
+    client_kwargs = cosmos_client_kwargs()
+    if connection_string:
+        cosmos_client = CosmosClient.from_connection_string(connection_string, **client_kwargs)
+    else:
+        account_url = cosmos_account_url()
+        if not account_url:
+            raise ValueError("AZURE_COSMOS_ENDPOINT is required for vector cleanup.")
+
+        if is_managed_identity_enabled():
+            credential: Any = DefaultAzureCredential()
+        elif settings.azure_cosmos_key:
+            credential = settings.azure_cosmos_key
+        else:
+            raise ValueError(
+                "Cosmos vector cleanup requires connection_string, endpoint+key, or managed identity."
+            )
+
+        cosmos_client = CosmosClient(
+            url=account_url,
+            credential=credential,
+            **client_kwargs,
+        )
+
+    try:
+        database = cosmos_client.get_database_client(database_name)
+        container = database.get_container_client(_FIXED_VECTOR_CONTAINER_NAME)
+        container.read()
+    except CosmosResourceNotFoundError:
+        cosmos_client.close()
+        return 0
+
+    try:
+        deleted_count = 0
+        rows = container.query_items(
+            query=(
+                "SELECT c.id, c.partitionKey FROM c "
+                "WHERE c.collectionId = @collectionId"
+            ),
+            parameters=[{"name": "@collectionId", "value": collection_id}],
+            enable_cross_partition_query=True,
+        )
+        for row in rows:
+            item_id = str(row.get("id") or "").strip()
+            partition_key = str(row.get(_PARTITION_KEY_FIELD) or "").strip()
+            if not item_id or not partition_key:
+                logger.warning(
+                    "vector_cleanup_skipped_invalid_row collection=%s id=%s partitionKey=%s",
+                    collection_id,
+                    item_id,
+                    partition_key,
+                )
+                continue
+            container.delete_item(item=item_id, partition_key=partition_key)
+            deleted_count += 1
+
+        return deleted_count
+    finally:
+        cosmos_client.close()
 
 
 class ScopedCosmosDBVectorStore(BaseVectorStore):

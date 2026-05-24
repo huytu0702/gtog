@@ -76,6 +76,7 @@ dependencies = [
     "litellm>=1.77.1",
     "tavily-python>=0.7.21",
     "nemoguardrails==0.21.0",
+    "aiohttp-retry>=2.9.0",
 ]
 
 [dependency-groups]

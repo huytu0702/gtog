@@ -9,6 +9,8 @@ import re
 from functools import lru_cache
 
 import pandas as pd
+from azure.cosmos import CosmosClient
+from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
 from graphrag.storage.cosmosdb_pipeline_storage import CosmosDBPipelineStorage
 
@@ -76,6 +78,62 @@ class PipelineOutputRepository:
         else:
             kwargs["cosmosdb_account_url"] = account_url
         return CosmosDBPipelineStorage(**kwargs)
+
+    def _create_cosmos_client(self) -> CosmosClient:
+        self._ensure_cosmos_runtime()
+        if not self._database_name:
+            raise ValueError("AZURE_COSMOS_DATABASE_NAME is required for cosmos_pipeline mode.")
+
+        connection_string = resolve_cosmos_connection_string()
+        client_kwargs = cosmos_client_kwargs()
+        if connection_string:
+            return CosmosClient.from_connection_string(connection_string, **client_kwargs)
+
+        account_url = cosmos_account_url()
+        if not account_url:
+            raise ValueError("AZURE_COSMOS_ENDPOINT is required for cosmos_pipeline mode.")
+
+        if is_managed_identity_enabled():
+            from azure.identity import DefaultAzureCredential
+
+            credential = DefaultAzureCredential()
+        elif settings.azure_cosmos_key:
+            credential = settings.azure_cosmos_key
+        else:
+            raise ValueError(
+                "AZURE_COSMOS runtime is required for cosmos_pipeline mode. "
+                "Configure AZURE_COSMOS_CONNECTION_STRING or AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
+                "or enable managed identity."
+            )
+
+        return CosmosClient(url=account_url, credential=credential, **client_kwargs)
+
+    def delete_collection_outputs(self, *, collection_id: str, versions: list[str]) -> int:
+        unique_versions = sorted({str(version).strip() for version in versions if str(version).strip()})
+        if not unique_versions:
+            return 0
+
+        client = self._create_cosmos_client()
+        try:
+            database = client.get_database_client(self._database_name)
+
+            deleted_count = 0
+            for version in unique_versions:
+                container_name = build_pipeline_container_name(collection_id, version)
+                try:
+                    database.delete_container(container_name)
+                    deleted_count += 1
+                except CosmosResourceNotFoundError:
+                    logger.info(
+                        "pipeline_output_container_missing collection=%s version=%s container=%s",
+                        collection_id,
+                        version,
+                        container_name,
+                    )
+
+            return deleted_count
+        finally:
+            client.close()
 
     @staticmethod
     def _run_storage_coro(coro):

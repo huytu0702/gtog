@@ -203,6 +203,38 @@ class CosmosControlPlaneRepository:
         except CosmosResourceNotFoundError:
             return None
 
+    def list_collection_versions(self, collection_id: str) -> list[str]:
+        collection = self.get_collection(collection_id)
+        if collection is None:
+            raise ValueError(f"Collection '{collection_id}' not found")
+
+        versions: set[str] = set()
+        active_version = str(collection.get("activeVersion") or "").strip()
+        if active_version:
+            versions.add(active_version)
+
+        artifact_rows = self._container("artifact_manifest").query_items(
+            query="SELECT c.version FROM c WHERE c.collectionId = @collectionId",
+            parameters=[{"name": "@collectionId", "value": collection_id}],
+            partition_key=collection_id,
+        )
+        for row in artifact_rows:
+            version = str(row.get("version") or "").strip()
+            if version:
+                versions.add(version)
+
+        job_rows = self._container("indexing_jobs").query_items(
+            query="SELECT c.targetVersion FROM c WHERE c.collectionId = @collectionId",
+            parameters=[{"name": "@collectionId", "value": collection_id}],
+            partition_key=collection_id,
+        )
+        for row in job_rows:
+            version = str(row.get("targetVersion") or "").strip()
+            if version:
+                versions.add(version)
+
+        return sorted(versions)
+
     def list_collections(self) -> list[dict[str, Any]]:
         query = "SELECT * FROM c"
         return list(

@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime, timezone
 
 from fastapi import UploadFile
 
 from ..models import CollectionResponse, DocumentResponse
-from ..repositories import get_control_plane_repository
+from ..repositories import get_control_plane_repository, get_pipeline_output_repository
 from ..utils.helpers import (
     _blob_client,
     _collection_container,
     _ensure_blob_container,
     delete_search_indexes_for_collection,
 )
+from ..vector_stores.scoped_cosmosdb import delete_collection_vector_documents
+
+logger = logging.getLogger(__name__)
 
 
 class StorageService:
@@ -96,8 +100,15 @@ class StorageService:
 
     def delete_collection(self, collection_id: str) -> bool:
         self._ensure_control_plane_enabled()
+        control_plane = self._require_control_plane()
         blob_client = self._require_blob_client()
-        self._require_control_plane().delete_collection(collection_id)
+
+        versions = control_plane.list_collection_versions(collection_id)
+        get_pipeline_output_repository().delete_collection_outputs(
+            collection_id=collection_id,
+            versions=versions,
+        )
+        delete_collection_vector_documents(collection_id)
 
         container = blob_client.get_container_client(_collection_container(collection_id))
         if container.exists():
@@ -106,21 +117,32 @@ class StorageService:
         try:
             delete_search_indexes_for_collection(collection_id)
         except Exception:
-            pass
+            logger.exception(
+                "Failed to delete search indexes for collection '%s'",
+                collection_id,
+            )
 
         try:
             from .conversation_service import conversation_service
 
             conversation_service.purge_collection(collection_id)
         except Exception:
-            pass
+            logger.exception(
+                "Failed to purge conversations for collection '%s'",
+                collection_id,
+            )
 
         try:
             from .query_service import query_service
 
             query_service.invalidate_collection_cache(collection_id)
         except Exception:
-            pass
+            logger.exception(
+                "Failed to invalidate query cache for collection '%s'",
+                collection_id,
+            )
+
+        control_plane.delete_collection(collection_id)
         return True
 
     def list_collections(self) -> list[CollectionResponse]:

@@ -7,7 +7,11 @@ from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFo
 from graphrag.config.models.vector_store_schema_config import VectorStoreSchemaConfig
 from graphrag.vector_stores.base import VectorStoreDocument
 
-from backend.app.vector_stores.scoped_cosmosdb import ScopedCosmosDBVectorStore
+from backend.app.config import settings
+from backend.app.vector_stores.scoped_cosmosdb import (
+    ScopedCosmosDBVectorStore,
+    delete_collection_vector_documents,
+)
 
 
 @pytest.fixture
@@ -297,3 +301,68 @@ def test_search_by_id_falls_back_to_partition_query(store: ScopedCosmosDBVectorS
     assert document.id == "s2"
     query_call = store._query_items.call_args.kwargs
     assert query_call["partition_key"] == "c1:v1|entity.description"
+
+
+def test_delete_collection_vector_documents_deletes_by_item_partition_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+    container_client = MagicMock()
+    container_client.query_items.return_value = [
+        {"id": "doc-1", "partitionKey": "p1"},
+        {"id": "doc-2", "partitionKey": "p2"},
+    ]
+    database_client = MagicMock()
+    database_client.get_container_client.return_value = container_client
+    cosmos_client = MagicMock()
+    cosmos_client.get_database_client.return_value = database_client
+
+    with patch(
+        "backend.app.vector_stores.scoped_cosmosdb.resolve_cosmos_connection_string",
+        return_value="AccountEndpoint=https://localhost:8081/;AccountKey=key;",
+    ):
+        with patch(
+            "backend.app.vector_stores.scoped_cosmosdb.cosmos_client_kwargs",
+            return_value={"enable_endpoint_discovery": False},
+        ):
+            with patch(
+                "backend.app.vector_stores.scoped_cosmosdb.CosmosClient.from_connection_string",
+                return_value=cosmos_client,
+            ):
+                deleted_count = delete_collection_vector_documents("c1")
+
+    assert deleted_count == 2
+    container_client.query_items.assert_called_once_with(
+        query="SELECT c.id, c.partitionKey FROM c WHERE c.collectionId = @collectionId",
+        parameters=[{"name": "@collectionId", "value": "c1"}],
+        enable_cross_partition_query=True,
+    )
+    container_client.delete_item.assert_any_call(item="doc-1", partition_key="p1")
+    container_client.delete_item.assert_any_call(item="doc-2", partition_key="p2")
+    database_client.delete_container.assert_not_called()
+
+
+def test_delete_collection_vector_documents_returns_zero_when_container_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+    database_client = MagicMock()
+    database_client.get_container_client.side_effect = CosmosResourceNotFoundError(message="missing")
+    cosmos_client = MagicMock()
+    cosmos_client.get_database_client.return_value = database_client
+
+    with patch(
+        "backend.app.vector_stores.scoped_cosmosdb.resolve_cosmos_connection_string",
+        return_value="AccountEndpoint=https://localhost:8081/;AccountKey=key;",
+    ):
+        with patch(
+            "backend.app.vector_stores.scoped_cosmosdb.cosmos_client_kwargs",
+            return_value={"enable_endpoint_discovery": False},
+        ):
+            with patch(
+                "backend.app.vector_stores.scoped_cosmosdb.CosmosClient.from_connection_string",
+                return_value=cosmos_client,
+            ):
+                deleted_count = delete_collection_vector_documents("c1")
+
+    assert deleted_count == 0
