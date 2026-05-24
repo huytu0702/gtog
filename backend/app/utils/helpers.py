@@ -27,6 +27,7 @@ from ..azure_runtime import (
 )
 from ..config import settings
 from ..repositories import get_control_plane_repository, get_pipeline_output_repository
+from ..vector_stores import register_backend_vector_stores
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +239,11 @@ def _build_vector_index_name(collection_id: str, version: str | None = None) -> 
     return f"{normalized[:117]}-{digest}"
 
 
+def _fixed_cosmos_vector_container_name() -> str:
+    """Return the shared Cosmos vector container name."""
+    return "vectors"
+
+
 def _search_index_client() -> SearchIndexClient | None:
     endpoint = settings.azure_search_endpoint.strip()
     if not endpoint:
@@ -275,6 +281,8 @@ def delete_search_indexes_for_collection(collection_id: str) -> int:
 def _vector_store_cli_overrides(
     vector_index_name: str,
     *,
+    collection_id: str,
+    version: str | None,
     use_cloud_vectors: bool,
 ) -> dict[str, object]:
     """Build runtime vector-store overrides for local vs cloud serving/indexing."""
@@ -316,6 +324,11 @@ def _vector_store_cli_overrides(
             "CLOUD_VECTOR_STORE_TYPE must be one of ['azure_ai_search', 'cosmosdb']."
         )
 
+    if not version:
+        raise ValueError(
+            "Cloud/runtime Cosmos vector embeddings require an active collection version."
+        )
+
     endpoint = cosmos_account_url()
     if not endpoint:
         raise ValueError(
@@ -332,12 +345,23 @@ def _vector_store_cli_overrides(
             "Cloud/runtime vector embeddings require AZURE_COSMOS_DATABASE_NAME for Cosmos DB."
         )
 
+    client_kwargs = {
+        **cosmos_client_kwargs(),
+        "__collection_id": collection_id,
+        "__version": version,
+        "__collection_version": f"{collection_id}:{version}",
+    }
+
     overrides.update({
         "vector_store.default_vector_store.type": VectorStoreType.CosmosDB.value,
         "vector_store.default_vector_store.db_uri": None,
         "vector_store.default_vector_store.url": endpoint,
         "vector_store.default_vector_store.database_name": database_name,
-        "vector_store.default_vector_store.client_kwargs": cosmos_client_kwargs(),
+        "vector_store.default_vector_store.client_kwargs": client_kwargs,
+        "vector_store.default_vector_store.container_name": _fixed_cosmos_vector_container_name(),
+        "vector_store.default_vector_store.collection_id": collection_id,
+        "vector_store.default_vector_store.version": version,
+        "vector_store.default_vector_store.collection_version": f"{collection_id}:{version}",
     })
     if connection_string:
         overrides["vector_store.default_vector_store.connection_string"] = (
@@ -405,6 +429,8 @@ def load_graphrag_config(
     cli_overrides.update(
         _vector_store_cli_overrides(
             vector_index_name,
+            collection_id=collection_id,
+            version=version,
             use_cloud_vectors=use_cloud_vectors,
         )
     )

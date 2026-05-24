@@ -222,6 +222,12 @@ sequenceDiagram
 
 **Use case:** entity-centric questions ("Tell me about Acme Corp's leadership.")
 
+Before vector retrieval starts, the backend resolves the collection's `activeVersion`. Cosmos vector searches are then restricted to the matching logical scope inside the shared `vectors` container:
+
+- `entity.description` → `{collectionId}:{activeVersion}|entity.description`
+- `community.full_content` → `{collectionId}:{activeVersion}|community.full_content`
+- `text_unit.text` → `{collectionId}:{activeVersion}|text_unit.text`
+
 ```mermaid
 sequenceDiagram
     participant API as QueryService.local_search
@@ -396,6 +402,11 @@ flowchart LR
 - If that second output check blocks, the fallback still counts as executed, but `web_response` is omitted from the final `AgentSearchResponse`.
 
 ## 6. Dataset Caching
+
+For Cosmos-backed retrieval, query execution reads from two storage planes tied to the collection's `activeVersion`:
+
+1. `pipeline-{collection}-{activeVersion}` for GraphRAG datasets.
+2. `vectors` for similarity search, filtered to `{collectionId}:{activeVersion}|{embeddingKind}`.
 
 `QueryService` uses `serving_context_cache.py` (LRU) to avoid reloading pipeline datasets from Cosmos on every query.
 

@@ -68,7 +68,7 @@ graph TB
 
     subgraph INFRA["Azure Infrastructure"]
         INFRA_Blob["Blob Storage<br/>(per-collection containers)"]
-        INFRA_Cosmos["Cosmos DB<br/>(control plane + pipeline output<br/>+ conversations)"]
+        INFRA_Cosmos["Cosmos DB<br/>(control plane + pipeline output<br/>+ shared vector plane + conversations)"]
         INFRA_Queue["Storage Queue<br/>(indexing-jobs)"]
         INFRA_KV["Key Vault"]
         INFRA_Search["AI Search (optional)"]
@@ -142,6 +142,8 @@ graph LR
 
 **Key services:**
 
+The backend owns the Cosmos vector-store override. At API and worker startup, it registers a backend-scoped replacement for GraphRAG's `cosmosdb` vector store so the GraphRAG core remains unchanged while deployed runtime behavior writes vectors into the shared `vectors` container.
+
 | Service | Responsibility |
 |---|---|
 | `StorageService` | Collection + document CRUD across blob and Cosmos |
@@ -201,8 +203,9 @@ sequenceDiagram
     Worker->>Cosmos: Lease job (status=running)
     Worker->>Blob: Read input docs (pipeline-input container)
     Worker->>Core: build_index(config, output.type=cosmosdb)
-    Core->>Cosmos: Write pipeline datasets to<br/>pipeline-{collection}-{version} container<br/>(parquet bytes — no files on disk)
-    Worker->>Cosmos: Verify row counts + upsert artifactManifest
+    Core->>Cosmos: Write pipeline datasets to<br/>pipeline-{collection}-{version}
+    Core->>Cosmos: Write vector embeddings to<br/>shared vectors container<br/>via backend runtime override
+    Worker->>Cosmos: Verify pipeline datasets + vector scopes<br/>and upsert artifactManifest
     Worker->>Cosmos: set_active_version(collection, version)
     Worker->>Cosmos: Mark completed (status=completed)
     FE->>API: GET /collections/{id}/index (polling)
@@ -262,7 +265,7 @@ sequenceDiagram
 - **Backend**: `ca-gtog-api-prod` (Azure Container Apps) — Easy Auth `AllowAnonymous`, backend enforces auth via `REQUIRE_PLATFORM_AUTH=true`.
 - **Public hostnames**: `app.gtog.id.vn` (frontend), `api.gtog.id.vn` (API).
 - **Worker**: Same image as API, runs `python -m app.worker` to consume the indexing queue.
-| **Storage** | Azure Blob (raw documents in `pipeline-input` container), Cosmos DB (control plane + pipeline output + conversations + on-demand vector containers `vec-{collection}-{version}-{embedding}`), Storage Queue (jobs). |
+| **Storage** | Azure Blob (raw documents in `pipeline-input` container), Cosmos DB (control plane + versioned pipeline output + shared `vectors` container + conversations), Storage Queue (jobs). |
 
 ## 10. Cross-Cutting Concerns
 

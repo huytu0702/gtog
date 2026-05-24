@@ -6,13 +6,20 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
+from functools import lru_cache
 
 import graphrag.api as api
+from azure.cosmos import CosmosClient
+from azure.cosmos.exceptions import CosmosHttpResponseError
 from graphrag.callbacks.noop_workflow_callbacks import NoopWorkflowCallbacks
 
 from ..config import settings
 from ..models import IndexJobResponse, IndexStatus, IndexStatusResponse
+from ..azure_runtime import (
+    cosmos_account_url,
+    is_managed_identity_enabled,
+)
 from ..repositories import (
     INDEX_JOB_CANCELLED,
     INDEX_JOB_COMPLETED,
@@ -35,8 +42,8 @@ class IndexingService:
     """Service for managing indexing operations."""
 
     def __init__(self):
-        self.control_plane = get_control_plane_repository()
-        self.pipeline_repo = get_pipeline_output_repository()
+        self.control_plane = None
+        self.pipeline_repo = None
         self.queue_service = queue_service
         self._is_local = False
         # Local mode: in-memory job state keyed by collection_id
@@ -72,6 +79,8 @@ class IndexingService:
         )
 
     def _require_control_plane(self) -> CosmosControlPlaneRepository:
+        if self.control_plane is None:
+            self.control_plane = get_control_plane_repository()
         if self.control_plane is None:
             raise RuntimeError(
                 "Azure Cosmos DB is required for control-plane metadata in Phase 2. "
@@ -174,6 +183,8 @@ class IndexingService:
 
     def _verify_pipeline_output(self, *, collection_id: str, version: str) -> dict[str, int]:
         if self.pipeline_repo is None:
+            self.pipeline_repo = get_pipeline_output_repository()
+        if self.pipeline_repo is None:
             raise RuntimeError("Pipeline output repository is not configured")
 
         required_datasets = [
@@ -208,13 +219,107 @@ class IndexingService:
             )
         return row_counts
 
+    @staticmethod
+    def _expected_vector_scopes(config: Any) -> list[str]:
+        vector_store = cast("dict[str, Any]", config.vector_store)
+        default_store = vector_store["default_vector_store"]
+        embeddings_schema = getattr(default_store, "embeddings_schema", {}) or {}
+        return sorted(str(name) for name in embeddings_schema.keys())
+
+    @staticmethod
+    def _vector_partition_key(*, collection_id: str, version: str, embedding_kind: str) -> str:
+        return f"{collection_id}:{version}|{embedding_kind}"
+
+    @staticmethod
+    def _sanitize_vector_client_kwargs(client_kwargs: dict[str, Any]) -> dict[str, Any]:
+        internal_keys = {"__collection_id", "__version", "__collection_version"}
+        return {
+            key: value
+            for key, value in client_kwargs.items()
+            if key not in internal_keys
+        }
+
+    def _create_vector_cosmos_client(self, config: Any) -> CosmosClient:
+        vector_store = cast("dict[str, Any]", config.vector_store)
+        default_store = vector_store["default_vector_store"]
+        connection_string = str(getattr(default_store, "connection_string", "") or "").strip()
+        raw_client_kwargs = dict(getattr(default_store, "client_kwargs", {}) or {})
+        client_kwargs = self._sanitize_vector_client_kwargs(raw_client_kwargs)
+        if connection_string:
+            return CosmosClient.from_connection_string(connection_string, **client_kwargs)
+
+        url = str(getattr(default_store, "url", "") or cosmos_account_url()).strip()
+        if not url:
+            raise RuntimeError("Cosmos vector store URL is not configured")
+        credential: Any = None
+        if is_managed_identity_enabled():
+            from azure.identity import DefaultAzureCredential
+
+            credential = DefaultAzureCredential()
+        elif settings.azure_cosmos_key:
+            credential = settings.azure_cosmos_key
+        if credential is None:
+            raise RuntimeError("Cosmos vector store credentials are not configured")
+        return CosmosClient(url=url, credential=credential, **client_kwargs)
+
+    def _verify_vector_output(self, *, config: Any, collection_id: str, version: str) -> dict[str, int]:
+        vector_store = cast("dict[str, Any]", config.vector_store)
+        default_store = vector_store["default_vector_store"]
+        store_type = str(getattr(default_store, "type", "") or "").strip().lower()
+        if store_type == "azure_ai_search":
+            return {}
+        if store_type and store_type != "cosmosdb":
+            raise RuntimeError(f"Unsupported vector store type for verification: {store_type}")
+
+        database_name = str(getattr(default_store, "database_name", "") or "").strip()
+        container_name = str(getattr(default_store, "container_name", "") or "vectors").strip()
+        if not database_name:
+            raise RuntimeError("Cosmos vector database name is not configured")
+        if not container_name:
+            raise RuntimeError("Cosmos vector container name is not configured")
+
+        client = self._create_vector_cosmos_client(config)
+        database = client.get_database_client(database_name)
+        try:
+            container = database.get_container_client(container_name)
+            container.read()
+        except CosmosHttpResponseError as exc:
+            raise RuntimeError(f"Vector container '{container_name}' is not ready") from exc
+
+        scope_counts: dict[str, int] = {}
+        for embedding_kind in self._expected_vector_scopes(config):
+            partition_key = self._vector_partition_key(
+                collection_id=collection_id,
+                version=version,
+                embedding_kind=embedding_kind,
+            )
+            rows = list(
+                container.query_items(
+                    query="SELECT VALUE COUNT(1) FROM c WHERE c.partitionKey = @partitionKey",
+                    parameters=[{"name": "@partitionKey", "value": partition_key}],
+                    partition_key=partition_key,
+                )
+            )
+            count = int(rows[0]) if rows else 0
+            if count <= 0:
+                raise RuntimeError(
+                    f"Missing vector scope for partition '{partition_key}'"
+                )
+            scope_counts[embedding_kind] = count
+        return scope_counts
+
     async def _run_local_indexing(self, collection_id: str, job_id: str) -> None:
         """Execute indexing directly in the background for local mode."""
         job = self._local_jobs[collection_id]
         job.update({"status": IndexStatus.RUNNING, "progress": 10.0, "message": "Loading configuration...", "started_at": datetime.now(timezone.utc).replace(tzinfo=None)})
         try:
             apply_arrow_fix()
-            config = load_graphrag_config(collection_id, use_cloud_vectors=False)
+            version = job_id[:16]
+            config = load_graphrag_config(
+                collection_id,
+                version=version,
+                use_cloud_vectors=True,
+            )
 
             job.update({"progress": 20.0, "message": "Running indexing pipeline..."})
             outputs = await api.build_index(
@@ -295,17 +400,20 @@ class IndexingService:
                 })
                 return
 
-            job.update({"progress": 80.0, "message": "Verifying pipeline output..."})
-            if self.pipeline_repo is not None:
-                try:
-                    row_counts = await asyncio.to_thread(
-                        self._verify_pipeline_output,
-                        collection_id=collection_id,
-                        version=version,
-                    )
-                    logger.info("Pipeline output verified: %s", row_counts)
-                except Exception as verify_err:
-                    logger.warning("Pipeline output verification failed: %s", verify_err)
+            job.update({"progress": 80.0, "message": "Verifying pipeline and vector output..."})
+            row_counts = await asyncio.to_thread(
+                self._verify_pipeline_output,
+                collection_id=collection_id,
+                version=version,
+            )
+            vector_counts = await asyncio.to_thread(
+                self._verify_vector_output,
+                config=config,
+                collection_id=collection_id,
+                version=version,
+            )
+            logger.info("Pipeline output verified: %s", row_counts)
+            logger.info("Vector output verified: %s", vector_counts)
 
             job.update({"progress": 90.0, "message": "Publishing active version..."})
             control_plane.set_active_version(collection_id, version)
@@ -458,10 +566,16 @@ class IndexingService:
                 lease_owner_id=worker_id,
                 lease_duration_seconds=settings.indexing_worker_lease_duration_seconds,
                 progress=70.0,
-                message="Verifying pipeline output...",
+                message="Verifying pipeline and vector output...",
             )
             pipeline_counts = await asyncio.to_thread(
                 self._verify_pipeline_output,
+                collection_id=collection_id,
+                version=target_version,
+            )
+            vector_counts = await asyncio.to_thread(
+                self._verify_vector_output,
+                config=config,
                 collection_id=collection_id,
                 version=target_version,
             )
@@ -469,7 +583,7 @@ class IndexingService:
                 collection_id=collection_id,
                 version=target_version,
                 artifact_name="pipeline-datasets",
-                counts=pipeline_counts,
+                counts={**pipeline_counts, **{f"vector:{key}": value for key, value in vector_counts.items()}},
                 checksum="storageMode=cosmos_pipeline",
             )
             control_plane.set_active_version(collection_id, target_version)
@@ -632,4 +746,14 @@ class IndexingService:
         return self._job_to_response(job)
 
 
-indexing_service = IndexingService()
+@lru_cache(maxsize=1)
+def get_indexing_service() -> IndexingService:
+    return IndexingService()
+
+
+class _IndexingServiceProxy:
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_indexing_service(), name)
+
+
+indexing_service = _IndexingServiceProxy()

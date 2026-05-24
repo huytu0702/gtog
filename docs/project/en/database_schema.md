@@ -2,14 +2,15 @@
 
 This document describes the data stores used by the GraphRAG.ToG platform in **production / cosmos_pipeline mode**, the only mode used in deployed environments:
 
-1. **Azure Cosmos DB** — three logical planes in one database:
+1. **Azure Cosmos DB** — four logical planes in one database:
    - **Control plane** — collections, documents, indexing jobs, version pointers.
-   - **Pipeline output plane** — pipeline artifacts written directly by `CosmosDBPipelineStorage` (no parquet files on disk).
+   - **Pipeline output plane** — pipeline artifacts written directly by `CosmosDBPipelineStorage` into versioned `pipeline-{collection}-{version}` containers.
+   - **Vector plane** — all Cosmos vector embeddings stored in one shared physical container `vectors`, scoped by partition key.
    - **Conversation plane** — chat sessions and turns.
 2. **Azure Blob Storage** — raw user-uploaded documents (`.txt`, `.md`).
 3. **Azure Storage Queue** — durable indexing-job dispatch (`indexing-jobs`).
 
-> **Important** — the GraphRAG core can also write parquet to local files or blob, but this deployment uses `output.type: cosmosdb` in `settings.yaml`. Pipeline datasets are persisted as **parquet payloads stored inside Cosmos documents**, not as files on disk. This document only covers the cosmosdb mode.
+> **Important** — the GraphRAG core can also write parquet to local files or blob, but this deployment uses `output.type: cosmosdb` in `settings.yaml`. The backend also overrides the GraphRAG Cosmos vector store at runtime so all vector embeddings land in the shared `vectors` container instead of per-embedding `vec-*` containers. This document only covers that deployed cosmosdb runtime.
 
 ## 1. Storage Map
 
@@ -25,7 +26,11 @@ flowchart LR
     end
 
     subgraph PP["Cosmos DB — Pipeline Output Plane (per collection × version)"]
-        P1[pipeline-{collection}-{version}<br/>documents.parquet, text_units.parquet,<br/>entities.parquet, relationships.parquet,<br/>communities.parquet, community_reports.parquet,<br/>covariates.parquet — stored as bytes]
+        P1[pipeline-{collection}-{version}<br/>GraphRAG pipeline datasets<br/>for one collection version]
+    end
+
+    subgraph VP["Cosmos DB — Shared Vector Plane"]
+        V0[vectors<br/>partitionKey = {collectionId}:{version}|{embeddingKind}]
     end
 
     subgraph CV["Cosmos DB — Conversation Plane"]
@@ -42,12 +47,14 @@ flowchart LR
     end
 
     Worker --> PP
+    Worker --> VP
     Worker --> CP
     API --> CP
     API --> CV
     API --> BL
     API --> QU
     Query["QueryService"] --> PP
+    Query --> VP
     Query --> CP
 ```
 
@@ -55,11 +62,12 @@ flowchart LR
 
 **Database:** `AZURE_COSMOS_DATABASE_NAME` (default `gtog-control`).
 
-**Three kinds of containers** live in this database:
+**Four kinds of containers** live in this database:
 
-1. **Control + conversation containers** — fixed names, partition key `/collectionId`. They store collection metadata, documents, indexing jobs, conversation sessions and turns.
-2. **Pipeline output containers** — one container *per collection × version*, named `pipeline-{collection}-{version}` (sanitized, ≤128 chars), partition key `/id`. They are created by `CosmosDBPipelineStorage` during an indexing run and hold the parquet payloads of all GraphRAG datasets.
-3. **Vector containers (Cosmos vector store)** — created on-demand during indexing, named `vec-{collection}-{version}-{embedding}` (sanitized, ≤128 chars), partition key `/id`.
+1. **Control containers** — fixed names, partition key `/collectionId`. They store collection metadata, documents, indexing jobs, manifests, and active-version pointers.
+2. **Conversation containers** — fixed names, partition key `/collectionId`. They store chat sessions and turns.
+3. **Pipeline output containers** — one container *per collection × version*, named `pipeline-{collection}-{version}` (sanitized, ≤128 chars). They are created by `CosmosDBPipelineStorage` during an indexing run and hold the GraphRAG pipeline datasets for that version.
+4. **Vector container (Cosmos vector store)** — one shared physical container named `vectors`, partition key `/partitionKey`. The backend overrides GraphRAG's Cosmos vector store registration at runtime so all embeddings are stored here and isolated by logical scope.
 
 ```mermaid
 erDiagram
@@ -187,41 +195,59 @@ Tracks which version is currently served per collection. Written by `control_pla
 
 The GraphRAG core writes pipeline artifacts directly to Cosmos via `CosmosDBPipelineStorage` (selected by `output.type: cosmosdb` in `settings.yaml`). **No parquet files are written to disk.** Instead:
 
-- One container is created per `(collection, version)`: name `pipeline-{collection}-{version}`, sanitized to `[a-z0-9-]`, capped at 128 chars (`backend/app/repositories/pipeline_output_repository.py::build_pipeline_container_name`).
-- Partition key: `/id`.
-- Each pipeline dataset is stored as a **single Cosmos document** keyed by `{dataset}.parquet`, whose body holds the parquet bytes serialized for retrieval. The reader (`PipelineOutputRepository._load_parquet_bytes`) calls `storage.get(key, as_bytes=True)` and `pd.read_parquet(BytesIO(...))` to materialize a DataFrame.
+- One container is created per `(collection, version)`: name `pipeline-{collection}-{version}`, sanitized to `[a-z0-9-]`, capped at 128 chars (`backend/app/repositories/pipeline_output_repository.py:build_pipeline_container_name`).
+- These containers hold the GraphRAG pipeline datasets for that exact version.
+- The backend verifies the required datasets before flipping `collections.activeVersion` to the new version.
 
 ```mermaid
 flowchart LR
     subgraph DB["Cosmos DB database (gtog-control)"]
-        subgraph Container["pipeline-{collection}-{version}<br/>partition key: /id"]
-            D1["id: documents.parquet<br/>(parquet bytes)"]
-            D2["id: text_units.parquet"]
-            D3["id: entities.parquet"]
-            D4["id: relationships.parquet"]
-            D5["id: communities.parquet"]
-            D6["id: community_reports.parquet"]
-            D7["id: covariates.parquet (optional)"]
+        subgraph Container["pipeline-{collection}-{version}"]
+            D1[documents dataset]
+            D2[text_units dataset]
+            D3[entities dataset]
+            D4[relationships dataset]
+            D5[communities dataset]
+            D6[community_reports dataset]
+            D7[covariates dataset optional]
         end
     end
 ```
 
-**Why one container per version:** atomic publish. The new run writes a fresh container; only after `_verify_pipeline_output` succeeds does the control plane swap `collections.activeVersion` to point at it. Old versions stay readable until cleaned up.
+**Why one container per version:** atomic publish. The new run writes a fresh container; only after `_verify_pipeline_output(...)` and `_verify_vector_output(...)` succeed does the control plane swap `collections.activeVersion` to point at it. Old versions stay readable until cleaned up.
 
-**Datasets and their schema:** the parquet payload of each dataset matches the GraphRAG core data model (`graphrag.data_model.*`). See section 5 for column-level detail.
+**Datasets and their schema:** the stored datasets match the GraphRAG core data model (`graphrag.data_model.*`). See section 5 for column-level detail.
 
-## 4.1 Vector Containers (Cosmos vector store)
+## 4.1 Shared Vector Plane (`vectors`)
 
-Vector containers are created during indexing (not pre-provisioned by DB scripts), with version-scoped names:
+The deployed runtime does **not** create per-embedding vector containers. Instead, the backend overrides the GraphRAG `cosmosdb` vector-store registration at process startup and routes all Cosmos vector writes into one shared physical container named `vectors`.
 
-- `vec-{collection}-{version}-entity-description`
-- `vec-{collection}-{version}-community-full-content`
-- `vec-{collection}-{version}-text-unit-text`
-- (optional by config) `vec-{collection}-{version}-relationship-description`
+- Physical container: `vectors`
+- Partition key path: `/partitionKey`
+- Logical scope: `{collectionId}:{version}|{embeddingKind}`
+- Supported embedding scopes:
+  - `entity.description`
+  - `community.full_content`
+  - `text_unit.text`
 
-These containers are used for ANN similarity retrieval and are separate from the pipeline artifact container. Query flow uses both:
+Each stored vector row includes:
 
-1. vector search from `vec-*` containers to fetch candidates,
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Deterministic key: `{partitionKey}|{sourceId}` |
+| `sourceId` | string | Original GraphRAG source id |
+| `partitionKey` | string | `{collectionId}:{version}|{embeddingKind}` |
+| `collectionId` | string | Collection slug |
+| `version` | string | Indexed version |
+| `collectionVersion` | string | `{collectionId}:{version}` |
+| `embeddingKind` | string | Logical embedding scope |
+| `text` | string | Source text for retrieval |
+| `vector` | list[float] | Embedding payload |
+| `attributes` | string | JSON-serialized metadata |
+
+Query flow uses both planes:
+
+1. vector similarity search in `vectors`, restricted to the active partition scope,
 2. then hydration from the active `pipeline-{collection}-{version}` datasets.
 
 ## 5. Pipeline Dataset Schemas (parquet payloads)

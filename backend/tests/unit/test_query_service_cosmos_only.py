@@ -6,9 +6,11 @@ import pandas as pd
 import pytest
 
 from backend.app.errors import ServingContextUnavailableError
+from backend.app.models import SearchMethod
 from backend.app.services.query_service import QueryService
 
 query_service_module = importlib.import_module("backend.app.services.query_service")
+query_service_tog_module = importlib.import_module("backend.app.services.query_service_tog")
 
 
 def _make_service(*frames: pd.DataFrame) -> QueryService:
@@ -19,6 +21,7 @@ def _make_service(*frames: pd.DataFrame) -> QueryService:
         "collectionId": "c1",
         "activeVersion": "v1",
     }
+    service.context_cache.invalidate_collection("c1")
 
     dataset_frames = {
         "entities": frames[0],
@@ -136,6 +139,9 @@ async def test_local_search_uses_runtime_safe_vector_store_without_parquet():
 async def test_tog_search_uses_runtime_safe_vector_store_without_parquet():
     service = _make_service(
         pd.DataFrame([{"id": "e1", "title": "Entity 1"}]),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame([{"id": "t1", "text": "chunk"}]),
         pd.DataFrame([{"id": "rel1", "source": "Entity 1", "target": "Entity 2"}]),
     )
     config = _runtime_safe_config()
@@ -155,12 +161,331 @@ async def test_tog_search_uses_runtime_safe_vector_store_without_parquet():
     mock_read_parquet.assert_not_called()
     mock_config.assert_called_once_with("c1", version="v1", use_cloud_vectors=True)
     assert mock_search.await_args.kwargs["config"] is config
+    assert mock_search.await_args.kwargs["text_units"].to_dict(orient="records") == [
+        {"id": "t1", "text": "chunk"}
+    ]
     assert (
         mock_search.await_args.kwargs["config"]
         .vector_store["default_vector_store"]
         .type
         == "azure_ai_search"
     )
+
+
+@pytest.mark.asyncio
+async def test_tog_search_wraps_json_safe_raw_context_when_paths_cannot_be_serialized():
+    service = _make_service(
+        pd.DataFrame([{"id": "e1", "title": "Entity 1"}]),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame([{"id": "t1", "text": "chunk"}]),
+        pd.DataFrame([{"id": "rel1", "source": "Entity 1", "target": "Entity 2"}]),
+    )
+    config = _runtime_safe_config()
+    raw_context = {
+        "exploration_paths": ["Entity 1 -> Entity 2"],
+        "score": 0.9,
+        "bad_score": float("nan"),
+        "overflow": float("inf"),
+        "sources": pd.DataFrame([{"id": "s1", "text": "chunk", "rank": None}]),
+    }
+
+    with patch.object(
+        query_service_module, "load_graphrag_config", return_value=config
+    ):
+        with patch.object(
+            query_service_module.api,
+            "tog_search",
+            new=AsyncMock(return_value=("ok", raw_context)),
+        ):
+            response = await service.tog_search("c1", "q1")
+
+    assert response.context_data == {
+        "RawContext": {
+            "exploration_paths": ["Entity 1 -> Entity 2"],
+            "score": 0.9,
+            "bad_score": None,
+            "overflow": None,
+            "sources": [{"id": "s1", "text": "chunk", "rank": None}],
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_tog_search_serializes_exploration_paths_when_available():
+    service = _make_service(
+        pd.DataFrame([{"id": "e1", "title": "Entity 1"}]),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame([{"id": "t1", "text": "chunk"}]),
+        pd.DataFrame([{"id": "rel1", "source": "Entity 1", "target": "Entity 2"}]),
+    )
+    config = _runtime_safe_config()
+
+    raw_context = {
+        "exploration_paths": ["Entity 1 --[related_to]--> Entity 2"],
+        "score": 0.9,
+    }
+
+    with patch.object(
+        query_service_module, "load_graphrag_config", return_value=config
+    ):
+        with patch.object(
+            query_service_module.api,
+            "tog_search",
+            new=AsyncMock(
+                return_value=(
+                    "Answer [Data: Entity 1, Entity 2]",
+                    raw_context,
+                )
+            ),
+        ):
+            response = await service.tog_search("c1", "q1")
+
+    assert response.response == "Answer [Data: Entities (Entity 1, Entity 2)]"
+    assert response.context_data == {
+        "Entities": {
+            "Entity 1": {
+                "name": "Entity 1",
+                "description": "Entity 1 --[related_to]--> Entity 2",
+            },
+            "Entity 2": {
+                "name": "Entity 2",
+                "description": "Entity 1 --[related_to]--> Entity 2",
+            },
+        },
+        "Relationships": {
+            "related_to": {"name": "related_to", "description": ""}
+        },
+        "RawContext": raw_context,
+    }
+
+
+@pytest.mark.asyncio
+async def test_tog_search_enriches_entity_name_only_paths_from_serving_context():
+    service = _make_service(
+        pd.DataFrame([
+            {"id": "e1", "title": "HANOI", "description": "Capital city of Vietnam"},
+            {"id": "e2", "title": "VIETNAM", "description": "Country in Southeast Asia"},
+        ]),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame([{"id": "t1", "text": "chunk"}]),
+        pd.DataFrame([
+            {"id": "r1", "source": "HANOI", "target": "VIETNAM", "description": "capital_of"}
+        ]),
+    )
+    config = _runtime_safe_config()
+    raw_context = {"exploration_paths": ["HANOI", "VIETNAM", "DOCUMENT"]}
+
+    with patch.object(
+        query_service_module, "load_graphrag_config", return_value=config
+    ):
+        with patch.object(
+            query_service_module.api,
+            "tog_search",
+            new=AsyncMock(return_value=("Hanoi is the capital of Vietnam [Data: HANOI, VIETNAM].", raw_context)),
+        ):
+            response = await service.tog_search("c1", "q1")
+
+    assert response.context_data == {
+        "Entities": {
+            "HANOI": {"name": "HANOI", "description": "Capital city of Vietnam"},
+            "VIETNAM": {"name": "VIETNAM", "description": "Country in Southeast Asia"},
+        },
+        "RawContext": raw_context,
+    }
+    assert response.response == "Hanoi is the capital of Vietnam [Data: Entities (HANOI, VIETNAM)]."
+    assert response.context_data == {
+        "Entities": {
+            "HANOI": {"name": "HANOI", "description": "Capital city of Vietnam"},
+            "VIETNAM": {"name": "VIETNAM", "description": "Country in Southeast Asia"},
+        },
+        "RawContext": raw_context,
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_tog_search_enriches_entity_name_only_paths_from_serving_context():
+    entities = pd.DataFrame([
+        {"id": "e1", "title": "HANOI", "description": "Capital city of Vietnam"},
+        {"id": "e2", "title": "VIETNAM", "description": "Country in Southeast Asia"},
+    ])
+    relationships = pd.DataFrame([
+        {"id": "r1", "source": "HANOI", "target": "VIETNAM", "description": "capital_of"}
+    ])
+    text_units = pd.DataFrame([{"id": "t1", "text": "chunk"}])
+    raw_context = {"exploration_paths": ["HANOI", "VIETNAM", "DOCUMENT"]}
+
+    async def load_context(collection_id: str, method: str):
+        assert collection_id == "c1"
+        assert method == "tog"
+        return "v1", {"entities": entities, "relationships": relationships, "text_units": text_units}
+
+    with patch.object(
+        query_service_tog_module, "load_graphrag_config", return_value=_runtime_safe_config()
+    ):
+        with patch.object(
+            query_service_tog_module.api,
+            "tog_search",
+            new=AsyncMock(return_value=("Hanoi is the capital of Vietnam [Data: HANOI, VIETNAM].", raw_context)),
+        ):
+            response = await query_service_tog_module.run_tog_search(
+                collection_id="c1",
+                query="q1",
+                load_context=load_context,
+            )
+
+    assert response.response == "Hanoi is the capital of Vietnam [Data: Entities (HANOI, VIETNAM)]."
+    assert response.context_data == {
+        "Entities": {
+            "HANOI": {"name": "HANOI", "description": "Capital city of Vietnam"},
+            "VIETNAM": {"name": "VIETNAM", "description": "Country in Southeast Asia"},
+        },
+        "RawContext": raw_context,
+    }
+
+
+@pytest.mark.asyncio
+async def test_tog_search_node_only_paths_ignore_internal_ids():
+    service = _make_service(
+        pd.DataFrame([
+            {"id": "DOCUMENT", "title": "Doc title", "description": "Should not match by id only"},
+            {"id": "e1", "title": "HANOI", "description": "Capital city of Vietnam"},
+            {"id": "e2", "title": "VIETNAM", "description": "Country in Southeast Asia"},
+        ]),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame([{"id": "t1", "text": "chunk"}]),
+        pd.DataFrame([{"id": "r1", "source": "HANOI", "target": "VIETNAM", "description": "capital_of"}]),
+    )
+    config = _runtime_safe_config()
+    raw_context = {"exploration_paths": ["HANOI", "VIETNAM", "DOCUMENT"]}
+
+    with patch.object(
+        query_service_module, "load_graphrag_config", return_value=config
+    ):
+        with patch.object(
+            query_service_module.api,
+            "tog_search",
+            new=AsyncMock(return_value=("Hanoi is the capital of Vietnam [Data: HANOI, VIETNAM].", raw_context)),
+        ):
+            response = await service.tog_search("c1", "q1")
+
+    assert response.context_data == {
+        "Entities": {
+            "HANOI": {"name": "HANOI", "description": "Capital city of Vietnam"},
+            "VIETNAM": {"name": "VIETNAM", "description": "Country in Southeast Asia"},
+        },
+        "RawContext": raw_context,
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_tog_search_wraps_json_safe_raw_context_when_paths_cannot_be_serialized():
+    entities = pd.DataFrame([{"id": "e1", "title": "Entity 1"}])
+    relationships = pd.DataFrame([{"id": "rel1", "source": "Entity 1", "target": "Entity 2"}])
+    raw_context = {
+        "exploration_paths": ["Entity 1 -> Entity 2"],
+        "score": 0.9,
+        "bad_score": float("nan"),
+        "overflow": float("inf"),
+        "sources": pd.DataFrame([{"id": "s1", "text": "chunk", "rank": None}]),
+    }
+
+    text_units = pd.DataFrame([{"id": "t1", "text": "chunk"}])
+
+    async def load_context(collection_id: str, method: str):
+        assert collection_id == "c1"
+        assert method == "tog"
+        return "v1", {"entities": entities, "relationships": relationships, "text_units": text_units}
+
+    with patch.object(
+        query_service_tog_module, "load_graphrag_config", return_value=_runtime_safe_config()
+    ):
+        with patch.object(
+            query_service_tog_module.api,
+            "tog_search",
+            new=AsyncMock(return_value=("ok", raw_context)),
+        ) as mock_search:
+            response = await query_service_tog_module.run_tog_search(
+                collection_id="c1",
+                query="q1",
+                load_context=load_context,
+            )
+
+    assert mock_search.await_args.kwargs["text_units"].to_dict(orient="records") == [
+        {"id": "t1", "text": "chunk"}
+    ]
+    assert response.method == SearchMethod.TOG
+    assert response.context_data == {
+        "RawContext": {
+            "exploration_paths": ["Entity 1 -> Entity 2"],
+            "score": 0.9,
+            "bad_score": None,
+            "overflow": None,
+            "sources": [{"id": "s1", "text": "chunk", "rank": None}],
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_tog_search_serializes_exploration_paths_when_available():
+    entities = pd.DataFrame([{"id": "e1", "title": "Entity 1"}])
+    relationships = pd.DataFrame([{"id": "rel1", "source": "Entity 1", "target": "Entity 2"}])
+
+    text_units = pd.DataFrame([{"id": "t1", "text": "chunk"}])
+
+    async def load_context(collection_id: str, method: str):
+        assert collection_id == "c1"
+        assert method == "tog"
+        return "v1", {"entities": entities, "relationships": relationships, "text_units": text_units}
+
+    raw_context = {
+        "exploration_paths": ["Entity 1 --[related_to]--> Entity 2"],
+        "score": 0.9,
+    }
+
+    with patch.object(
+        query_service_tog_module, "load_graphrag_config", return_value=_runtime_safe_config()
+    ):
+        with patch.object(
+            query_service_tog_module.api,
+            "tog_search",
+            new=AsyncMock(
+                return_value=(
+                    "Answer [Data: Entity 1, Entity 2]",
+                    raw_context,
+                )
+            ),
+        ) as mock_search:
+            response = await query_service_tog_module.run_tog_search(
+                collection_id="c1",
+                query="q1",
+                load_context=load_context,
+            )
+
+    assert mock_search.await_args.kwargs["text_units"].to_dict(orient="records") == [
+        {"id": "t1", "text": "chunk"}
+    ]
+    assert response.method == SearchMethod.TOG
+    assert response.response == "Answer [Data: Entities (Entity 1, Entity 2)]"
+    assert response.context_data == {
+        "Entities": {
+            "Entity 1": {
+                "name": "Entity 1",
+                "description": "Entity 1 --[related_to]--> Entity 2",
+            },
+            "Entity 2": {
+                "name": "Entity 2",
+                "description": "Entity 1 --[related_to]--> Entity 2",
+            },
+        },
+        "Relationships": {
+            "related_to": {"name": "related_to", "description": ""}
+        },
+        "RawContext": raw_context,
+    }
 
 
 @pytest.mark.asyncio

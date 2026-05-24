@@ -171,7 +171,7 @@ ensure_control_container "${ARTIFACT_MANIFEST_CONTAINER}"
 # Vector store containers
 # ---------------------------------------------------------------------------
 
-echo ">>> Skipping vector container provisioning (created on-demand during indexing per collection)"
+echo ">>> Skipping vector container provisioning (indexing writes all vector embeddings into the shared 'vectors' container, scoped by collection/version/embedding partition keys)"
 
 # ---------------------------------------------------------------------------
 # Output

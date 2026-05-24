@@ -15,7 +15,7 @@ param(
     [string]$DocumentsContainer       = "documents",
     [string]$IndexingJobsContainer    = "indexingJobs",
     [string]$JobEventsContainer       = "jobEvents",
-    [string]$ArtifactManifestContainer = "artifactManifest",
+    [string]$ArtifactManifestContainer = "artifactManifest"
 
 )
 
@@ -225,7 +225,7 @@ Ensure-ControlContainer $ArtifactManifestContainer
 # Vector store containers
 # ---------------------------------------------------------------------------
 
-Write-Host ">>> Skipping vector container provisioning (created on-demand during indexing per collection)"
+Write-Host ">>> Skipping vector container provisioning (indexing writes all vector embeddings into the shared 'vectors' container, scoped by collection/version/embedding partition keys)"
 
 # ---------------------------------------------------------------------------
 # Output

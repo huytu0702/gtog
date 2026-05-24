@@ -116,7 +116,8 @@ def test_bash_db_provision_script_does_not_preprovision_vector_containers() -> N
     assert "VECTOR_COMMUNITY_CONTAINER" not in content
     assert "VECTOR_TEXT_UNIT_CONTAINER" not in content
     assert "ensure_vector_container" not in content
-    assert "created on-demand during indexing per collection" in content
+    assert "shared 'vectors' container" in content
+    assert "partition keys" in content
 
 
 def test_powershell_db_provision_script_does_not_preprovision_vector_containers() -> None:
@@ -126,4 +127,5 @@ def test_powershell_db_provision_script_does_not_preprovision_vector_containers(
     assert "$VectorCommunityContainer" not in content
     assert "$VectorTextUnitContainer" not in content
     assert "Ensure-VectorContainer" not in content
-    assert "created on-demand during indexing per collection" in content
+    assert "shared 'vectors' container" in content
+    assert "partition keys" in content

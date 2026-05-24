@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 from fastapi import UploadFile
 
-from ..config import settings
 from ..models import CollectionResponse, DocumentResponse
 from ..repositories import get_control_plane_repository
 from ..utils.helpers import (
@@ -22,17 +21,21 @@ class StorageService:
     """Service for managing collection/document metadata and document content."""
 
     def __init__(self):
-        """Initialize the storage service."""
-        self.blob_client = _blob_client()
-        self.control_plane = get_control_plane_repository()
+        self.blob_client = None
+        self.control_plane = None
 
-    def _ensure_blob_enabled(self) -> None:
+    def _require_blob_client(self):
+        if self.blob_client is None:
+            self.blob_client = _blob_client()
         if self.blob_client is None:
             raise RuntimeError(
                 "Azure Blob Storage is not configured. Set AZURE_STORAGE_CONNECTION_STRING."
             )
+        return self.blob_client
 
-    def _ensure_control_plane_enabled(self) -> None:
+    def _require_control_plane(self):
+        if self.control_plane is None:
+            self.control_plane = get_control_plane_repository()
         if self.control_plane is None:
             raise RuntimeError(
                 "Azure Cosmos DB is required for control-plane metadata in Phase 1. "
@@ -40,6 +43,13 @@ class StorageService:
                 "AZURE_COSMOS_ENDPOINT + AZURE_COSMOS_KEY, "
                 "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
             )
+        return self.control_plane
+
+    def _ensure_blob_enabled(self) -> None:
+        self._require_blob_client()
+
+    def _ensure_control_plane_enabled(self) -> None:
+        self._require_control_plane()
 
     @staticmethod
     def _parse_iso(value: str | None) -> datetime:
@@ -48,9 +58,10 @@ class StorageService:
         return datetime.fromisoformat(value)
 
     def _is_indexed(self, collection_id: str) -> bool:
-        if self.control_plane is None:
+        control_plane = self.control_plane
+        if control_plane is None:
             return False
-        collection = self.control_plane.get_collection(collection_id)
+        collection = control_plane.get_collection(collection_id)
         if collection is None:
             return False
         return bool(collection.get("activeVersion"))
@@ -74,27 +85,21 @@ class StorageService:
             uploaded_at=self._parse_iso(item.get("uploadedAt")),
         )
 
-    # ---- Public API ----
-
     def create_collection(
         self, collection_id: str, description: str | None = None
     ) -> CollectionResponse:
-        """Create a new collection."""
         self._ensure_control_plane_enabled()
         self._ensure_blob_enabled()
         _ensure_blob_container(collection_id)
-        item = self.control_plane.create_collection(collection_id, description)
+        item = self._require_control_plane().create_collection(collection_id, description)
         return self._to_collection_response(item=item, document_count=0, indexed=False)
 
     def delete_collection(self, collection_id: str) -> bool:
-        """Delete a collection and all its contents."""
         self._ensure_control_plane_enabled()
-        self._ensure_blob_enabled()
-        self.control_plane.delete_collection(collection_id)
+        blob_client = self._require_blob_client()
+        self._require_control_plane().delete_collection(collection_id)
 
-        container = self.blob_client.get_container_client(
-            _collection_container(collection_id)
-        )
+        container = blob_client.get_container_client(_collection_container(collection_id))
         if container.exists():
             container.delete_container()
 
@@ -105,24 +110,25 @@ class StorageService:
 
         try:
             from .conversation_service import conversation_service
+
             conversation_service.purge_collection(collection_id)
         except Exception:
             pass
 
         try:
             from .query_service import query_service
+
             query_service.invalidate_collection_cache(collection_id)
         except Exception:
             pass
         return True
 
     def list_collections(self) -> list[CollectionResponse]:
-        """List all collections."""
-        self._ensure_control_plane_enabled()
+        control_plane = self._require_control_plane()
         collections = []
-        for item in self.control_plane.list_collections():
+        for item in control_plane.list_collections():
             collection_id = str(item["collectionId"])
-            document_count = self.control_plane.count_documents(collection_id)
+            document_count = control_plane.count_documents(collection_id)
             collections.append(
                 self._to_collection_response(
                     item=item,
@@ -133,12 +139,11 @@ class StorageService:
         return collections
 
     def get_collection(self, collection_id: str) -> CollectionResponse | None:
-        """Get details about a specific collection."""
-        self._ensure_control_plane_enabled()
-        item = self.control_plane.get_collection(collection_id)
+        control_plane = self._require_control_plane()
+        item = control_plane.get_collection(collection_id)
         if item is None:
             return None
-        document_count = self.control_plane.count_documents(collection_id)
+        document_count = control_plane.count_documents(collection_id)
         return self._to_collection_response(
             item=item,
             document_count=document_count,
@@ -148,20 +153,17 @@ class StorageService:
     async def upload_document(
         self, collection_id: str, file: UploadFile
     ) -> DocumentResponse:
-        """Upload a document to collection input."""
-        self._ensure_control_plane_enabled()
-        self._ensure_blob_enabled()
-        if self.control_plane.get_collection(collection_id) is None:
+        control_plane = self._require_control_plane()
+        blob_client = self._require_blob_client()
+        if control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
         content = await file.read()
         filename = file.filename or "document"
         content_sha256 = hashlib.sha256(content).hexdigest()
-        container = self.blob_client.get_container_client(
-            _collection_container(collection_id)
-        )
+        container = blob_client.get_container_client(_collection_container(collection_id))
         container.upload_blob(f"input/{filename}", content, overwrite=True)
-        item = self.control_plane.upsert_document(
+        item = control_plane.upsert_document(
             collection_id=collection_id,
             document_name=filename,
             source_path=f"input/{filename}",
@@ -173,35 +175,31 @@ class StorageService:
         return self._to_document_response(item)
 
     def list_documents(self, collection_id: str) -> list[DocumentResponse]:
-        """List all documents in a collection."""
-        self._ensure_control_plane_enabled()
-        if self.control_plane.get_collection(collection_id) is None:
+        control_plane = self._require_control_plane()
+        if control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
         return [
             self._to_document_response(item)
-            for item in self.control_plane.list_documents(collection_id)
+            for item in control_plane.list_documents(collection_id)
         ]
 
     def delete_document(self, collection_id: str, document_name: str) -> bool:
-        """Delete a document from a collection."""
-        self._ensure_control_plane_enabled()
-        self._ensure_blob_enabled()
-        if self.control_plane.get_collection(collection_id) is None:
+        control_plane = self._require_control_plane()
+        blob_client = self._require_blob_client()
+        if control_plane.get_collection(collection_id) is None:
             raise ValueError(f"Collection '{collection_id}' not found")
 
-        blob_container = self.blob_client.get_container_client(
-            _collection_container(collection_id)
-        )
+        blob_container = blob_client.get_container_client(_collection_container(collection_id))
         blob = blob_container.get_blob_client(f"input/{document_name}")
         if not blob.exists():
             raise ValueError(f"Document '{document_name}' not found")
         blob.delete_blob()
 
-        self.control_plane.delete_document(
-            collection_id=collection_id, document_name=document_name
+        control_plane.delete_document(
+            collection_id=collection_id,
+            document_name=document_name,
         )
         return True
 
 
-# Global storage service instance
 storage_service = StorageService()

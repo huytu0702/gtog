@@ -12,7 +12,7 @@ from ..errors import (
     ConversationStoreUnavailableError,
 )
 from ..models import SessionCreateResponse, SessionDetailResponse
-from ..services import conversation_service
+from ..services.conversation_service import conversation_service
 
 router = APIRouter(
     prefix="/api/collections/{collection_id}/sessions", tags=["sessions"]

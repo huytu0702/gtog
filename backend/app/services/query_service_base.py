@@ -3,7 +3,10 @@
 import json
 import logging
 import re
+from numbers import Integral, Real
 from typing import Any
+
+from collections.abc import Iterable
 
 import pandas as pd
 from pandas import DataFrame
@@ -117,6 +120,138 @@ def _serialize_context_records(
             lookup[short_id] = {"name": name, "description": desc}
         result[key] = lookup
     return result or None
+
+
+def _serialize_json_safe_context(value: Any) -> Any:
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real):
+        numeric = float(value)
+        if not pd.notna(numeric) or numeric in (float("inf"), float("-inf")):
+            return None
+        return numeric
+    if isinstance(value, DataFrame):
+        normalized = value.astype(object).where(pd.notna(value), None)
+        return normalized.to_dict(orient="records")
+    if isinstance(value, pd.Series):
+        normalized = value.astype(object).where(pd.notna(value), None)
+        return {str(key): _serialize_json_safe_context(item) for key, item in normalized.items()}
+    if isinstance(value, dict):
+        return {
+            str(key): _serialize_json_safe_context(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_serialize_json_safe_context(item) for item in value]
+    return str(value)
+
+
+def _match_entity_record_by_name(
+    entities: pd.DataFrame,
+    raw_name: str,
+) -> dict[str, str] | None:
+    if entities.empty:
+        return None
+
+    normalized_name = raw_name.strip()
+    if not normalized_name:
+        return None
+
+    name_column = _preferred_entity_name_column(entities)
+    candidate_columns = [
+        col for col in (name_column, "title", "name", "entity") if col in entities.columns
+    ]
+    normalized_target = normalized_name.casefold()
+
+    for _, row in entities.iterrows():
+        for column in candidate_columns:
+            value = _non_empty_text(row.get(column))
+            if value and value.casefold() == normalized_target:
+                description = _non_empty_text(row.get("description"))
+                if not description:
+                    description = _non_empty_text(row.get("text"))
+                if not description:
+                    return None
+                return {"name": value, "description": description}
+    return None
+
+
+def _build_tog_serialized_context(
+    context_data: dict[str, Any],
+    *,
+    entities: pd.DataFrame,
+    relationships: pd.DataFrame,
+) -> tuple[dict[str, dict[str, dict[str, str]]] | None, set[str]]:
+    paths = context_data.get("exploration_paths", [])
+    if not isinstance(paths, Iterable) or isinstance(paths, (str, bytes)):
+        return None, set()
+
+    entity_paths: dict[str, list[str]] = {}
+    rel_lookup: dict[str, dict[str, str]] = {}
+    known_entity_names: set[str] = set()
+    saw_edge_path = False
+
+    for path in paths:
+        path_text = _non_empty_text(path)
+        if not path_text:
+            continue
+        segments = [segment.strip() for segment in path_text.split(" | ") if segment.strip()]
+        for segment in segments:
+            match = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment)
+            if match is None:
+                match = re.match(r"^(.+?)\s+<--\[(.+?)\]--\s+(.+)$", segment)
+                if match is not None:
+                    src = match.group(3).strip()
+                    rel = match.group(2).strip()
+                    tgt = match.group(1).strip()
+                else:
+                    continue
+            else:
+                src = match.group(1).strip()
+                rel = match.group(2).strip()
+                tgt = match.group(3).strip()
+
+            saw_edge_path = True
+            entity_paths.setdefault(src, []).append(segment)
+            entity_paths.setdefault(tgt, []).append(segment)
+            known_entity_names.add(src)
+            known_entity_names.add(tgt)
+            rel_lookup[rel] = {"name": rel, "description": ""}
+
+    if saw_edge_path:
+        entity_lookup = {
+            name: {
+                "name": name,
+                "description": " | ".join(dict.fromkeys(path_list)),
+            }
+            for name, path_list in entity_paths.items()
+        }
+        serialized: dict[str, dict[str, dict[str, str]]] = {}
+        if entity_lookup:
+            serialized["Entities"] = entity_lookup
+        if rel_lookup:
+            serialized["Relationships"] = rel_lookup
+        return serialized or None, known_entity_names
+
+    entity_lookup: dict[str, dict[str, str]] = {}
+    for path in paths:
+        entity_name = _non_empty_text(path)
+        if not entity_name:
+            continue
+        entity_record = _match_entity_record_by_name(entities, entity_name)
+        if entity_record is None:
+            continue
+        entity_lookup[entity_record["name"]] = entity_record
+        known_entity_names.add(entity_record["name"])
+
+    if not entity_lookup:
+        return None, set()
+
+    return {"Entities": entity_lookup}, known_entity_names
 
 
 # ---------------------------------------------------------------------------

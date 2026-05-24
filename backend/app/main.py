@@ -34,9 +34,10 @@ from .routers import (
     indexing_router,
     search_router,
 )
-from .services import queue_service
+from .services.queue_service import queue_service
 from .utils import validate_graphrag_settings_compatibility, register_exception_handlers
 from .utils.helpers import _blob_client, _search_index_client
+from .vector_stores import register_backend_vector_stores
 
 # Configure logging
 configure_logging()
@@ -247,6 +248,7 @@ def _check_key_vault_ready() -> tuple[bool, str]:
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     logger.info("Starting GraphRAG FastAPI backend...")
+    register_backend_vector_stores()
     bootstrap_runtime_secrets()
     validate_graphrag_settings_compatibility(
         settings.settings_yaml_path,

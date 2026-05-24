@@ -2,7 +2,7 @@
 
 This document explains the **GraphRAG indexing pipeline** — how raw documents become a queryable knowledge graph stored in **Azure Cosmos DB**. It covers both the backend job lifecycle (queue → worker → status updates) and the GraphRAG core workflow steps.
 
-> This deployment runs in **cosmos_pipeline mode**: `settings.yaml` has `output.type: cosmosdb`, so pipeline datasets are written directly to Cosmos as parquet payloads inside per-version containers. **No parquet files are written to disk.**
+> This deployment runs in **cosmos_pipeline mode**: `settings.yaml` has `output.type: cosmosdb`, so pipeline datasets are written directly to Cosmos inside per-version `pipeline-{collection}-{version}` containers. The backend also overrides the GraphRAG Cosmos vector store at runtime so all vector embeddings are written into the shared `vectors` container and scoped by partition key. **No parquet files are written to disk.**
 
 ## 1. Two-Layer View
 
@@ -22,8 +22,10 @@ graph LR
     E --> F[Lease job<br/>status=running]
     F --> G[graphrag.api.build_index]
     G --> H[Workflow steps<br/>1..N]
-    H --> I[Pipeline datasets in<br/>pipeline-{collection}-{version}<br/>Cosmos container]
-    I --> V[Verify row counts +<br/>upsert artifactManifest]
+    H --> I[Pipeline datasets in<br/>pipeline-{collection}-{version}]
+    H --> J1[Vector embeddings in<br/>shared vectors container]
+    I --> V[Verify pipeline datasets +<br/>verify vector scopes +<br/>upsert artifactManifest]
+    J1 --> V
     V --> P[set_active_version<br/>in collections container]
     P --> J[Cosmos: status=completed]
     F -. failure .-> K[Retry up to<br/>max_attempts]
@@ -294,16 +296,16 @@ See [database_schema.md](database_schema.md) for the full column schema of each 
 
 ## 7. Output Storage Layout
 
-In **cosmos_pipeline mode** (this deployment), all pipeline datasets for one indexing run live inside a single per-version container; control-plane metadata lives alongside it in fixed-name containers:
+In **cosmos_pipeline mode** (this deployment), pipeline datasets for one indexing run live inside a versioned pipeline container, while vector embeddings for all versions share one physical Cosmos vector container:
 
 | Container | Partition Key | Purpose |
 |---|---|---|
-| `pipeline-{collection}-{version}` | `/id` | Pipeline datasets as parquet payloads — one Cosmos document per dataset (`entities.parquet`, `relationships.parquet`, `text_units.parquet`, `communities.parquet`, `community_reports.parquet`, `covariates.parquet`) |
-| `artifactManifest` | `/collectionId` | Row counts + checksum per `(collection, version)` after verification |
+| `pipeline-{collection}-{version}` | implementation-defined by GraphRAG cosmos pipeline storage | GraphRAG pipeline datasets for one collection version |
+| `artifactManifest` | `/collectionId` | Verified dataset counts per `(collection, version)` |
 | `collections` | `/collectionId` | Active version pointer per collection (`activeVersion`) |
-| `vec-{collection}-{version}-{embedding}` | `/id` | On-demand Cosmos vector containers populated during indexing for ANN retrieval (`entity.description`, `community.full_content`, `text_unit.text`, etc.) |
+| `vectors` | `/partitionKey` | Shared Cosmos vector container; logical scopes are `{collectionId}:{version}|{embeddingKind}` |
 
-The query layer reads `collections.activeVersion` for the collection, then loads from the matching `pipeline-{collection}-{version}` container.
+The backend worker verifies both the pipeline datasets and the expected vector scopes before calling `set_active_version(...)`. The query layer reads `collections.activeVersion` for the collection, then loads from the matching `pipeline-{collection}-{version}` container and the matching scoped partition inside `vectors`.
 
 > File-backed development is not supported in this deployment — `settings.yaml` pins `output.type: cosmosdb`. The GraphRAG core supports `file` and `blob` modes, but they are not used here.
 
@@ -346,7 +348,7 @@ flowchart TB
 
 **Backoff:** exponential with jitter, capped at `AZURE_STORAGE_QUEUE_VISIBILITY_TIMEOUT_SECONDS` (300s default).
 
-**Idempotency:** each indexing run targets a fresh `pipeline-{collection}-{version}` container (version = first 16 chars of `jobId`) and version-scoped vector namespaces (`vec-{collection}-{version}-*`). Only after `_verify_pipeline_output` succeeds does `set_active_version` swap the pointer in the `collections` container (`activeVersion`), so a retry from scratch writes a clean version without affecting the currently-served one.
+**Idempotency:** each indexing run targets a fresh `pipeline-{collection}-{version}` container (version = first 16 chars of `jobId`) and a fresh logical vector scope inside `vectors` for each embedding kind. Only after `_verify_pipeline_output(...)` and `_verify_vector_output(...)` succeed does `set_active_version(...)` swap the pointer in the `collections` container (`activeVersion`), so a retry from scratch writes a clean version without affecting the currently-served one.
 
 ## 10. Cache & Update Strategy
 

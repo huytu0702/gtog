@@ -1,7 +1,6 @@
 """ToG (Think-on-Graph) search handler."""
 
 import logging
-import re
 
 import graphrag.api as api
 
@@ -9,61 +8,14 @@ from ..models import SearchMethod, SearchResponse
 from ..utils import load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
+    _build_tog_serialized_context,
     _detach_query_log,
     _normalize_tog_citations,
     _preferred_entity_name_column,
+    _serialize_json_safe_context,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _build_tog_serialized_context(
-    context_data: dict,
-) -> tuple[dict | None, set[str]]:
-    """Parse ToG exploration paths into a serialized context dict and known entity names.
-
-    Returns
-    -------
-        (serialized_context, known_entity_names)
-        serialized_context keys: "Entities", "Relationships"
-    """
-    paths = context_data.get("exploration_paths", [])
-    if not paths:
-        return None, set()
-
-    entity_paths: dict[str, list[str]] = {}
-    rel_lookup: dict[str, dict] = {}
-    known_entity_names: set[str] = set()
-
-    for path in paths:
-        for segment in path.split(" | "):
-            m = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment.strip())
-            if m:
-                src = m.group(1).strip()
-                rel = m.group(2).strip()
-                tgt = m.group(3).strip()
-                entity_paths.setdefault(src, []).append(segment.strip())
-                entity_paths.setdefault(tgt, []).append(segment.strip())
-                known_entity_names.add(src)
-                known_entity_names.add(tgt)
-                rel_lookup[rel] = {"name": rel, "description": ""}
-
-    entity_lookup = {
-        name: {
-            "name": name,
-            "description": " | ".join(dict.fromkeys(path_list)),
-        }
-        for name, path_list in entity_paths.items()
-    }
-
-    serialized: dict[str, dict] = {}
-    if entity_lookup:
-        serialized["Entities"] = entity_lookup
-    if rel_lookup:
-        serialized["Relationships"] = rel_lookup
-
-    return serialized or None, known_entity_names
-
 
 async def run_tog_search(
     *,
@@ -107,6 +59,7 @@ async def run_tog_search(
             config=config,
             entities=entities,
             relationships=relationships,
+            text_units=frames["text_units"],
             query=query,
         )
 
@@ -117,7 +70,22 @@ async def run_tog_search(
     serialized: dict | None = None
     known_entity_names: set[str] = set()
     if context_data and isinstance(context_data, dict):
-        serialized, known_entity_names = _build_tog_serialized_context(context_data)
+        serialized, known_entity_names = _build_tog_serialized_context(
+            context_data,
+            entities=entities,
+            relationships=relationships,
+        )
+        raw_context = _serialize_json_safe_context(context_data)
+        if serialized is None:
+            logger.warning(
+                "ToG context_data could not be normalized; preserving raw context envelope"
+            )
+            serialized = {"RawContext": raw_context}
+        else:
+            serialized = {
+                **serialized,
+                "RawContext": raw_context,
+            }
 
     if known_entity_names:
         response_text = _normalize_tog_citations(response_text, known_entity_names)

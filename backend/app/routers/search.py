@@ -29,16 +29,13 @@ from ..models import (
     ToGSearchRequest,
     WebSearchRequest,
 )
-from ..services import (
-    GuardrailDecision,
-    conversation_service,
-    insufficiency_judge,
-    nemo_guardrails_service,
-    query_service,
-    router_agent,
-    summarization_service,
-    web_search_service,
-)
+from ..services.conversation_service import conversation_service
+from ..services.insufficiency_judge import insufficiency_judge
+from ..services.nemo_guardrails_service import GuardrailDecision, nemo_guardrails_service
+from ..services.query_service import query_service
+from ..services.router_agent import router_agent
+from ..services.summarization_service import summarization_service
+from ..services.web_search import web_search_service
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ that patch.object(query_service_module, ...) calls work unchanged.
 
 import asyncio
 import logging
-import re
 import time
 from typing import Any, Optional
 
@@ -22,12 +21,14 @@ from ..repositories import get_control_plane_repository, get_pipeline_output_rep
 from ..utils import load_graphrag_config  # tests patch query_service_module.load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
+    _build_tog_serialized_context,
     _detach_query_log,
     _is_missing_value,
     _normalize_community_reports_frame,  # tests patch this name on this module
     _normalize_tog_citations,
     _preferred_entity_name_column,
     _serialize_context_records,
+    _serialize_json_safe_context,
 )
 from .serving_context_cache import serving_context_cache
 
@@ -51,53 +52,6 @@ _REQUIRED_DATASETS: dict[str, list[str]] = {
         "relationships",
     ],
 }
-
-
-def _build_tog_context(
-    context_data: dict,
-) -> tuple[dict | None, set[str]]:
-    """Parse ToG exploration paths into serialized context and entity-name set.
-
-    Returns:
-        (serialized_lookup, known_entity_names)
-    """
-    paths = context_data.get("exploration_paths", [])
-    if not paths:
-        return None, set()
-
-    entity_paths: dict[str, list[str]] = {}
-    rel_lookup: dict[str, dict] = {}
-    known_entity_names: set[str] = set()
-
-    for path in paths:
-        for segment in path.split(" | "):
-            m = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment.strip())
-            if m:
-                src = m.group(1).strip()
-                rel = m.group(2).strip()
-                tgt = m.group(3).strip()
-                entity_paths.setdefault(src, []).append(segment.strip())
-                entity_paths.setdefault(tgt, []).append(segment.strip())
-                known_entity_names.add(src)
-                known_entity_names.add(tgt)
-                rel_lookup[rel] = {"name": rel, "description": ""}
-
-    entity_lookup = {
-        name: {
-            "name": name,
-            "description": " | ".join(dict.fromkeys(path_list)),
-        }
-        for name, path_list in entity_paths.items()
-    }
-
-    serialized: dict[str, dict] = {}
-    if entity_lookup:
-        serialized["Entities"] = entity_lookup
-    if rel_lookup:
-        serialized["Relationships"] = rel_lookup
-
-    return serialized or None, known_entity_names
-
 
 class QueryService:
     """Service for managing query/search operations."""
@@ -352,10 +306,25 @@ class QueryService:
         finally:
             _detach_query_log(fh)
 
-        serialized: dict | None = None
+        serialized: dict[str, Any] | None = None
         known_entity_names: set[str] = set()
         if context_data and isinstance(context_data, dict):
-            serialized, known_entity_names = _build_tog_context(context_data)
+            serialized, known_entity_names = _build_tog_serialized_context(
+                context_data,
+                entities=entities,
+                relationships=relationships,
+            )
+            raw_context = _serialize_json_safe_context(context_data)
+            if serialized is None:
+                logger.warning(
+                    "ToG context_data could not be normalized; preserving raw context envelope"
+                )
+                serialized = {"RawContext": raw_context}
+            else:
+                serialized = {
+                    **serialized,
+                    "RawContext": raw_context,
+                }
 
         if known_entity_names and isinstance(response_text, str):
             response_text = _normalize_tog_citations(response_text, known_entity_names)
