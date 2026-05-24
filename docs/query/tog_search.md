@@ -129,7 +129,7 @@ flowchart LR
 
 | Stage | Input | Method (LLM) | Method (Semantic) | Method (BM25) |
 |-------|-------|---------------|-------------------|---------------|
-| Relation scoring | `(query, entity_name, relations, relation_history, current_path)` | `TOG_RELATION_SCORING_PROMPT` → scores 1–10 | Cosine similarity query↔relation text (scaled `[-1,1]→[0,10]`) | BM25 IDF-TF normalized 1–10 |
+| Relation scoring | `(query, entity_name, relations, current_path)` | `TOG_RELATION_SCORING_PROMPT` → scores 1–10 | Cosine similarity query↔relation text (scaled `[-1,1]→[0,10]`) | BM25 IDF-TF normalized 1–10 |
 | Entity scoring | `(query, current_path, entity_candidates)` | `TOG_ENTITY_SCORING_PROMPT` → scores 1–10 | Cosine similarity query↔entity text (scaled `[-1,1]→[0,10]`) | BM25 IDF-TF normalized 1–10 |
 
 If the number of entity candidates in a relation group reaches `ENTITY_CANDIDATE_SAMPLE_THRESHOLD` (20) and exceeds `num_retain_entity`, they are randomly sampled before the entity-scoring step (matching the original ToG paper semantics).
@@ -142,7 +142,7 @@ Three strategies implement the `PruningStrategy` base class:
 
 | Class | Relation Scoring | Entity Scoring | LLM calls per hop | Notes |
 |-------|-----------------|----------------|-------------------|-------|
-| `LLMPruning` | Structured prompt → parse list; accepts `relation_history` + `current_path` context | Structured prompt → parse list | 2 | Prompts loadable from `.txt`/`.md` file paths |
+| `LLMPruning` | Structured prompt → parse list; accepts `current_path` context | Structured prompt → parse list | 2 | Prompts loadable from `.txt`/`.md` file paths |
 | `SemanticPruning` | Cosine similarity (pre-computed or on-demand embeddings); accepts optional `relationship_embedding_store` | Cosine similarity (pre-computed or on-demand embeddings); accepts optional `entity_embedding_store` | 0 (embedding only) | Query embedding pre-computed once per search and reused |
 | `BM25Pruning` | BM25 IDF-TF lexical score over `"{entity} {direction} {rel_desc}"` | BM25 IDF-TF lexical score over `"{name}: {desc}"` | 0 | Parameters: `k1=1.5`, `b=0.75` |
 
@@ -179,7 +179,7 @@ class ExplorationNode:
 Helper methods:
 - `get_path()` — returns `(entity, relation)` pairs from root to node.
 - `get_relation_history()` — returns structured `(parent, relation, child, direction)` tuples.
-- `get_relation_history_text()` — compact text representation used in LLM prompts.
+- `get_relation_history_text()` — compact multiline text representation of relation history.
 
 ### `ToGSearchState` (`state.py`)
 

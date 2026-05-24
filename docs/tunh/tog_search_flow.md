@@ -226,7 +226,6 @@ Code build prompt từ template `TOG_RELATION_SCORING_PROMPT` với các biến:
 - `query`
 - `entity_name`
 - `current_path`
-- `relation_history`
 - `relations`
 
 #### `current_path`
@@ -237,17 +236,6 @@ Ví dụ:
 
 ```text
 MIT --[tài trợ bởi]--> Google | Google --[sở hữu]--> DeepMind
-```
-
-#### `relation_history`
-
-Được tạo từ `node.get_relation_history_text()`.
-
-Ví dụ:
-
-```text
-MIT --[tài trợ bởi]--> Google
-Google --[sở hữu]--> DeepMind
 ```
 
 #### `relations`
@@ -269,9 +257,6 @@ Entity: {entity_name}
 
 Current reasoning path:
 {current_path}
-
-Previous relations followed:
-{relation_history}
 
 Available relations:
 {relations}
@@ -446,7 +431,7 @@ Retrieved context:
 2. expand từng node
    └─ get_relations(entity_id)
    └─ _filter_backtrack_relations()
-   └─ score_relations(query, entity_name, relations, relation_history, current_path)
+   └─ score_relations(query, entity_name, relations, current_path)
    └─ group theo (relation_name, direction)
    └─ score_entities(query, current_path, entities)
    └─ tạo node mới + combined_score
@@ -532,6 +517,6 @@ Query: "Công ty nào tài trợ cho dự án nghiên cứu AI của MIT?"
 
 - `check_early_termination()` **có `text_units`** và **có `conversation_history_context`**.
 - `generate_answer()` cũng nhận `text_units` và history context.
-- `score_relations()` không chỉ chấm relation đơn lẻ; nó dùng `current_path` và `relation_history` để ưu tiên đường đi hợp lý.
+- `score_relations()` không chỉ chấm relation đơn lẻ; nó dùng `current_path` để ưu tiên đường đi hợp lý.
 - `_filter_backtrack_relations()` chỉ chặn **reverse edge ngay lập tức**, không phải toàn bộ cycle dài.
 - `relations` và `entities` đều được build theo hướng **dedupe exact-match**, không fuzzy matching.

@@ -23,7 +23,7 @@ class _FakeChatModel:
 
 
 @pytest.mark.asyncio
-async def test_llm_relation_scoring_includes_path_and_history():
+async def test_llm_relation_scoring_includes_current_path_context():
     model = _FakeChatModel()
     pruning = LLMPruning(model=cast(Any, model))  # noqa: TC006
 
@@ -34,7 +34,6 @@ async def test_llm_relation_scoring_includes_path_and_history():
             ("organization.founders", "person", "outgoing", 1.0),
             ("organization.location", "place", "outgoing", 0.5),
         ],
-        relation_history="Topic --[owns]--> Company",
         current_path="Topic --[owns]--> Company",
     )
 
@@ -44,7 +43,6 @@ async def test_llm_relation_scoring_includes_path_and_history():
     assert "Entity: Company" in prompt
     assert "Current reasoning path:" in prompt
     assert "Topic --[owns]--> Company" in prompt
-    assert "Previous relations followed:" in prompt
     assert "organization.founders" in prompt
     assert scored_relations == [
         ("organization.founders", "person", "outgoing", 1.0, 8.0),
@@ -57,18 +55,19 @@ async def test_llm_relation_scoring_keeps_custom_prompt_compatibility():
     model = _FakeChatModel()
     pruning = LLMPruning(
         model=cast(Any, model),  # noqa: TC006
-        relation_scoring_prompt="Q={query}; E={entity_name}; R={relations}",
+        relation_scoring_prompt=(
+            "Q={query}; E={entity_name}; P={current_path}; H={relation_history}; R={relations}"
+        ),
     )
 
     scored_relations, _ = await pruning.score_relations(
         query="question",
         entity_name="Entity",
         relations=[("relation", "target", "incoming", 1.0)],
-        relation_history="Entity <--[previous]-- Topic",
         current_path="Entity <--[previous]-- Topic",
     )
 
     assert model.prompts == [
-        "Q=question; E=Entity; R=1. [incoming] relation... (weight: 1.00)"
+        "Q=question; E=Entity; P=Entity <--[previous]-- Topic; H=Entity <--[previous]-- Topic; R=1. [incoming] relation... (weight: 1.00)"
     ]
     assert scored_relations == [("relation", "target", "incoming", 1.0, 8.0)]
