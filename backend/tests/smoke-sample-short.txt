@@ -1,0 +1,1 @@
+GraphRAG turns documents into structured knowledge. This sample document says that Hanoi is the capital of Vietnam and GraphRAG can answer questions from indexed text.

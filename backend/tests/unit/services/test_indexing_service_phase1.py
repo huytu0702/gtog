@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -133,3 +133,31 @@ def test_get_index_status_maps_retrying_state():
     assert response.status == IndexStatus.RETRYING
     assert response.retry_at is not None
     assert response.error == "temporary failure"
+
+
+def test_create_vector_cosmos_client_strips_internal_scope_keys_from_connection_string_kwargs() -> None:
+    service = IndexingService()
+    client_kwargs = {
+        "connection_timeout": 30,
+        "retry_total": 9,
+        "__collection_id": "collection-a",
+        "__version": "v1",
+        "__collection_version": "collection-a:v1",
+    }
+    default_store = MagicMock(
+        connection_string="AccountEndpoint=https://example.documents.azure.com:443/;AccountKey=key;",
+        client_kwargs=client_kwargs,
+    )
+    config = MagicMock(vector_store={"default_vector_store": default_store})
+
+    with patch(
+        "backend.app.services.indexing_service.CosmosClient.from_connection_string"
+    ) as from_connection_string:
+        service._create_vector_cosmos_client(config)
+
+    from_connection_string.assert_called_once_with(
+        "AccountEndpoint=https://example.documents.azure.com:443/;AccountKey=key;",
+        connection_timeout=30,
+        retry_total=9,
+    )
+    assert default_store.client_kwargs == client_kwargs

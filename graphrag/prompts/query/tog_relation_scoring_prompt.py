@@ -50,9 +50,6 @@ Entity: {entity_name}
 Current reasoning path:
 {current_path}
 
-Previous relations followed:
-{relation_history}
-
 Available relations:
 {relations}
 

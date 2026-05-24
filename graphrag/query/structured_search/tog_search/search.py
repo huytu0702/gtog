@@ -531,7 +531,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         )
 
         current_path = self._node_to_path_string(node)
-        relation_history = node.get_relation_history_text()
 
         # Score relations
         scored_relations, pruning_metrics = await self._score_relations(
@@ -539,7 +538,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             node=node,
             relations=relations,
             query_embedding=query_embedding,
-            relation_history=relation_history,
             current_path=current_path,
         )
         metrics_list.append(pruning_metrics)
@@ -690,7 +688,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         node: ExplorationNode,
         relations: list[tuple[str, str, str, float]],
         query_embedding: np.ndarray | None,
-        relation_history: str,
         current_path: str,
     ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         score_relations = self.pruning_strategy.score_relations
@@ -703,10 +700,10 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             for parameter in parameters.values()
         )
         context_kwargs = {}
-        if accepts_kwargs or "relation_history" in parameters:
-            context_kwargs["relation_history"] = relation_history
         if accepts_kwargs or "current_path" in parameters:
             context_kwargs["current_path"] = current_path
+        if accepts_kwargs or "relation_history" in parameters:
+            context_kwargs["relation_history"] = current_path
 
         return await score_relations(
             query,

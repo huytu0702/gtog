@@ -23,6 +23,7 @@ from .azure_runtime import (
     is_cosmos_configured,
 )
 from .config import settings
+from .logging_config import configure_logging
 from .models import HealthResponse
 from .repositories import get_control_plane_repository
 from .routers import (
@@ -33,15 +34,13 @@ from .routers import (
     indexing_router,
     search_router,
 )
-from .services import queue_service
+from .services.queue_service import queue_service
 from .utils import validate_graphrag_settings_compatibility, register_exception_handlers
 from .utils.helpers import _blob_client, _search_index_client
+from .vector_stores import register_backend_vector_stores
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -249,16 +248,12 @@ def _check_key_vault_ready() -> tuple[bool, str]:
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     logger.info("Starting GraphRAG FastAPI backend...")
+    register_backend_vector_stores()
     bootstrap_runtime_secrets()
-    cloud_runtime = (
-        bool(_blob_client()) and settings.query_context_mode.lower() == "cosmos_only"
-    )
     validate_graphrag_settings_compatibility(
         settings.settings_yaml_path,
-        cloud_runtime=cloud_runtime,
-        effective_store_type=(
-            settings.cloud_vector_store_type.strip().lower() if cloud_runtime else None
-        ),
+        cloud_runtime=True,
+        effective_store_type=settings.cloud_vector_store_type.strip().lower(),
     )
 
     if is_cosmos_configured():
@@ -267,20 +262,16 @@ async def lifespan(app: FastAPI):
             f"(database={settings.azure_cosmos_database_name})"
         )
     else:
-        if settings.query_context_mode.lower() == "cosmos_only":
-            raise RuntimeError(
-                "QUERY_CONTEXT_MODE=cosmos_only requires Azure Cosmos DB to be configured."
-            )
-        logger.warning(
-            "Azure Cosmos DB is not configured. Collection/document/indexing metadata "
-            "APIs require Cosmos in Phase 1."
+        raise RuntimeError(
+            "Azure Cosmos DB is required but not configured."
         )
 
     if settings.azure_storage_connection_string:
         logger.info("Using Azure Blob Storage for collection data")
     else:
-        settings.collections_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Storage directory: {settings.collections_dir}")
+        raise RuntimeError(
+            "AZURE_STORAGE_CONNECTION_STRING is required but not configured."
+        )
 
     auth_configuration_error = _auth_configuration_error()
     if auth_configuration_error:
@@ -291,14 +282,13 @@ async def lifespan(app: FastAPI):
     logger.info(
         "Active features: "
         "cosmos=%s | blob=%s | rate_limit=%s (backend=%s, rpm=%d) | "
-        "edge_auth=%s | query_mode=%s | tog_debug=%s",
+        "edge_auth=%s | tog_debug=%s",
         is_cosmos_configured(),
         bool(settings.azure_storage_connection_string or settings.azure_storage_account_name),
         settings.rate_limit_enabled,
         settings.rate_limiter_backend,
         settings.rate_limit_requests_per_minute,
         settings.require_edge_auth,
-        settings.query_context_mode,
         settings.enable_tog_debug_endpoint,
     )
 
@@ -444,9 +434,6 @@ async def readiness_check():
 
     queue_ok, queue_detail = _check_queue_ready()
     checks["queue"] = {"ok": queue_ok, "detail": queue_detail}
-
-    search_ok, search_detail = _check_search_ready()
-    checks["search"] = {"ok": search_ok, "detail": search_detail}
 
     key_vault_ok, key_vault_detail = _check_key_vault_ready()
     checks["key_vault"] = {"ok": key_vault_ok, "detail": key_vault_detail}

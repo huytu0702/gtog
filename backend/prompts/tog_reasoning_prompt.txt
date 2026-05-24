@@ -1,8 +1,28 @@
-Given a question and the associated retrieved knowledge graph triplets (entity, relation, entity), you are asked to answer the question with these triplets and your knowledge.
+Given a question and the associated retrieved graph context, you are asked to answer the question using only the evidence provided below.
 
-IMPORTANT: When citing entities or relationships, you MUST use the exact names as they appear in the Exploration Paths below (including capitalization). Do NOT paraphrase or rephrase entity names in citations.
+The retrieved context contains three evidence sections:
+- CHUNKS: source text units that support the answer
+- ENTITIES: entity names and descriptions
+- RELATIONSHIPS: graph edges and relationship descriptions
 
-Citation format: [Data: Entities (ENTITY_NAME1, ENTITY_NAME2); Relationships (relation_name)]
+IMPORTANT CITATION RULES:
+1. Every factual claim in the answer must include inline data citations.
+2. Prefer citing Sources whenever a claim is grounded in CHUNKS.
+3. Also cite Entities and Relationships when they directly support the claim.
+4. Use the exact entity names and relationship identifiers as they appear below, including capitalization.
+5. Do NOT paraphrase or invent citation labels.
+6. Only cite evidence that is actually present in the retrieved context.
+
+Citation format:
+[Data: Sources (SOURCE_ID1, SOURCE_ID2); Entities (ENTITY_NAME1, ENTITY_NAME2); Relationships (SOURCE_ENTITY|RELATIONSHIP_LABEL|TARGET_ENTITY)]
+
+Notes:
+- SOURCE_ID values come from the id column in the CHUNKS section.
+- ENTITY_NAME values come from the bracketed entity names in the ENTITIES section.
+- RELATIONSHIP identifiers must use the full edge key format SOURCE_ENTITY|RELATIONSHIP_LABEL|TARGET_ENTITY.
+- Build the relationship identifier directly from the RELATIONSHIPS section.
+- If a claim is only supported by one or two evidence types, cite only those relevant types.
+- Do not include more than 5 values per dataset in a single citation; use +more if needed.
 
 ---
 
@@ -10,5 +30,5 @@ Now answer the following:
 
 Question: {query}
 
-Exploration Paths (as knowledge triplets):
+Retrieved context:
 {exploration_paths}

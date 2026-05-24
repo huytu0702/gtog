@@ -5,7 +5,8 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 
 from ..models import IndexJobResponse, IndexStatusResponse
-from ..services import indexing_service, storage_service
+from ..services.indexing_service import indexing_service
+from ..services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
 

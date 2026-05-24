@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import ValidationError
 
 from ..models import CollectionCreate, CollectionList, CollectionResponse
-from ..services import storage_service
+from ..services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
 

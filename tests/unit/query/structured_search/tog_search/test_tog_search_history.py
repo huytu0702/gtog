@@ -91,8 +91,28 @@ class _LegacyPruning:
         return [8.0], MagicMock()
 
 
+class _LegacyPruningWithHistoryRequired:
+    def __init__(self):
+        self.received_relation_history = None
+
+    async def score_relations(
+        self,
+        query,
+        entity_name,
+        relations,
+        query_embedding=None,
+        relation_history=None,
+    ):
+        self.received_relation_history = relation_history
+        rel_desc, target_id, direction, weight = relations[0]
+        return [(rel_desc, target_id, direction, weight, 9.0)], MagicMock()
+
+    async def score_entities(self, query, current_path, entities, query_embedding=None):
+        return [8.0], MagicMock()
+
+
 @pytest.mark.asyncio
-async def test_process_node_preserves_relation_metadata_and_passes_history():
+async def test_process_node_preserves_relation_metadata_and_passes_current_path():
     from graphrag.query.structured_search.tog_search.state import ExplorationNode
 
     parent = ExplorationNode(
@@ -142,9 +162,6 @@ async def test_process_node_preserves_relation_metadata_and_passes_history():
     assert child.relation_target_id == "parent-id"
     assert pruning.entity_candidates == [[("child-id", "Child", "child desc")]]
     assert pruning.relation_kwargs[0]["current_path"] == "Root --[root_rel]--> Parent"
-    assert (
-        pruning.relation_kwargs[0]["relation_history"] == "Root --[root_rel]--> Parent"
-    )
 
 
 @pytest.mark.asyncio
@@ -176,6 +193,51 @@ async def test_process_node_supports_legacy_relation_scorer_signature():
 
     assert len(new_nodes) == 1
     assert new_nodes[0].relation_direction_from_parent == "incoming"
+
+
+@pytest.mark.asyncio
+async def test_process_node_supports_relation_history_compatible_signature():
+    from graphrag.query.structured_search.tog_search.state import ExplorationNode
+
+    root = ExplorationNode(
+        entity_id="root",
+        entity_name="Root",
+        entity_description="root desc",
+        depth=0,
+        score=1.0,
+        parent=None,
+        relation_from_parent=None,
+    )
+    node = ExplorationNode(
+        entity_id="parent",
+        entity_name="Parent",
+        entity_description="parent desc",
+        depth=1,
+        score=1.0,
+        parent=root,
+        relation_from_parent="root_rel",
+        relation_direction_from_parent="outgoing",
+    )
+
+    explorer = MagicMock()
+    explorer.get_relations.return_value = [("rel", "child", "incoming", 1.0)]
+    explorer.get_full_entity_info.side_effect = {
+        "parent": ("parent-id", "Parent", "parent desc"),
+        "child": ("child-id", "Child", "child desc"),
+    }.get
+    explorer.get_full_relation_info.return_value = ("rel_id", "full rel desc")
+
+    legacy_pruning = _LegacyPruningWithHistoryRequired()
+    engine = ToGSearch.__new__(ToGSearch)
+    engine.explorer = explorer
+    engine.pruning_strategy = cast(Any, legacy_pruning)  # noqa: TC006
+    engine.width = 1
+    engine.num_retain_entity = 5
+
+    new_nodes, _metrics = await engine._process_node("query", node)  # noqa: SLF001
+
+    assert len(new_nodes) == 1
+    assert legacy_pruning.received_relation_history == "Root --[root_rel]--> Parent"
 
 
 @pytest.mark.asyncio

@@ -3,15 +3,17 @@
 import logging
 from functools import cached_property
 from pathlib import Path
+from typing import Any, Literal
 
 import yaml
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 _ENV_FILE_PATH = _BACKEND_DIR / ".env"
 
 _config_logger = logging.getLogger(__name__)
+_VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
 
 
 class Settings(BaseSettings):
@@ -31,7 +33,6 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
 
     # Storage Configuration
-    storage_root_dir: str = "./storage"
     azure_storage_connection_string: str = ""
     azure_storage_account_name: str = ""
     azure_storage_account_key: str = ""
@@ -65,18 +66,15 @@ class Settings(BaseSettings):
     azure_cosmos_retry_read: int = 3
     azure_cosmos_retry_status: int = 9
     azure_cosmos_retry_on_status_codes: str = "429,503,408"
+    azure_cosmos_disable_endpoint_discovery: bool = False
+    azure_cosmos_connection_verify: bool = True
+    azure_sdk_http_logging_enabled: bool = False
     azure_cosmos_database_name: str = "gtog-control"
     azure_cosmos_collections_container: str = "collections"
     azure_cosmos_documents_container: str = "documents"
     azure_cosmos_indexing_jobs_container: str = "indexingJobs"
     azure_cosmos_job_events_container: str = "jobEvents"
     azure_cosmos_artifact_manifest_container: str = "artifactManifest"
-    azure_cosmos_entities_container: str = "entities"
-    azure_cosmos_relationships_container: str = "relationships"
-    azure_cosmos_text_units_container: str = "textUnits"
-    azure_cosmos_communities_container: str = "communities"
-    azure_cosmos_community_reports_container: str = "communityReports"
-    azure_cosmos_covariates_container: str = "covariates"
     azure_cosmos_conversation_sessions_container: str = "conversationSessions"
     azure_cosmos_conversation_turns_container: str = "conversationTurns"
 
@@ -86,8 +84,7 @@ class Settings(BaseSettings):
     indexing_worker_heartbeat_interval_seconds: int = 30
     indexing_worker_recovery_interval_seconds: int = 30
 
-    # Query serving mode
-    query_context_mode: str = "cosmos_only"
+    # Index/query runtime mode
     cloud_vector_store_type: str = "cosmosdb"
     serving_dataset_cache_max_entries: int = 96
     serving_cache_warm_on_index_complete: bool = True
@@ -112,6 +109,25 @@ class Settings(BaseSettings):
     insufficiency_judge_min_confidence: float = 0.5
     insufficiency_judge_max_response_chars: int = 6000
     web_fallback_enabled: bool = True
+
+    # AI Guardrails
+    ai_guardrails_enabled: bool = False
+    ai_guardrails_mode: str = "shadow"
+    ai_guardrails_fail_mode: str = "open"
+    ai_guardrails_config_path: str = str(_BACKEND_DIR / "app" / "guardrails")
+    ai_guardrails_timeout_seconds: int = 8
+    ai_guardrails_log_decisions: bool = True
+    ai_guardrails_block_web_on_sensitive_query: bool = True
+    ai_guardrails_return_metadata: bool = False
+
+    # Logging Configuration
+    app_log_level: Literal[
+        "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"
+    ] = "INFO"
+    azure_sdk_log_level: Literal[
+        "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"
+    ] = "WARNING"
+    graphrag_index_verbose: bool = False
 
     # Server Configuration
     host: str = "0.0.0.0"
@@ -140,6 +156,17 @@ class Settings(BaseSettings):
         description="Maximum number of LRU cache entries.",
     )
 
+    @field_validator("app_log_level", "azure_sdk_log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: Any) -> str:
+        normalized = str(value).strip().upper()
+        if normalized not in _VALID_LOG_LEVELS:
+            raise ValueError(
+                "Log level must be one of: "
+                + ", ".join(sorted(_VALID_LOG_LEVELS))
+            )
+        return normalized
+
     @model_validator(mode="after")
     def _warn_missing_recommended_settings(self) -> "Settings":
         """Log warnings for any missing recommended production settings."""
@@ -151,7 +178,7 @@ class Settings(BaseSettings):
         if not self.azure_storage_connection_string and not self.azure_storage_account_name:
             _config_logger.warning(
                 "AZURE_STORAGE_CONNECTION_STRING (or AZURE_STORAGE_ACCOUNT_NAME) is not set. "
-                "Azure Blob Storage will be unavailable; falling back to local filesystem."
+                "Configure Azure Blob Storage (or Azurite for local dev) before running the indexing pipeline."
             )
         if not self.edge_origin_secret and self.require_edge_auth:
             _config_logger.warning(
@@ -165,15 +192,6 @@ class Settings(BaseSettings):
                 "container instances. Set RATE_LIMITER_BACKEND=redis for distributed limiting."
             )
         return self
-
-    @property
-    def collections_dir(self) -> Path:
-        """Get the collections directory path, resolved relative to backend dir."""
-        backend_dir = Path(__file__).parent.parent
-        p = Path(self.storage_root_dir)
-        if not p.is_absolute():
-            p = backend_dir / p
-        return p / "collections"
 
     @property
     def settings_yaml_path(self) -> Path:

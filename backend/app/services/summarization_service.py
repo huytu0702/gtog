@@ -7,6 +7,7 @@ from litellm import acompletion
 
 from ..config import settings
 from ..models.schemas import ConversationTurn
+from .nemo_guardrails_service import nemo_guardrails_service
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ class SummarizationService:
         )
 
         try:
-            return await self._call_llm(prompt)
+            summary = await self._call_llm(prompt)
         except Exception as e:
             logger.warning("Summarization LLM call failed: %s. Using fallback.", e)
             # Fallback: join user questions as plain text
@@ -111,7 +112,12 @@ class SummarizationService:
                 if t.role == "user"
             ]
             base = existing_summary or ""
-            return (base + " " + "; ".join(user_questions)).strip()
+            summary = (base + " " + "; ".join(user_questions)).strip()
+
+        decision = await nemo_guardrails_service.sanitize_summary(summary)
+        if not decision.allowed:
+            return ""
+        return decision.safe_response or summary
 
 
 # Global instance

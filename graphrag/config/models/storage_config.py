@@ -50,3 +50,7 @@ class StorageConfig(BaseModel):
         description="The cosmosdb account url to use.",
         default=graphrag_config_defaults.storage.cosmosdb_account_url,
     )
+    client_kwargs: dict | None = Field(
+        description="Extra kwargs passed to the CosmosDB client constructor.",
+        default=None,
+    )

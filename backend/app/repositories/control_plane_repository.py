@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
@@ -11,6 +12,7 @@ from azure.core import MatchConditions
 from azure.cosmos import CosmosClient
 from azure.cosmos.exceptions import (
     CosmosAccessConditionFailedError,
+    CosmosHttpResponseError,
     CosmosResourceNotFoundError,
 )
 from azure.cosmos.partition_key import PartitionKey
@@ -122,7 +124,9 @@ class CosmosControlPlaneRepository:
                 "or enable managed identity with AZURE_USE_MANAGED_IDENTITY=true."
             )
 
-        self._database = self._client.create_database_if_not_exists(id=database_name)
+        self._database = self._cosmos_create_with_retry(
+            lambda: self._client.create_database_if_not_exists(id=database_name)
+        )
         self._container_names = {
             "collections": collections_container,
             "documents": documents_container,
@@ -133,10 +137,22 @@ class CosmosControlPlaneRepository:
         self._containers = {}
 
         for name in self._container_names.values():
-            self._containers[name] = self._database.create_container_if_not_exists(
-                id=name,
-                partition_key=PartitionKey(path="/collectionId"),
+            self._containers[name] = self._cosmos_create_with_retry(
+                lambda n=name: self._database.create_container_if_not_exists(
+                    id=n,
+                    partition_key=PartitionKey(path="/collectionId"),
+                )
             )
+
+    @staticmethod
+    def _cosmos_create_with_retry(fn, max_attempts: int = 6):
+        for attempt in range(max_attempts):
+            try:
+                return fn()
+            except CosmosHttpResponseError:
+                if attempt == max_attempts - 1:
+                    raise
+                time.sleep(2 ** attempt)  # 1, 2, 4, 8, 16 s
 
     def _container(self, logical_name: str):
         return self._containers[self._container_names[logical_name]]
@@ -186,6 +202,38 @@ class CosmosControlPlaneRepository:
             )
         except CosmosResourceNotFoundError:
             return None
+
+    def list_collection_versions(self, collection_id: str) -> list[str]:
+        collection = self.get_collection(collection_id)
+        if collection is None:
+            raise ValueError(f"Collection '{collection_id}' not found")
+
+        versions: set[str] = set()
+        active_version = str(collection.get("activeVersion") or "").strip()
+        if active_version:
+            versions.add(active_version)
+
+        artifact_rows = self._container("artifact_manifest").query_items(
+            query="SELECT c.version FROM c WHERE c.collectionId = @collectionId",
+            parameters=[{"name": "@collectionId", "value": collection_id}],
+            partition_key=collection_id,
+        )
+        for row in artifact_rows:
+            version = str(row.get("version") or "").strip()
+            if version:
+                versions.add(version)
+
+        job_rows = self._container("indexing_jobs").query_items(
+            query="SELECT c.targetVersion FROM c WHERE c.collectionId = @collectionId",
+            parameters=[{"name": "@collectionId", "value": collection_id}],
+            partition_key=collection_id,
+        )
+        for row in job_rows:
+            version = str(row.get("targetVersion") or "").strip()
+            if version:
+                versions.add(version)
+
+        return sorted(versions)
 
     def list_collections(self) -> list[dict[str, Any]]:
         query = "SELECT * FROM c"
