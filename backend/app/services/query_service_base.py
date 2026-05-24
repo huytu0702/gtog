@@ -107,13 +107,21 @@ def _serialize_context_records(
         lookup: dict[str, dict] = {}
         for _, row in df.iterrows():
             short_id = str(row.get("id", ""))
-            if key_lower == "relationships" and "source" in df.columns and "target" in df.columns:
+            if (
+                key_lower == "relationships"
+                and "source" in df.columns
+                and "target" in df.columns
+            ):
                 source = str(row.get("source", ""))
                 target = str(row.get("target", ""))
                 name = f"{source} → {target}" if source and target else source or target
             else:
-                name = str(row.get(name_col, "")) if name_col in df.columns else short_id
-            raw_desc = row.get(desc_col, "") if desc_col and desc_col in df.columns else ""
+                name = (
+                    str(row.get(name_col, "")) if name_col in df.columns else short_id
+                )
+            raw_desc = (
+                row.get(desc_col, "") if desc_col and desc_col in df.columns else ""
+            )
             desc = _non_empty_text(raw_desc)
             if key_lower == "reports" and not desc:
                 desc = _non_empty_text(row.get("full_content"))
@@ -139,119 +147,119 @@ def _serialize_json_safe_context(value: Any) -> Any:
         return normalized.to_dict(orient="records")
     if isinstance(value, pd.Series):
         normalized = value.astype(object).where(pd.notna(value), None)
-        return {str(key): _serialize_json_safe_context(item) for key, item in normalized.items()}
-    if isinstance(value, dict):
         return {
             str(key): _serialize_json_safe_context(item)
-            for key, item in value.items()
+            for key, item in normalized.items()
+        }
+    if isinstance(value, dict):
+        return {
+            str(key): _serialize_json_safe_context(item) for key, item in value.items()
         }
     if isinstance(value, (list, tuple, set)):
         return [_serialize_json_safe_context(item) for item in value]
     return str(value)
 
 
-def _match_entity_record_by_name(
-    entities: pd.DataFrame,
-    raw_name: str,
-) -> dict[str, str] | None:
-    if entities.empty:
+def _serialize_tog_context_data(context_data: Any) -> dict[str, Any] | None:
+    if not isinstance(context_data, dict) or not context_data:
         return None
 
-    normalized_name = raw_name.strip()
-    if not normalized_name:
-        return None
-
-    name_column = _preferred_entity_name_column(entities)
-    candidate_columns = [
-        col for col in (name_column, "title", "name", "entity") if col in entities.columns
-    ]
-    normalized_target = normalized_name.casefold()
-
-    for _, row in entities.iterrows():
-        for column in candidate_columns:
-            value = _non_empty_text(row.get(column))
-            if value and value.casefold() == normalized_target:
-                description = _non_empty_text(row.get("description"))
-                if not description:
-                    description = _non_empty_text(row.get("text"))
-                if not description:
-                    return None
-                return {"name": value, "description": description}
-    return None
+    serialized = _serialize_json_safe_context(context_data)
+    return serialized if isinstance(serialized, dict) else None
 
 
-def _build_tog_serialized_context(
-    context_data: dict[str, Any],
-    *,
-    entities: pd.DataFrame,
-    relationships: pd.DataFrame,
-) -> tuple[dict[str, dict[str, dict[str, str]]] | None, set[str]]:
+def _extract_tog_entity_names_from_context(
+    context_data: dict[str, Any] | None,
+) -> set[str]:
+    if not context_data:
+        return set()
+
     paths = context_data.get("exploration_paths", [])
     if not isinstance(paths, Iterable) or isinstance(paths, (str, bytes)):
-        return None, set()
+        return set()
 
-    entity_paths: dict[str, list[str]] = {}
-    rel_lookup: dict[str, dict[str, str]] = {}
-    known_entity_names: set[str] = set()
-    saw_edge_path = False
-
+    entity_names: set[str] = set()
     for path in paths:
-        path_text = _non_empty_text(path)
-        if not path_text:
+        if not isinstance(path, str):
             continue
-        segments = [segment.strip() for segment in path_text.split(" | ") if segment.strip()]
-        for segment in segments:
+        for segment in [part.strip() for part in path.split(" | ") if part.strip()]:
             match = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment)
             if match is None:
                 match = re.match(r"^(.+?)\s+<--\[(.+?)\]--\s+(.+)$", segment)
-                if match is not None:
-                    src = match.group(3).strip()
-                    rel = match.group(2).strip()
-                    tgt = match.group(1).strip()
-                else:
-                    continue
-            else:
-                src = match.group(1).strip()
-                rel = match.group(2).strip()
-                tgt = match.group(3).strip()
+            if match is None:
+                entity_names.add(segment)
+                continue
+            entity_names.add(match.group(1).strip())
+            entity_names.add(match.group(3).strip())
 
-            saw_edge_path = True
-            entity_paths.setdefault(src, []).append(segment)
-            entity_paths.setdefault(tgt, []).append(segment)
-            known_entity_names.add(src)
-            known_entity_names.add(tgt)
-            rel_lookup[rel] = {"name": rel, "description": ""}
+    return {name for name in entity_names if name}
 
-    if saw_edge_path:
-        entity_lookup = {
-            name: {
-                "name": name,
-                "description": " | ".join(dict.fromkeys(path_list)),
-            }
-            for name, path_list in entity_paths.items()
+
+def _coerce_text_unit_ids(value: Any) -> list[str]:
+    if _is_missing_value(value):
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            return [stripped]
+        return _coerce_text_unit_ids(parsed)
+    if hasattr(value, "tolist") and not isinstance(value, (bytes, bytearray)):
+        try:
+            return _coerce_text_unit_ids(value.tolist())
+        except Exception:
+            return []
+    if isinstance(value, Iterable) and not isinstance(
+        value, (str, bytes, bytearray, dict)
+    ):
+        return [_non_empty_text(item) for item in value if _non_empty_text(item)]
+    return [_non_empty_text(value)]
+
+
+def _build_tog_sources_context(
+    *,
+    entity_names: set[str],
+    entities: pd.DataFrame,
+    text_units: pd.DataFrame,
+) -> dict[str, dict[str, str]]:
+    if not entity_names or entities.empty or text_units.empty:
+        return {}
+    if "text_unit_ids" not in entities.columns or "id" not in text_units.columns:
+        return {}
+
+    entity_name_lookup = {name.casefold() for name in entity_names}
+    name_column = _preferred_entity_name_column(entities)
+    candidate_columns = [
+        col
+        for col in (name_column, "title", "name", "entity")
+        if col in entities.columns
+    ]
+    text_unit_ids: list[str] = []
+
+    for _, row in entities.iterrows():
+        row_names = {
+            _non_empty_text(row.get(column)).casefold() for column in candidate_columns
         }
-        serialized: dict[str, dict[str, dict[str, str]]] = {}
-        if entity_lookup:
-            serialized["Entities"] = entity_lookup
-        if rel_lookup:
-            serialized["Relationships"] = rel_lookup
-        return serialized or None, known_entity_names
-
-    entity_lookup: dict[str, dict[str, str]] = {}
-    for path in paths:
-        entity_name = _non_empty_text(path)
-        if not entity_name:
+        if not row_names.intersection(entity_name_lookup):
             continue
-        entity_record = _match_entity_record_by_name(entities, entity_name)
-        if entity_record is None:
+        text_unit_ids.extend(_coerce_text_unit_ids(row.get("text_unit_ids")))
+
+    wanted_ids = set(dict.fromkeys(text_unit_ids))
+    sources: dict[str, dict[str, str]] = {}
+    for _, row in text_units.iterrows():
+        text_unit_id = _non_empty_text(row.get("id"))
+        if text_unit_id not in wanted_ids:
             continue
-        entity_lookup[entity_record["name"]] = entity_record
-        known_entity_names.add(entity_record["name"])
+        text = _non_empty_text(row.get("text")) or _non_empty_text(row.get("content"))
+        sources[text_unit_id] = {
+            "name": text_unit_id,
+            "description": text,
+        }
 
-    if not entity_lookup:
-        return None, set()
-
-    return {"Entities": entity_lookup}, known_entity_names
+    return sources
 
 
 # ---------------------------------------------------------------------------

@@ -344,7 +344,21 @@ Same shape as `/search/local`.
 |---|---|---|
 | `max_depth` | int \| null | Overrides `ToGSearchConfig.depth` |
 | `beam_width` | int \| null | Overrides `ToGSearchConfig.width` |
-| `show_exploration_paths` | bool | Include exploration paths in `context_data` |
+| `show_exploration_paths` | bool | Reserved for UI/debug intent; GraphRAG ToG returns exploration paths in its native `context_data` contract |
+
+ToG returns GraphRAG-native context data rather than the lookup tables used by Global, Local, and DRIFT search:
+
+```json
+{
+  "context_data": {
+    "exploration_paths": [
+      "Entity A --[relationship]--> Entity B"
+    ]
+  }
+}
+```
+
+The backend passes `entities`, `relationships`, and `text_units` into GraphRAG ToG for traversal and reasoning. The response preserves GraphRAG's native `exploration_paths` and may add a frontend-compatible `Sources` lookup for text units linked to the explored entities so citation hover cards can show source chunks. It does not synthesize separate `Entities`, `Relationships`, or `RawContext` tables.
 
 #### `GET /search/tog/debug`
 

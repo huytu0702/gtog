@@ -18,17 +18,20 @@ from ..config import settings
 from ..errors import ServingContextNotReadyError, ServingContextUnavailableError
 from ..models import SearchMethod, SearchResponse
 from ..repositories import get_control_plane_repository, get_pipeline_output_repository
-from ..utils import load_graphrag_config  # tests patch query_service_module.load_graphrag_config
+from ..utils import (
+    load_graphrag_config,
+)  # tests patch query_service_module.load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
-    _build_tog_serialized_context,
+    _build_tog_sources_context,
     _detach_query_log,
+    _extract_tog_entity_names_from_context,
     _is_missing_value,
     _normalize_community_reports_frame,  # tests patch this name on this module
     _normalize_tog_citations,
     _preferred_entity_name_column,
     _serialize_context_records,
-    _serialize_json_safe_context,
+    _serialize_tog_context_data,
 )
 from .serving_context_cache import serving_context_cache
 
@@ -52,6 +55,7 @@ _REQUIRED_DATASETS: dict[str, list[str]] = {
         "relationships",
     ],
 }
+
 
 class QueryService:
     """Service for managing query/search operations."""
@@ -107,7 +111,12 @@ class QueryService:
         logger.info(
             "pipeline_context_load collection=%s version=%s dataset=%s "
             "cache_hit=%s rows=%s load_ms=%.2f",
-            collection_id, version, dataset, cache_hit, len(frame), elapsed_ms,
+            collection_id,
+            version,
+            dataset,
+            cache_hit,
+            len(frame),
+            elapsed_ms,
         )
         return frame
 
@@ -138,16 +147,14 @@ class QueryService:
 
         required = _REQUIRED_DATASETS[method]
 
-        loaded_frames = await asyncio.gather(
-            *[
-                self._load_dataset_frame(
-                    collection_id=collection_id,
-                    version=str(active_version),
-                    dataset=dataset,
-                )
-                for dataset in required
-            ]
-        )
+        loaded_frames = await asyncio.gather(*[
+            self._load_dataset_frame(
+                collection_id=collection_id,
+                version=str(active_version),
+                dataset=dataset,
+            )
+            for dataset in required
+        ])
 
         frames: dict[str, pd.DataFrame] = {}
         for dataset, frame in zip(required, loaded_frames, strict=False):
@@ -156,7 +163,8 @@ class QueryService:
             if frame.empty:
                 if dataset == "community_reports":
                     logger.warning(
-                        "community_reports is empty for version %s, skipping", active_version
+                        "community_reports is empty for version %s, skipping",
+                        active_version,
                     )
                     continue
                 raise ServingContextNotReadyError(
@@ -284,7 +292,8 @@ class QueryService:
             logger.info("ToG search for collection %s: %s", collection_id, query)
             logger.info(
                 "Loaded %d entities and %d relationships",
-                len(entities), len(relationships),
+                len(entities),
+                len(relationships),
             )
             if logger.isEnabledFor(logging.DEBUG) and len(entities) > 0:
                 name_column = _preferred_entity_name_column(entities)
@@ -306,25 +315,15 @@ class QueryService:
         finally:
             _detach_query_log(fh)
 
-        serialized: dict[str, Any] | None = None
-        known_entity_names: set[str] = set()
-        if context_data and isinstance(context_data, dict):
-            serialized, known_entity_names = _build_tog_serialized_context(
-                context_data,
-                entities=entities,
-                relationships=relationships,
-            )
-            raw_context = _serialize_json_safe_context(context_data)
-            if serialized is None:
-                logger.warning(
-                    "ToG context_data could not be normalized; preserving raw context envelope"
-                )
-                serialized = {"RawContext": raw_context}
-            else:
-                serialized = {
-                    **serialized,
-                    "RawContext": raw_context,
-                }
+        serialized = _serialize_tog_context_data(context_data)
+        known_entity_names = _extract_tog_entity_names_from_context(serialized)
+        sources = _build_tog_sources_context(
+            entity_names=known_entity_names,
+            entities=entities,
+            text_units=frames["text_units"],
+        )
+        if serialized is not None and sources:
+            serialized = {**serialized, "Sources": sources}
 
         if known_entity_names and isinstance(response_text, str):
             response_text = _normalize_tog_citations(response_text, known_entity_names)
@@ -406,7 +405,10 @@ class QueryService:
         logger.info(
             "pipeline_context_preview collection=%s version=%s dataset=entities "
             "cache_hit=%s rows=%s",
-            collection_id, active_version, cache_hit, len(entities_df),
+            collection_id,
+            active_version,
+            cache_hit,
+            len(entities_df),
         )
         source = f"cosmos:{active_version}"
 
@@ -421,13 +423,11 @@ class QueryService:
             truncated_desc = (
                 description[:100] + "..." if len(description) > 100 else description
             )
-            entities_info.append(
-                {
-                    "id": str(entity_id) if not _is_missing_value(entity_id) else "",
-                    "description": truncated_desc,
-                    "type": row.get("type", "unknown"),
-                }
-            )
+            entities_info.append({
+                "id": str(entity_id) if not _is_missing_value(entity_id) else "",
+                "description": truncated_desc,
+                "type": row.get("type", "unknown"),
+            })
 
         return {
             "collection_id": collection_id,

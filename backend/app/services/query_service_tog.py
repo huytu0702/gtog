@@ -8,14 +8,16 @@ from ..models import SearchMethod, SearchResponse
 from ..utils import load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
-    _build_tog_serialized_context,
+    _build_tog_sources_context,
     _detach_query_log,
+    _extract_tog_entity_names_from_context,
     _normalize_tog_citations,
     _preferred_entity_name_column,
-    _serialize_json_safe_context,
+    _serialize_tog_context_data,
 )
 
 logger = logging.getLogger(__name__)
+
 
 async def run_tog_search(
     *,
@@ -67,27 +69,17 @@ async def run_tog_search(
     finally:
         _detach_query_log(fh)
 
-    serialized: dict | None = None
-    known_entity_names: set[str] = set()
-    if context_data and isinstance(context_data, dict):
-        serialized, known_entity_names = _build_tog_serialized_context(
-            context_data,
-            entities=entities,
-            relationships=relationships,
-        )
-        raw_context = _serialize_json_safe_context(context_data)
-        if serialized is None:
-            logger.warning(
-                "ToG context_data could not be normalized; preserving raw context envelope"
-            )
-            serialized = {"RawContext": raw_context}
-        else:
-            serialized = {
-                **serialized,
-                "RawContext": raw_context,
-            }
+    serialized = _serialize_tog_context_data(context_data)
+    known_entity_names = _extract_tog_entity_names_from_context(serialized)
+    sources = _build_tog_sources_context(
+        entity_names=known_entity_names,
+        entities=entities,
+        text_units=frames["text_units"],
+    )
+    if serialized is not None and sources:
+        serialized = {**serialized, "Sources": sources}
 
-    if known_entity_names:
+    if known_entity_names and isinstance(response_text, str):
         response_text = _normalize_tog_citations(response_text, known_entity_names)
 
     return SearchResponse(
