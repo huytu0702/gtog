@@ -481,10 +481,12 @@ class ToGSearch:
         except Exception as e:
             logger.exception("[ToG][finish] reasoning_failed")
             # Fallback response if reasoning fails
-            paths_summary = "\n".join([
-                f"- {node.entity_name}: {node.entity_description[:100]}..."
-                for node in all_paths[:5]
-            ])
+            paths_summary = "\n".join(
+                [
+                    f"- {node.entity_name}: {node.entity_description[:100]}..."
+                    for node in all_paths[:5]
+                ]
+            )
             yield (
                 f"""Error during reasoning: {e!s}
 
@@ -531,7 +533,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         )
 
         current_path = self._node_to_path_string(node)
-        relation_history = node.get_relation_history_text()
 
         # Score relations
         scored_relations, pruning_metrics = await self._score_relations(
@@ -539,7 +540,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             node=node,
             relations=relations,
             query_embedding=query_embedding,
-            relation_history=relation_history,
             current_path=current_path,
         )
         metrics_list.append(pruning_metrics)
@@ -574,17 +574,19 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             if target_info:
                 target_entity_id, target_name, target_full_desc = target_info
                 rel_full_desc = rel_info[1] if rel_info else rel_desc
-                candidate_groups[group_key].append((
-                    rel_desc,
-                    target_id,
-                    target_entity_id,
-                    direction,
-                    weight,
-                    rel_score,
-                    target_name,
-                    target_full_desc,
-                    rel_full_desc,
-                ))
+                candidate_groups[group_key].append(
+                    (
+                        rel_desc,
+                        target_id,
+                        target_entity_id,
+                        direction,
+                        weight,
+                        rel_score,
+                        target_name,
+                        target_full_desc,
+                        rel_full_desc,
+                    )
+                )
 
         candidate_data = []
         for rel_desc, direction in selected_relation_groups:
@@ -690,7 +692,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         node: ExplorationNode,
         relations: list[tuple[str, str, str, float]],
         query_embedding: np.ndarray | None,
-        relation_history: str,
         current_path: str,
     ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         score_relations = self.pruning_strategy.score_relations
@@ -703,8 +704,6 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
             for parameter in parameters.values()
         )
         context_kwargs = {}
-        if accepts_kwargs or "relation_history" in parameters:
-            context_kwargs["relation_history"] = relation_history
         if accepts_kwargs or "current_path" in parameters:
             context_kwargs["current_path"] = current_path
 
@@ -727,16 +726,23 @@ Based on the exploration, I found {len(all_paths)} potential paths. Please try r
         if we arrived via relation R in direction D, remove relation R in the
         opposite direction from the candidate list to prevent A->B->A cycles.
         """
-        if node.relation_from_parent is None or node.relation_direction_from_parent is None:
+        if (
+            node.relation_from_parent is None
+            or node.relation_direction_from_parent is None
+        ):
             return relations
 
         backtrack_direction = (
-            "incoming" if node.relation_direction_from_parent == "outgoing" else "outgoing"
+            "incoming"
+            if node.relation_direction_from_parent == "outgoing"
+            else "outgoing"
         )
         return [
             (rel, target, direction, weight)
             for rel, target, direction, weight in relations
-            if not (rel == node.relation_from_parent and direction == backtrack_direction)
+            if not (
+                rel == node.relation_from_parent and direction == backtrack_direction
+            )
         ]
 
     def _node_to_path_string(self, node: ExplorationNode) -> str:

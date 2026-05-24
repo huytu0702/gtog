@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-13T05:39:06.434532+00:00",
+    "input_file": "F:\\KL\\gtog-eval\\benchmarks\\medical_nlp_graph\\eval_results\\local_chunk_03\\eval_results_simple.json",
+    "model": "gpt-5.2",
+    "base_url": "http://127.0.0.1:8317/v1",
+    "settings_path": "F:\\KL\\gtog-eval\\benchmarks\\medical_nlp_graph\\settings.yaml"
+  },
+  "overall": {
+    "count": 50,
+    "success_count": 50,
+    "fail_count": 0,
+    "skip_count": 0
+  },
+  "by_method": {
+    "local": {
+      "count": 50,
+      "success_count": 50,
+      "fail_count": 0,
+      "skip_count": 0,
+      "context_precision": 0.9,
+      "context_recall": 0.4,
+      "faithfulness": 0.688012,
+      "answer_relevancy": 0.87099,
+      "answer_correctness_custom": 0.66
+    }
+  }
+}

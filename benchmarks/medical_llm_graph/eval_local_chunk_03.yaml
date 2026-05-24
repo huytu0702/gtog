@@ -1,0 +1,11 @@
+dataset:
+  path: F:/KL/gtog-eval/Datasets/Questions/medical_questions_eval_subset_200_chunk_03.json
+indexes:
+  medical: F:/KL/gtog-eval/benchmarks/medical_llm_graph
+methods:
+- local
+output:
+  dir: F:/KL/gtog-eval/benchmarks/medical_llm_graph/eval_results/local_chunk_03
+  save_intermediate: true
+judge:
+  temperature: 0.0

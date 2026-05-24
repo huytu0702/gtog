@@ -129,7 +129,6 @@ class LLMPruning(PruningStrategy):
         entity_name: str,
         relations: list[tuple[str, str, str, float]],
         query_embedding: np.ndarray | None = None,
-        relation_history: str | None = None,
         current_path: str | None = None,
     ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using LLM."""
@@ -138,20 +137,20 @@ class LLMPruning(PruningStrategy):
         if not relations:
             return [], metrics
 
-        relation_history = relation_history or "None"
         current_path = current_path or entity_name
 
         # Build relations text
-        relations_text = "\n".join([
-            f"{i + 1}. [{direction}] {rel_desc[:100]}... (weight: {weight:.2f})"
-            for i, (rel_desc, _, direction, weight) in enumerate(relations)
-        ])
+        relations_text = "\n".join(
+            [
+                f"{i + 1}. [{direction}] {rel_desc[:100]}... (weight: {weight:.2f})"
+                for i, (rel_desc, _, direction, weight) in enumerate(relations)
+            ]
+        )
 
         prompt = self.relation_scoring_prompt.format(
             query=query,
             entity_name=entity_name,
             relations=relations_text,
-            relation_history=relation_history,
             current_path=current_path,
         )
 
@@ -192,10 +191,12 @@ class LLMPruning(PruningStrategy):
         if not entities:
             return [], metrics
 
-        entities_text = "\n".join([
-            f"{i + 1}. {name}: {desc[:100]}..."
-            for i, (_, name, desc) in enumerate(entities)
-        ])
+        entities_text = "\n".join(
+            [
+                f"{i + 1}. {name}: {desc[:100]}..."
+                for i, (_, name, desc) in enumerate(entities)
+            ]
+        )
 
         prompt = self.entity_scoring_prompt.format(
             query=query, current_path=current_path, candidate_entities=entities_text
@@ -269,7 +270,6 @@ class SemanticPruning(PruningStrategy):
         entity_name: str,
         relations: list[tuple[str, str, str, float]],
         query_embedding: np.ndarray | None = None,
-        relation_history: str | None = None,
         current_path: str | None = None,
     ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using embedding similarity."""
@@ -516,7 +516,6 @@ class BM25Pruning(PruningStrategy):
         entity_name: str,
         relations: list[tuple[str, str, str, float]],
         query_embedding: np.ndarray | None = None,
-        relation_history: str | None = None,
         current_path: str | None = None,
     ) -> tuple[list[tuple[str, str, str, float, float]], PruningMetrics]:
         """Score relations using BM25."""
