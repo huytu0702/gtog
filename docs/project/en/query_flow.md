@@ -348,7 +348,7 @@ flowchart TB
 
 **Datasets read:** `entities`, `relationships`, `text_units`.
 
-**Context returned:** ToG preserves GraphRAG's native `context_data.exploration_paths`. The backend also adds a `Sources` lookup for text units linked to the explored entities so frontend citations can display source chunks. Relationship and entity lookup tables are not synthesized for ToG; relationship evidence remains represented in the exploration path strings.
+**Context returned:** ToG preserves GraphRAG's native `context_data.exploration_paths`. The backend also adds `Relationships` for explicit edge segments in those paths and `Sources` for text units linked to explored entities, so the frontend can display graph edges and source chunks. Entity lookup tables are not synthesized for ToG.
 
 **Prompts:** `TOG_RELATION_SCORING_PROMPT`, `TOG_ENTITY_SCORING_PROMPT`, `TOG_REASONING_PROMPT`.
 

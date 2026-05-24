@@ -195,6 +195,87 @@ def _extract_tog_entity_names_from_context(
     return {name for name in entity_names if name}
 
 
+def _build_tog_relationships_context(
+    *,
+    context_data: dict[str, Any] | None,
+    relationships: pd.DataFrame,
+) -> dict[str, dict[str, str]]:
+    if not context_data:
+        return {}
+
+    paths = context_data.get("exploration_paths", [])
+    if not isinstance(paths, Iterable) or isinstance(paths, (str, bytes)):
+        return {}
+
+    relationship_lookup: dict[str, dict[str, str]] = {}
+    for path in paths:
+        if not isinstance(path, str):
+            continue
+        for segment in [part.strip() for part in path.split(" | ") if part.strip()]:
+            match = re.match(r"^(.+?)\s+--\[(.+?)\]-->\s+(.+)$", segment)
+            if match is not None:
+                source = match.group(1).strip()
+                relation = match.group(2).strip()
+                target = match.group(3).strip()
+            else:
+                match = re.match(r"^(.+?)\s+<--\[(.+?)\]--\s+(.+)$", segment)
+                if match is None:
+                    continue
+                source = match.group(3).strip()
+                relation = match.group(2).strip()
+                target = match.group(1).strip()
+
+            if not source or not target or not relation:
+                continue
+            relationship_key = f"{source}|{relation}|{target}"
+            relationship_lookup[relationship_key] = {
+                "name": f"{source} → {target}",
+                "description": _tog_relationship_description(
+                    relationships=relationships,
+                    source=source,
+                    target=target,
+                    relation=relation,
+                ),
+            }
+
+    return relationship_lookup
+
+
+def _tog_relationship_description(
+    *,
+    relationships: pd.DataFrame,
+    source: str,
+    target: str,
+    relation: str,
+) -> str:
+    if (
+        relationships.empty
+        or "source" not in relationships.columns
+        or "target" not in relationships.columns
+    ):
+        return relation
+
+    source_key = source.casefold()
+    target_key = target.casefold()
+    relation_key = relation.casefold()
+    candidate_descriptions: list[str] = []
+    for _, row in relationships.iterrows():
+        row_source = _non_empty_text(row.get("source"))
+        row_target = _non_empty_text(row.get("target"))
+        if row_source.casefold() != source_key or row_target.casefold() != target_key:
+            continue
+        description = _non_empty_text(row.get("description"))
+        if not description:
+            continue
+        if description.casefold() == relation_key:
+            return description
+        candidate_descriptions.append(description)
+
+    if len(candidate_descriptions) == 1:
+        return candidate_descriptions[0]
+    return relation
+
+
 def _coerce_text_unit_ids(value: Any) -> list[str]:
     if _is_missing_value(value):
         return []
@@ -369,16 +450,117 @@ def _normalize_tog_citations(text: str, entity_names: set[str]) -> str:
         ):
             return match.group(0)
         raw_names = [n.strip() for n in inner.split(",")]
-        matched = [
-            name_map[n.lower()] if n.lower() in name_map else n
-            for n in raw_names
-            if n.strip()
-        ]
-        if matched:
+        matched = [name_map.get(n.lower(), "") for n in raw_names if n.strip()]
+        if matched and all(matched):
             return f"[Data: Entities ({', '.join(matched)})]"
         return match.group(0)
 
     return re.sub(r"\[Data:\s*([^\]]+)\]", _rewrite, text)
+
+
+_CITATION_BLOCK_RE = re.compile(r"\[Data:\s*([^\]]+)\]")
+_CITATION_ENTRY_RE = re.compile(r"([A-Za-z][A-Za-z\s]*?)\s*\(([^)]+)\)")
+_CITATION_DATASET_ALIASES: dict[str, tuple[str, ...]] = {
+    "sources": ("sources", "text units", "source chunks"),
+    "reports": ("reports",),
+    "entities": ("entities",),
+    "relationships": ("relationships",),
+    "claims": ("claims",),
+}
+_CITATION_DATASET_LABELS: dict[str, str] = {
+    "sources": "Sources",
+    "reports": "Reports",
+    "entities": "Entities",
+    "relationships": "Relationships",
+    "claims": "Claims",
+}
+
+
+def _collect_context_citation_ids(
+    context_data: dict[str, Any] | None,
+    dataset: str,
+) -> list[str]:
+    if not context_data:
+        return []
+
+    aliases = _CITATION_DATASET_ALIASES.get(dataset, (dataset,))
+    dataset_key = next(
+        (
+            key
+            for key in context_data
+            if key.casefold() in {alias.casefold() for alias in aliases}
+        ),
+        None,
+    )
+    if dataset_key is None:
+        return []
+
+    dataset_value = context_data.get(dataset_key)
+    if isinstance(dataset_value, dict):
+        return [identifier for identifier in dataset_value if _non_empty_text(identifier)]
+    if isinstance(dataset_value, list):
+        identifiers: list[str] = []
+        for item in dataset_value:
+            if not isinstance(item, dict):
+                continue
+            identifier = _non_empty_text(item.get("id"))
+            if identifier:
+                identifiers.append(identifier)
+        return identifiers
+    return []
+
+
+
+def _format_citation_identifier_list(values: list[str]) -> str:
+    unique_values = [value for value in dict.fromkeys(values) if value]
+    if len(unique_values) <= 5:
+        return ", ".join(unique_values)
+    return ", ".join([*unique_values[:5], "+more"])
+
+
+
+def _parse_structured_citation_entries(inner: str) -> dict[str, str]:
+    entries: dict[str, str] = {}
+    for match in _CITATION_ENTRY_RE.finditer(inner):
+        label = _non_empty_text(match.group(1))
+        values = _non_empty_text(match.group(2))
+        if not label or not values:
+            continue
+        entries[label] = values
+    return entries
+
+
+
+def _normalize_context_citations(
+    text: str,
+    *,
+    context_data: dict[str, Any] | None,
+    dataset_order: list[str],
+    entity_names: set[str] | None = None,
+) -> str:
+    if not text or not context_data:
+        return text
+
+    del dataset_order
+    name_map = {name.casefold(): name for name in entity_names or set()}
+    if not name_map:
+        return text
+
+    def _rewrite(match: re.Match) -> str:
+        inner = _non_empty_text(match.group(1))
+        entries = _parse_structured_citation_entries(inner)
+        if entries:
+            return match.group(0)
+
+        raw_names = [_non_empty_text(value) for value in inner.split(",")]
+        matched_names = [
+            name_map.get(raw_name.casefold(), "") for raw_name in raw_names if raw_name
+        ]
+        if matched_names and all(matched_names):
+            return f"[Data: Entities ({', '.join(matched_names)})]"
+        return match.group(0)
+
+    return _CITATION_BLOCK_RE.sub(_rewrite, text)
 
 
 # ---------------------------------------------------------------------------

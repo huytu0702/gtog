@@ -250,11 +250,92 @@ async def test_tog_search_serializes_exploration_paths_when_available():
     assert response.response == "Answer [Data: Entities (Entity 1, Entity 2)]"
     assert response.context_data == {
         **raw_context,
+        "Relationships": {
+            "Entity 1|related_to|Entity 2": {
+                "name": "Entity 1 → Entity 2",
+                "description": "related_to",
+            }
+        },
         "Sources": {"t1": {"name": "t1", "description": "chunk"}},
     }
     assert "RawContext" not in response.context_data
     assert "Entities" not in response.context_data
-    assert "Relationships" not in response.context_data
+
+
+@pytest.mark.asyncio
+async def test_tog_search_preserves_duplicate_relationship_labels():
+    service = _make_service(
+        pd.DataFrame([
+            {"id": "e1", "title": "Entity 1"},
+            {"id": "e2", "title": "Entity 2"},
+            {"id": "e3", "title": "Entity 3"},
+            {"id": "e4", "title": "Entity 4"},
+        ]),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame([{"id": "t1", "text": "chunk"}]),
+        pd.DataFrame([
+            {
+                "id": "rel1",
+                "source": "Entity 1",
+                "target": "Entity 2",
+                "description": "related_to",
+            },
+            {
+                "id": "rel2",
+                "source": "Entity 1",
+                "target": "Entity 2",
+                "description": "supports",
+            },
+            {
+                "id": "rel3",
+                "source": "Entity 3",
+                "target": "Entity 4",
+                "description": "related_to",
+            },
+        ]),
+    )
+    config = _runtime_safe_config()
+    raw_context = {
+        "exploration_paths": [
+            "Entity 1 --[related_to]--> Entity 2",
+            "Entity 1 --[supports]--> Entity 2",
+            "Entity 1 --[support]--> Entity 2",
+            "Entity 3 --[related_to]--> Entity 4",
+        ]
+    }
+
+    with patch.object(
+        query_service_module, "load_graphrag_config", return_value=config
+    ):
+        with patch.object(
+            query_service_module.api,
+            "tog_search",
+            new=AsyncMock(return_value=("ok", raw_context)),
+        ):
+            response = await service.tog_search("c1", "q1")
+
+    assert response.context_data == {
+        **raw_context,
+        "Relationships": {
+            "Entity 1|related_to|Entity 2": {
+                "name": "Entity 1 → Entity 2",
+                "description": "related_to",
+            },
+            "Entity 1|supports|Entity 2": {
+                "name": "Entity 1 → Entity 2",
+                "description": "supports",
+            },
+            "Entity 1|support|Entity 2": {
+                "name": "Entity 1 → Entity 2",
+                "description": "support",
+            },
+            "Entity 3|related_to|Entity 4": {
+                "name": "Entity 3 → Entity 4",
+                "description": "related_to",
+            },
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -543,11 +624,16 @@ async def test_run_tog_search_serializes_exploration_paths_when_available():
     assert response.response == "Answer [Data: Entities (Entity 1, Entity 2)]"
     assert response.context_data == {
         **raw_context,
+        "Relationships": {
+            "Entity 1|related_to|Entity 2": {
+                "name": "Entity 1 → Entity 2",
+                "description": "related_to",
+            }
+        },
         "Sources": {"t1": {"name": "t1", "description": "chunk"}},
     }
     assert "RawContext" not in response.context_data
     assert "Entities" not in response.context_data
-    assert "Relationships" not in response.context_data
 
 
 @pytest.mark.asyncio

@@ -8,9 +8,11 @@ from ..models import SearchMethod, SearchResponse
 from ..utils import load_graphrag_config
 from .query_service_base import (
     _attach_query_log,
+    _build_tog_relationships_context,
     _build_tog_sources_context,
     _detach_query_log,
     _extract_tog_entity_names_from_context,
+    _normalize_context_citations,
     _normalize_tog_citations,
     _preferred_entity_name_column,
     _serialize_tog_context_data,
@@ -71,16 +73,35 @@ async def run_tog_search(
 
     serialized = _serialize_tog_context_data(context_data)
     known_entity_names = _extract_tog_entity_names_from_context(serialized)
+    relationships_context = _build_tog_relationships_context(
+        context_data=serialized,
+        relationships=relationships,
+    )
     sources = _build_tog_sources_context(
         entity_names=known_entity_names,
         entities=entities,
         text_units=frames["text_units"],
     )
-    if serialized is not None and sources:
-        serialized = {**serialized, "Sources": sources}
+    if serialized is not None:
+        serialized = {
+            **serialized,
+            **(
+                {"Relationships": relationships_context}
+                if relationships_context
+                else {}
+            ),
+            **({"Sources": sources} if sources else {}),
+        }
 
     if known_entity_names and isinstance(response_text, str):
         response_text = _normalize_tog_citations(response_text, known_entity_names)
+    if isinstance(response_text, str):
+        response_text = _normalize_context_citations(
+            response_text,
+            context_data=serialized,
+            dataset_order=["sources", "entities", "relationships"],
+            entity_names=known_entity_names,
+        )
 
     return SearchResponse(
         query=query,

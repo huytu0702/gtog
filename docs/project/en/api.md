@@ -358,7 +358,7 @@ ToG returns GraphRAG-native context data rather than the lookup tables used by G
 }
 ```
 
-The backend passes `entities`, `relationships`, and `text_units` into GraphRAG ToG for traversal and reasoning. The response preserves GraphRAG's native `exploration_paths` and may add a frontend-compatible `Sources` lookup for text units linked to the explored entities so citation hover cards can show source chunks. It does not synthesize separate `Entities`, `Relationships`, or `RawContext` tables.
+The backend passes `entities`, `relationships`, and `text_units` into GraphRAG ToG for traversal and reasoning. The response preserves GraphRAG's native `exploration_paths`, adds a frontend-compatible `Relationships` lookup for explicit edge segments in those paths, and may add a `Sources` lookup for text units linked to explored entities so citation hover cards can show source chunks. It does not synthesize separate `Entities` or `RawContext` tables.
 
 #### `GET /search/tog/debug`
 
