@@ -1,8 +1,14 @@
 """Integration tests for agent search."""
 
+import os
+
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import httpx
+
+os.environ["AZURE_COSMOS_CONNECTION_STRING"] = ""
+os.environ["AZURE_COSMOS_ENDPOINT"] = ""
+os.environ["AZURE_COSMOS_KEY"] = ""
 
 from backend.app.main import app
 
@@ -33,6 +39,10 @@ class TestAgentSearchIntegration:
         mock_graphrag_result.response = "I do not have enough indexed information."
         mock_graphrag_result.context_data = {}
 
+        graph_output_decision = MagicMock()
+        graph_output_decision.allowed = True
+        graph_output_decision.safe_response = None
+
         mock_web_result = MagicMock()
         mock_web_result.response = "The FDA regulations..."
         mock_web_result.sources = []
@@ -46,28 +56,112 @@ class TestAgentSearchIntegration:
                 new_callable=AsyncMock,
             ) as mock_local:
                 with patch(
-                    "backend.app.routers.search._should_trigger_web_fallback",
-                    new_callable=AsyncMock,
-                ) as mock_should_fallback:
+                    "backend.app.routers.search.nemo_guardrails_service.check_output",
+                    new=AsyncMock(return_value=graph_output_decision),
+                ):
                     with patch(
-                        "backend.app.routers.search.web_search_service.search",
+                        "backend.app.routers.search._should_trigger_web_fallback",
                         new_callable=AsyncMock,
-                    ) as mock_web:
-                        mock_router.return_value = mock_route
-                        mock_local.return_value = mock_graphrag_result
-                        mock_should_fallback.return_value = True
-                        mock_web.return_value = mock_web_result
+                    ) as mock_should_fallback:
+                        with patch(
+                            "backend.app.routers.search.web_search_service.search",
+                            new_callable=AsyncMock,
+                        ) as mock_web:
+                            mock_router.return_value = mock_route
+                            mock_local.return_value = mock_graphrag_result
+                            mock_should_fallback.return_value = True
+                            mock_web.return_value = mock_web_result
 
-                        response = await client.post(
-                            "/api/collections/test/search/agent",
-                            json={"query": "What are latest FDA regulations?", "stream": False},
-                        )
+                            response = await client.post(
+                                "/api/collections/test/search/agent",
+                                json={"query": "What are latest FDA regulations?", "stream": False},
+                            )
 
-                        assert response.status_code == 200
-                        data = response.json()
-                        assert data["method_used"] == "local"
-                        assert data["web_search_triggered"] is True
-                        assert "FDA" in data["web_response"]
+                            assert response.status_code == 200
+                            data = response.json()
+                            assert data["method_used"] == "local"
+                            assert (
+                                data["response"]
+                                == "I do not have enough indexed information."
+                            )
+                            assert data["web_search_triggered"] is True
+                            assert "FDA" in data["web_response"]
+
+    @pytest.mark.asyncio
+    async def test_agent_search_suppresses_blocked_web_fallback_output(self, client):
+        """GraphRAG response stays primary when fallback runs but web output is blocked."""
+        mock_route = MagicMock()
+        mock_route.method = "local"
+        mock_route.confidence = 0.92
+        mock_route.reasoning = "Focused entity query"
+        mock_route.rewritten_query = "What are the latest FDA regulations?"
+
+        mock_graphrag_result = MagicMock()
+        mock_graphrag_result.response = "Use the indexed FDA guidance as the baseline answer."
+        mock_graphrag_result.context_data = {"entities": ["FDA"]}
+
+        graph_output_decision = MagicMock()
+        graph_output_decision.allowed = True
+        graph_output_decision.safe_response = None
+
+        blocked_web_output_decision = MagicMock()
+        blocked_web_output_decision.allowed = False
+        blocked_web_output_decision.safe_response = "Blocked web answer"
+
+        mock_web_source = MagicMock()
+        mock_web_source.model_dump.return_value = {
+            "title": "FDA source",
+            "url": "https://example.com/fda",
+        }
+
+        mock_web_result = MagicMock()
+        mock_web_result.response = "Untrusted web synthesis that should be suppressed."
+        mock_web_result.sources = [mock_web_source]
+
+        with patch(
+            "backend.app.routers.search.router_agent.route",
+            new_callable=AsyncMock,
+        ) as mock_router:
+            with patch(
+                "backend.app.routers.search.query_service.local_search",
+                new_callable=AsyncMock,
+            ) as mock_local:
+                with patch(
+                    "backend.app.routers.search.nemo_guardrails_service.check_output",
+                    new=AsyncMock(
+                        side_effect=[graph_output_decision, blocked_web_output_decision]
+                    ),
+                ) as mock_check_output:
+                    with patch(
+                        "backend.app.routers.search._should_trigger_web_fallback",
+                        new_callable=AsyncMock,
+                    ) as mock_should_fallback:
+                        with patch(
+                            "backend.app.routers.search.web_search_service.search",
+                            new_callable=AsyncMock,
+                        ) as mock_web:
+                            mock_router.return_value = mock_route
+                            mock_local.return_value = mock_graphrag_result
+                            mock_should_fallback.return_value = True
+                            mock_web.return_value = mock_web_result
+
+                            response = await client.post(
+                                "/api/collections/test/search/agent",
+                                json={"query": "What are latest FDA regulations?", "stream": False},
+                            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["method_used"] == "local"
+        assert data["response"] == "Use the indexed FDA guidance as the baseline answer."
+        assert data["context_data"] == {"entities": ["FDA"]}
+        assert data["web_search_triggered"] is True
+        assert data["web_response"] is None
+        assert data["web_sources"] == []
+        assert mock_check_output.await_count == 2
+        assert mock_check_output.await_args_list[1].args[0] == (
+            "Untrusted web synthesis that should be suppressed."
+        )
 
     @pytest.mark.asyncio
     async def test_summarize_endpoint_returns_summary_and_trimmed_history(self, client):

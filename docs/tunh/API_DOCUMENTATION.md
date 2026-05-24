@@ -818,8 +818,8 @@ Backend sử dụng các environment variables sau (trong file `.env`):
 OPENAI_API_KEY=your-openai-api-key
 GRAPHRAG_API_KEY=your-graphrag-api-key
 
-# Storage
-STORAGE_ROOT_DIR=./storage
+# Azure Storage (Azurite locally, real account in prod)
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=...;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;
 
 # Models
 DEFAULT_CHAT_MODEL=gpt-4o-mini

@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from ..models import DocumentList, DocumentResponse
-from ..services import storage_service
+from ..services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
 

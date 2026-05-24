@@ -113,3 +113,38 @@ def test_transition_completed_sets_finished_at(repository: CosmosControlPlaneRep
     assert updated["status"] == INDEX_JOB_COMPLETED
     assert updated["finishedAt"] is not None
     assert updated["leaseOwnerId"] is None
+
+
+def test_list_collection_versions_merges_deduplicates_and_sorts() -> None:
+    repo = object.__new__(CosmosControlPlaneRepository)
+    repo._containers = {
+        "jobs": MagicMock(),
+        "artifacts": MagicMock(),
+    }
+    repo._container_names = {
+        "indexing_jobs": "jobs",
+        "artifact_manifest": "artifacts",
+    }
+    repo.get_collection = MagicMock(return_value={"activeVersion": "v2"})
+    repo._containers["artifacts"].query_items.return_value = [
+        {"version": "v1"},
+        {"version": "v2"},
+        {"version": ""},
+    ]
+    repo._containers["jobs"].query_items.return_value = [
+        {"targetVersion": "v3"},
+        {"targetVersion": "v2"},
+        {"targetVersion": None},
+    ]
+
+    versions = repo.list_collection_versions("c1")
+
+    assert versions == ["v1", "v2", "v3"]
+
+
+def test_list_collection_versions_raises_when_collection_missing() -> None:
+    repo = object.__new__(CosmosControlPlaneRepository)
+    repo.get_collection = MagicMock(return_value=None)
+
+    with pytest.raises(ValueError, match="Collection 'missing' not found"):
+        repo.list_collection_versions("missing")

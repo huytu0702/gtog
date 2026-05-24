@@ -7,8 +7,10 @@ import logging
 from uuid import uuid4
 
 from .config import settings
+from .logging_config import configure_logging
 from .services.indexing_service import indexing_service
 from .services.queue_service import queue_service
+from .vector_stores import register_backend_vector_stores
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,8 @@ async def _run_worker_loop() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    configure_logging()
+    register_backend_vector_stores()
     asyncio.run(_run_worker_loop())
 
 

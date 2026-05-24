@@ -53,8 +53,12 @@ class CosmosDBPipelineStorage(PipelineStorage):
             msg = "connection_string or cosmosdb_account_url is required."
             raise ValueError(msg)
 
+        client_kwargs = kwargs.get("client_kwargs", {}) or {}
         if connection_string:
-            self._cosmos_client = CosmosClient.from_connection_string(connection_string)
+            self._cosmos_client = CosmosClient.from_connection_string(
+                connection_string,
+                **client_kwargs,
+            )
         else:
             if cosmosdb_account_url is None:
                 msg = (
@@ -64,6 +68,7 @@ class CosmosDBPipelineStorage(PipelineStorage):
             self._cosmos_client = CosmosClient(
                 url=cosmosdb_account_url,
                 credential=DefaultAzureCredential(),
+                **client_kwargs,
             )
         self._encoding = kwargs.get("encoding", "utf-8")
         self._database_name = database_name
@@ -250,6 +255,22 @@ class CosmosDBPipelineStorage(PipelineStorage):
             # value represents a parquet file
             if isinstance(value, bytes):
                 prefix = self._get_prefix(key)
+                # Clear stale items with the same prefix to mirror file overwrite semantics.
+                stale_query = (
+                    f"SELECT c.id FROM c WHERE STARTSWITH(c.id, '{prefix}:')"  # noqa: S608
+                )
+                stale_items = list(
+                    self._container_client.query_items(
+                        query=stale_query, enable_cross_partition_query=True
+                    )
+                )
+                for stale in stale_items:
+                    try:
+                        self._container_client.delete_item(
+                            item=stale["id"], partition_key=stale["id"]
+                        )
+                    except CosmosResourceNotFoundError:
+                        continue
                 value_df = pd.read_parquet(BytesIO(value))
                 value_json = value_df.to_json(
                     orient="records", lines=False, force_ascii=False
@@ -258,12 +279,16 @@ class CosmosDBPipelineStorage(PipelineStorage):
                     logger.error("Error converting output %s to json", key)
                 else:
                     cosmosdb_item_list = json.loads(value_json)
+                    has_id_column = any("id" in item for item in cosmosdb_item_list)
+                    if has_id_column and prefix in self._no_id_prefixes:
+                        self._no_id_prefixes = [p for p in self._no_id_prefixes if p != prefix]
                     for index, cosmosdb_item in enumerate(cosmosdb_item_list):
                         # If the id key does not exist in the input dataframe json, create a unique id using the prefix and item index
                         # TODO: Figure out optimal way to handle missing id keys in input dataframes
                         if "id" not in cosmosdb_item:
                             prefixed_id = f"{prefix}:{index}"
-                            self._no_id_prefixes.append(prefix)
+                            if prefix not in self._no_id_prefixes:
+                                self._no_id_prefixes.append(prefix)
                         else:
                             prefixed_id = f"{prefix}:{cosmosdb_item['id']}"
                         cosmosdb_item["id"] = prefixed_id

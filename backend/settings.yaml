@@ -12,7 +12,7 @@ models:
     auth_type: api_key
     api_key: ${OPENAI_API_KEY}
     api_base: ${OPENAI_API_BASE}
-    model: gpt-5.2
+    model: gpt-4o-mini
     model_supports_json: true
     concurrent_requests: 5
     async_mode: threaded
@@ -29,7 +29,7 @@ models:
     auth_type: api_key
     api_key: ${OPENAI_API_KEY}
     api_base: ${OPENAI_API_BASE}
-    model: gpt-5.4-mini
+    model: gpt-4o-mini
     model_supports_json: true
     concurrent_requests: 2
     async_mode: threaded
@@ -57,7 +57,9 @@ models:
 
 input:
   storage:
-    type: file # or blob
+    type: blob
+    connection_string: ${AZURE_STORAGE_CONNECTION_STRING}
+    container_name: pipeline-input
     base_dir: "input"
   file_type: text # [csv, text, json]
 
@@ -71,24 +73,29 @@ chunks:
 ## connection_string and container_name must be provided
 
 output:
-  type: file # [file, blob, cosmosdb]
+  type: cosmosdb # [file, blob, cosmosdb]
   base_dir: "output"
     
 cache:
-  type: file # [file, memory, none]
+  type: memory # [file, memory, none]
   base_dir: "cache"
 
 reporting:
-  type: file # [file, blob]
+  type: blob # [file, blob]
+  connection_string: ${AZURE_STORAGE_CONNECTION_STRING}
+  container_name: pipeline-logs
   base_dir: "logs"
 
 vector_store:
   default_vector_store:
-    type: lancedb
-    db_uri: output/lancedb
-    container_name: default
+    type: cosmosdb
+    url: ${AZURE_COSMOS_ENDPOINT}
+    database_name: ${AZURE_COSMOS_DATABASE_NAME}
+    container_name: vectors
     embeddings_schema:
       entity.description:
+        vector_size: 3072
+      relationship.description:
         vector_size: 3072
       community.full_content:
         vector_size: 3072
@@ -100,6 +107,11 @@ vector_store:
 embed_text:
   model_id: default_embedding_model
   vector_store_id: default_vector_store
+  names:
+    - entity.description
+    - relationship.description
+    - community.full_content
+    - text_unit.text
 
 extract_graph:
   model_id: default_chat_model

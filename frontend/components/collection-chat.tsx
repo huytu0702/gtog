@@ -23,18 +23,32 @@ const DATASET_COLORS: Record<string, string> = {
     Entities: 'bg-green-100 text-green-800 border-green-400',
     Relationships: 'bg-purple-100 text-purple-800 border-purple-400',
     Sources: 'bg-orange-100 text-orange-800 border-orange-400',
+    'Text units': 'bg-orange-100 text-orange-800 border-orange-400',
     Claims: 'bg-red-100 text-red-800 border-red-400',
 };
 
 // context_data shape: { [dataset: string]: { [id: string]: { name: string, description: string } } }
-type ContextLookup = Record<string, Record<string, { name: string; description: string }>>;
+type ContextEntry = { name: string; description: string };
+type ContextLookup = Record<string, Record<string, ContextEntry>>;
+
+const DATASET_KEY_ALIASES: Record<string, string[]> = {
+    reports: ['reports'],
+    entities: ['entities'],
+    relationships: ['relationships'],
+    sources: ['sources', 'text units', 'source chunks'],
+    'text units': ['text units', 'sources', 'source chunks'],
+    'source chunks': ['source chunks', 'sources', 'text units'],
+    claims: ['claims'],
+};
 
 function buildTooltip(dataset: string, ids: string, context: ContextLookup | null): string {
     if (!context) return `${dataset}: ${ids}`;
-    // The backend keys are title-cased ("Entities"), match case-insensitively
-    const datasetKey = Object.keys(context).find(
-        (k) => k.toLowerCase() === dataset.toLowerCase()
-    );
+    const normalizedDataset = dataset.trim().toLowerCase();
+    const candidateKeys = DATASET_KEY_ALIASES[normalizedDataset] ?? [normalizedDataset];
+    const datasetKey = Object.keys(context).find((key) => {
+        const normalizedKey = key.toLowerCase();
+        return candidateKeys.includes(normalizedKey);
+    });
     if (!datasetKey) return `${dataset}: ${ids}`;
     const lookup = context[datasetKey];
     const lines = ids.split(',').map((rawId) => {
@@ -77,7 +91,7 @@ function CitationBadge({
 
 // Regex: matches [Data: Dataset1 (ids); Dataset2 (ids)]
 const CITATION_RE = /\[Data:\s*((?:[^[\]]+?))\]/g;
-const ENTRY_RE = /([A-Za-z]+)\s*\(([^)]+)\)/g;
+const ENTRY_RE = /([A-Za-z][A-Za-z\s]*?)\s*\(([^)]+)\)/g;
 
 const MARKDOWN_COMPONENTS = {
     p: ({ children }: { children?: React.ReactNode }) => <span className="font-medium leading-relaxed">{children}</span>,
@@ -143,7 +157,7 @@ function MessageContent({ text, context }: { text: string; context: ContextLooku
         );
     }
 
-    return <div className="whitespace-pre-wrap">{parts}</div>;
+    return <div>{parts}</div>;
 }
 
 function MethodBadge({ method, webSearchTriggered }: { method: string; webSearchTriggered?: boolean }) {

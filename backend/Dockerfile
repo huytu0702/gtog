@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# --- deps: install all dependencies (cached until requirements change) ---
+# --- deps: install all dependencies (cached until pyproject changes) ---
 FROM base AS deps
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -17,11 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN uv venv /opt/venv
 
-COPY backend/requirements.txt /tmp/backend-requirements.txt
 COPY pyproject.toml README.md /app/
 RUN mkdir -p /app/graphrag && echo '__version__ = "0.0.0"' > /app/graphrag/__init__.py \
-    && uv pip install --python /opt/venv/bin/python . \
-    && uv pip install --python /opt/venv/bin/python -r /tmp/backend-requirements.txt
+    && uv pip install --python /opt/venv/bin/python .
 
 # --- builder: install graphrag package + copy backend code ---
 FROM deps AS builder

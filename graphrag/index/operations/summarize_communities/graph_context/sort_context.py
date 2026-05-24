@@ -55,7 +55,7 @@ def sort_context(
 
     # Preprocess local context
     edges = [
-        {**e, schemas.SHORT_ID: int(e[schemas.SHORT_ID])}
+        {**e, schemas.SHORT_ID: int(e[schemas.SHORT_ID]) if e.get(schemas.SHORT_ID) is not None and not (isinstance(e[schemas.SHORT_ID], float) and pd.isna(e[schemas.SHORT_ID])) else 0}
         for record in local_context
         for e in record.get(edge_details_column, [])
         if isinstance(e, dict)
@@ -64,7 +64,7 @@ def sort_context(
     node_details = {
         record[node_name_column]: {
             **record[node_details_column],
-            schemas.SHORT_ID: int(record[node_details_column][schemas.SHORT_ID]),
+            schemas.SHORT_ID: int(record[node_details_column][schemas.SHORT_ID]) if record[node_details_column].get(schemas.SHORT_ID) is not None and not (isinstance(record[node_details_column][schemas.SHORT_ID], float) and pd.isna(record[node_details_column][schemas.SHORT_ID])) else 0,
         }
         for record in local_context
     }

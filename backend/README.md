@@ -17,21 +17,13 @@ FastAPI backend for GraphRAG that enables document indexing and querying with mu
 
 ### 1. Install Dependencies
 
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 2. Install GraphRAG Package
-
 From the project root:
 
 ```bash
-cd ..
 pip install -e .
 ```
 
-### 3. Configure Environment
+### 2. Configure Environment
 
 Create a `.env` file in the `backend/` directory (copy from `.env.example`):
 
@@ -75,7 +67,7 @@ Notes:
 - Backward compatibility: the backend still accepts legacy `AFD_ORIGIN_SECRET` as an env alias during migration.
 - The tunnel connector uses its own `CLOUDFLARE_TUNNEL_TOKEN` secret outside the backend runtime.
 
-### 4. Verify Settings
+### 3. Verify Settings
 
 The backend uses a shared `settings.yaml` file. Make sure `/backend/settings.yaml` exists (copied from root during setup).
 
@@ -199,7 +191,6 @@ backend/
 │       └── helpers.py          # Utility functions
 ├── storage/                     # Collections storage
 ├── settings.yaml                # Shared GraphRAG config
-├── requirements.txt
 ├── .env                         # Environment variables
 └── README.md
 ```

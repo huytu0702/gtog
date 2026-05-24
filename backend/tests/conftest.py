@@ -1,6 +1,6 @@
 """Pytest configuration for backend tests."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -17,5 +17,4 @@ def mock_settings():
         mock.openai_api_key = "test-key"
         mock.tavily_api_key = "test-tavily-key"
         mock.default_chat_model = "gpt-4o-mini"
-        mock.collections_dir = MagicMock()
         yield mock

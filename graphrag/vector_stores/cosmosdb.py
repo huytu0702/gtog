@@ -37,15 +37,18 @@ class CosmosDBVectorStore(BaseVectorStore):
     def connect(self, **kwargs: Any) -> Any:
         """Connect to CosmosDB vector storage."""
         connection_string = kwargs.get("connection_string")
+        client_kwargs = kwargs.get("client_kwargs") or {}
         if connection_string:
-            self._cosmos_client = CosmosClient.from_connection_string(connection_string)
+            self._cosmos_client = CosmosClient.from_connection_string(
+                connection_string, **client_kwargs
+            )
         else:
             url = kwargs.get("url")
             if not url:
                 msg = "Either connection_string or url must be provided."
                 raise ValueError(msg)
             self._cosmos_client = CosmosClient(
-                url=url, credential=DefaultAzureCredential()
+                url=url, credential=DefaultAzureCredential(), **client_kwargs
             )
 
         database_name = kwargs.get("database_name")
@@ -154,7 +157,8 @@ class CosmosDBVectorStore(BaseVectorStore):
         self, documents: list[VectorStoreDocument], overwrite: bool = True
     ) -> None:
         """Load documents into CosmosDB."""
-        # Create a CosmosDB container on overwrite
+        import time
+
         if overwrite:
             self._delete_container()
             self._create_container()
@@ -163,20 +167,23 @@ class CosmosDBVectorStore(BaseVectorStore):
             msg = "Container client is not initialized."
             raise ValueError(msg)
 
-        # Upload documents to CosmosDB
         for doc in documents:
-            if doc.vector is not None:
-                print("Document to store:")  # noqa: T201
-                print(doc)  # noqa: T201
-                doc_json = {
-                    self.id_field: doc.id,
-                    self.vector_field: doc.vector,
-                    self.text_field: doc.text,
-                    self.attributes_field: json.dumps(doc.attributes),
-                }
-                print("Storing document in CosmosDB:")  # noqa: T201
-                print(doc_json)  # noqa: T201
-                self._container_client.upsert_item(doc_json)
+            if doc.vector is None:
+                continue
+            doc_json = {
+                self.id_field: doc.id,
+                self.vector_field: doc.vector,
+                self.text_field: doc.text,
+                self.attributes_field: json.dumps(doc.attributes),
+            }
+            for attempt in range(5):
+                try:
+                    self._container_client.upsert_item(doc_json)
+                    break
+                except Exception:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.5 * (attempt + 1))
 
     def similarity_search_by_vector(
         self, query_embedding: list[float], k: int = 10, **kwargs: Any

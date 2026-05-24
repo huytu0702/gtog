@@ -34,6 +34,7 @@ __pycache__
 .pipeline
 
 # Azurite
+.azurite/
 temp_azurite/
 __azurite*.json
 __blobstorage*.json
