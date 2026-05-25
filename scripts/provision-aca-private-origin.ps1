@@ -51,15 +51,20 @@ param(
     [string]$EdgeOriginSecretName = "edge-origin-secret",
     [switch]$CreateApps,
     [string]$AppPublicHostname = "",
-    [string]$ApiPublicHostname = ""
+    [string]$ApiPublicHostname = "",
+    [string]$RegistryServer = "",
+    [string]$RegistryUsername = "",
+    [string]$RegistryPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not $env:AZURE_CONFIG_DIR) {
-    $env:AZURE_CONFIG_DIR = (Join-Path (Get-Location) ".azure")
+    $env:AZURE_CONFIG_DIR = Join-Path $HOME ".azure"
 }
-New-Item -ItemType Directory -Path $env:AZURE_CONFIG_DIR -Force | Out-Null
+if (-not (Test-Path $env:AZURE_CONFIG_DIR)) {
+    New-Item -ItemType Directory -Path $env:AZURE_CONFIG_DIR -Force | Out-Null
+}
 
 if (-not $PrivateDnsZone) {
     $PrivateDnsZone = "privatelink.$Location.azurecontainerapps.io"
@@ -111,6 +116,7 @@ function Ensure-Subnet {
             --resource-group $ResourceGroup `
             --vnet-name $VnetName `
             --name $Name `
+            --only-show-errors `
             --output none 2>$null
     })) {
         $arguments = @(
@@ -153,8 +159,44 @@ function Test-ContainerAppExists {
         az containerapp show `
             --resource-group $ResourceGroup `
             --name $Name `
+            --only-show-errors `
             --output none 2>$null
     })
+}
+
+function Get-ContainerAppProvisioningState {
+    param([string]$Name)
+
+    $state = az containerapp show `
+        --resource-group $ResourceGroup `
+        --name $Name `
+        --only-show-errors `
+        --query properties.provisioningState `
+        --output tsv 2>$null
+
+    if ($LASTEXITCODE -ne 0) {
+        return ""
+    }
+
+    return ([string]$state).Trim()
+}
+
+function Remove-ContainerAppIfFailed {
+    param([string]$Name)
+
+    if (-not (Test-ContainerAppExists -Name $Name)) {
+        return
+    }
+
+    $state = Get-ContainerAppProvisioningState -Name $Name
+    if ($state -eq "Failed") {
+        Write-Host ">>> Removing failed container app: $Name"
+        az containerapp delete `
+            --resource-group $ResourceGroup `
+            --name $Name `
+            --yes `
+            --output none | Out-Null
+    }
 }
 
 function Ensure-ContainerAppIdentity {
@@ -183,6 +225,7 @@ function Wait-ContainerAppProvisioning {
         $lastState = az containerapp show `
             --resource-group $ResourceGroup `
             --name $Name `
+            --only-show-errors `
             --query properties.provisioningState `
             --output tsv 2>$null
 
@@ -201,6 +244,26 @@ function Wait-ContainerAppProvisioning {
     throw "Timed out waiting for container app $Name provisioning state to settle. Last state: $lastState"
 }
 
+function Ensure-ContainerAppRegistry {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($RegistryServer)) {
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($RegistryUsername) -or [string]::IsNullOrWhiteSpace($RegistryPassword)) {
+        throw "RegistryUsername and RegistryPassword are required when RegistryServer is set."
+    }
+
+    az containerapp registry set `
+        --resource-group $ResourceGroup `
+        --name $Name `
+        --server $RegistryServer `
+        --username $RegistryUsername `
+        --password $RegistryPassword `
+        --output none | Out-Null
+}
+
 function Ensure-FrontendIngressContract {
     $frontendArgs = @(
         "containerapp", "update",
@@ -210,12 +273,13 @@ function Ensure-FrontendIngressContract {
         "--memory", $FrontendMemory,
         "--min-replicas", $FrontendMinReplicas,
         "--max-replicas", $FrontendMaxReplicas,
-        "--set-env-vars", "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname", "CORS_ORIGINS=https://$AppPublicHostname",
-        "--output", "none"
+        "--set-env-vars", "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname", "CORS_ORIGINS=https://$AppPublicHostname"
     )
+    Ensure-ContainerAppRegistry -Name $FrontendAppName
     if ($FrontendImage) {
         $frontendArgs += @("--image", $FrontendImage)
     }
+    $frontendArgs += @("--output", "none")
     az @frontendArgs | Out-Null
 
     az containerapp ingress enable `
@@ -253,12 +317,13 @@ function Ensure-ApiIngressContract {
         "--set-env-vars"
     )
     $apiArgs += $apiEnvVars
-    $apiArgs += @(
-        "--output", "none"
-    )
+    Ensure-ContainerAppRegistry -Name $ApiAppName
     if ($ApiImage) {
         $apiArgs += @("--image", $ApiImage)
     }
+    $apiArgs += @(
+        "--output", "none"
+    )
     az @apiArgs | Out-Null
 
     az containerapp ingress enable `
@@ -289,12 +354,13 @@ function Ensure-WorkerIngressContract {
         "--memory", $WorkerMemory,
         "--min-replicas", $WorkerMinReplicas,
         "--max-replicas", $WorkerMaxReplicas,
-        "--set-env-vars", "APP_ROLE=worker",
-        "--output", "none"
+        "--set-env-vars", "APP_ROLE=worker"
     )
+    Ensure-ContainerAppRegistry -Name $WorkerAppName
     if ($WorkerImage) {
         $workerArgs += @("--image", $WorkerImage)
     }
+    $workerArgs += @("--output", "none")
     az @workerArgs | Out-Null
 
     az containerapp ingress disable `
@@ -753,6 +819,7 @@ if ($RolloutMode -in @("promote", "rollback")) {
         }
 
         Write-Host ">>> Ensuring frontend app: $FrontendAppName"
+        Remove-ContainerAppIfFailed -Name $FrontendAppName
         if (-not (Test-ContainerAppExists -Name $FrontendAppName)) {
             $frontendArgs = @(
                 "containerapp", "create",
@@ -767,16 +834,27 @@ if ($RolloutMode -in @("promote", "rollback")) {
                 "--memory", $FrontendMemory,
                 "--min-replicas", $FrontendMinReplicas,
                 "--max-replicas", $FrontendMaxReplicas,
-                "--env-vars", "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname", "CORS_ORIGINS=https://$AppPublicHostname",
-                "--output", "none"
+                "--env-vars", "NEXT_PUBLIC_API_BASE_URL=https://$ApiPublicHostname", "CORS_ORIGINS=https://$AppPublicHostname"
             )
+            if (-not [string]::IsNullOrWhiteSpace($RegistryServer)) {
+                if ([string]::IsNullOrWhiteSpace($RegistryUsername) -or [string]::IsNullOrWhiteSpace($RegistryPassword)) {
+                    throw "RegistryUsername and RegistryPassword are required when RegistryServer is set."
+                }
+                $frontendArgs += @(
+                    "--registry-server", $RegistryServer,
+                    "--registry-username", $RegistryUsername,
+                    "--registry-password", $RegistryPassword
+                )
+            }
             if ($IdentityResourceId) {
                 $frontendArgs += @("--user-assigned", $IdentityResourceId)
             }
+            $frontendArgs += @("--output", "none")
             az @frontendArgs | Out-Null
         }
 
         Write-Host ">>> Ensuring API app: $ApiAppName"
+        Remove-ContainerAppIfFailed -Name $ApiAppName
         if (-not (Test-ContainerAppExists -Name $ApiAppName)) {
                 $apiEnvVars = @(
                     "APP_ROLE=api",
@@ -806,16 +884,27 @@ if ($RolloutMode -in @("promote", "rollback")) {
             )
             $apiArgs += $apiEnvVars
             $apiArgs += $apiSecretArgs
-            $apiArgs += @(
-                "--output", "none"
-            )
+            if (-not [string]::IsNullOrWhiteSpace($RegistryServer)) {
+                if ([string]::IsNullOrWhiteSpace($RegistryUsername) -or [string]::IsNullOrWhiteSpace($RegistryPassword)) {
+                    throw "RegistryUsername and RegistryPassword are required when RegistryServer is set."
+                }
+                $apiArgs += @(
+                    "--registry-server", $RegistryServer,
+                    "--registry-username", $RegistryUsername,
+                    "--registry-password", $RegistryPassword
+                )
+            }
             if ($IdentityResourceId) {
                 $apiArgs += @("--user-assigned", $IdentityResourceId)
             }
+            $apiArgs += @(
+                "--output", "none"
+            )
             az @apiArgs | Out-Null
         }
 
         Write-Host ">>> Ensuring worker app: $WorkerAppName"
+        Remove-ContainerAppIfFailed -Name $WorkerAppName
         if (-not (Test-ContainerAppExists -Name $WorkerAppName)) {
             $workerArgs = @(
                 "containerapp", "create",
@@ -827,12 +916,22 @@ if ($RolloutMode -in @("promote", "rollback")) {
                 "--memory", $WorkerMemory,
                 "--min-replicas", $WorkerMinReplicas,
                 "--max-replicas", $WorkerMaxReplicas,
-                "--env-vars", "APP_ROLE=worker",
-                "--output", "none"
+                "--env-vars", "APP_ROLE=worker"
             )
+            if (-not [string]::IsNullOrWhiteSpace($RegistryServer)) {
+                if ([string]::IsNullOrWhiteSpace($RegistryUsername) -or [string]::IsNullOrWhiteSpace($RegistryPassword)) {
+                    throw "RegistryUsername and RegistryPassword are required when RegistryServer is set."
+                }
+                $workerArgs += @(
+                    "--registry-server", $RegistryServer,
+                    "--registry-username", $RegistryUsername,
+                    "--registry-password", $RegistryPassword
+                )
+            }
             if ($IdentityResourceId) {
                 $workerArgs += @("--user-assigned", $IdentityResourceId)
             }
+            $workerArgs += @("--output", "none")
             az @workerArgs | Out-Null
         }
 

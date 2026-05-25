@@ -42,6 +42,12 @@ _SUPPORTED_EMBEDDING_SUFFIXES: tuple[tuple[str, str], ...] = (
 )
 
 
+def _close_cosmos_client(client: CosmosClient) -> None:
+    close_client = getattr(client, "close", None)
+    if callable(close_client):
+        close_client()
+
+
 def delete_collection_vector_documents(collection_id: str) -> int:
     database_name = settings.azure_cosmos_database_name.strip()
     if not database_name:
@@ -76,7 +82,7 @@ def delete_collection_vector_documents(collection_id: str) -> int:
         container = database.get_container_client(_FIXED_VECTOR_CONTAINER_NAME)
         container.read()
     except CosmosResourceNotFoundError:
-        cosmos_client.close()
+        _close_cosmos_client(cosmos_client)
         return 0
 
     try:
@@ -105,7 +111,7 @@ def delete_collection_vector_documents(collection_id: str) -> int:
 
         return deleted_count
     finally:
-        cosmos_client.close()
+        _close_cosmos_client(cosmos_client)
 
 
 class ScopedCosmosDBVectorStore(BaseVectorStore):

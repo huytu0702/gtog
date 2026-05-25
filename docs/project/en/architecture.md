@@ -8,7 +8,7 @@ The system is a knowledge-graph powered RAG application that:
 
 1. Ingests user-uploaded documents into per-collection blob containers.
 2. Builds a knowledge graph (entities, relationships, communities) via the GraphRAG indexing pipeline.
-3. Serves five different search strategies (Global, Local, DRIFT, Basic, ToG) through a FastAPI backend.
+3. Serves five different search strategies (Global, Local, DRIFT, ToG) through a FastAPI backend.
 4. Exposes a Next.js neo-brutalist frontend for collection management and conversational chat.
 
 ```mermaid

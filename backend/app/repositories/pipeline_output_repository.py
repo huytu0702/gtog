@@ -133,7 +133,9 @@ class PipelineOutputRepository:
 
             return deleted_count
         finally:
-            client.close()
+            close_client = getattr(client, "close", None)
+            if callable(close_client):
+                close_client()
 
     @staticmethod
     def _run_storage_coro(coro):

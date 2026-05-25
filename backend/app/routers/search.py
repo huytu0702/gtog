@@ -177,6 +177,131 @@ async def drift_search(collection_id: str, request: DriftSearchRequest):
         _raise_for_unknown(e)
 
 
+def _build_direct_stream_response(
+    *,
+    collection_id: str,
+    request: DriftSearchRequest,
+    method: SearchMethod,
+    search_call,
+) -> EventSourceResponse:
+    """Build an SSE response for a direct search method."""
+
+    async def event_generator():
+        method_name = method.value
+        method_label = method_name.upper()
+        try:
+            yield {
+                "event": "status",
+                "data": json.dumps({
+                    "step": "searching",
+                    "method": method_name,
+                    "message": f"Running {method_label} search...",
+                }),
+            }
+
+            input_decision = await nemo_guardrails_service.check_input(
+                request.query,
+                _guardrail_context(collection_id, stage=f"direct_{method_name}_stream_input"),
+            )
+            logger.info(
+                "[GUARDRAIL] direct %s stream input check: allowed=%s action=%s reason=%s",
+                method_name,
+                input_decision.allowed,
+                input_decision.action,
+                input_decision.reason,
+            )
+            if not input_decision.allowed:
+                safe_response = (
+                    input_decision.safe_response
+                    or "Request blocked by AI guardrails."
+                )
+                yield {
+                    "event": "content",
+                    "data": json.dumps({"delta": safe_response}),
+                }
+                yield {
+                    "event": "done",
+                    "data": json.dumps({
+                        "method_used": method_name,
+                        "router_reasoning": f"Direct {method_label} search blocked by AI guardrails.",
+                        "rewritten_query": None,
+                        "context_data": None,
+                        "web_search_triggered": False,
+                        "web_response": None,
+                        "web_sources": [],
+                    }),
+                }
+                return
+
+            result = await search_call()
+            output_decision = await nemo_guardrails_service.check_output(
+                _normalize_response_text(result.response),
+                _guardrail_context(
+                    collection_id,
+                    stage=f"direct_{method_name}_stream_output",
+                    context_metadata=_build_context_metadata(result.context_data),
+                ),
+            )
+            logger.info(
+                "[GUARDRAIL] direct %s stream output check: allowed=%s action=%s reason=%s",
+                method_name,
+                output_decision.allowed,
+                output_decision.action,
+                output_decision.reason,
+            )
+
+            response_payload = (
+                output_decision.safe_response or result.response
+                if output_decision.allowed
+                else output_decision.safe_response or "Request blocked by AI guardrails."
+            )
+            context_data = result.context_data if output_decision.allowed else None
+
+            response_str = (
+                response_payload
+                if isinstance(response_payload, str)
+                else json.dumps(response_payload, ensure_ascii=False)
+            )
+            for i in range(0, len(response_str), _SSE_CHUNK_SIZE):
+                yield {
+                    "event": "content",
+                    "data": json.dumps({
+                        "delta": response_str[i : i + _SSE_CHUNK_SIZE]
+                    }),
+                }
+
+            yield {
+                "event": "done",
+                "data": json.dumps({
+                    "method_used": method_name,
+                    "router_reasoning": f"Direct {method_label} search.",
+                    "rewritten_query": None,
+                    "context_data": context_data,
+                    "web_search_triggered": False,
+                    "web_response": None,
+                    "web_sources": [],
+                }),
+            }
+        except Exception:
+            logger.exception("Error in direct %s streaming search", method_name)
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "message": "Internal error while processing stream."
+                }),
+            }
+
+    return EventSourceResponse(
+        event_generator(),
+        ping=SSE_HEARTBEAT_INTERVAL_SECONDS,
+        ping_message_factory=_build_heartbeat_event,
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 def _normalize_response_text(response: Any) -> str:
     """Normalize GraphRAG response into text for judge input."""
     if response is None:
@@ -938,3 +1063,19 @@ async def agent_search_stream_get(
 async def agent_search_stream_post(collection_id: str, request: AgentSearchRequest):
     """Backward-compatible POST route for clients not yet using EventSource GET."""
     return _build_agent_stream_response(collection_id, request)
+
+
+@router.post("/drift/stream")
+async def drift_search_stream(collection_id: str, request: DriftSearchRequest):
+    """Perform a DRIFT search with SSE streaming."""
+    return _build_direct_stream_response(
+        collection_id=collection_id,
+        request=request,
+        method=SearchMethod.DRIFT,
+        search_call=lambda: query_service.drift_search(
+            collection_id=collection_id,
+            query=request.query,
+            community_level=request.community_level,
+            response_type=request.response_type,
+        ),
+    )

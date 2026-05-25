@@ -16,10 +16,11 @@ os.environ["AZURE_USE_MANAGED_IDENTITY"] = "false"
 
 from backend.app.errors import ServingContextUnavailableError
 from backend.app.main import app
-from backend.app.models import AgentSearchRequest
+from backend.app.models import AgentSearchRequest, DriftSearchRequest, SearchMethod
 from backend.app.routers.search import (
     SSE_HEARTBEAT_INTERVAL_SECONDS,
     _build_agent_stream_response,
+    _build_direct_stream_response,
 )
 
 SERVICE_MODULE = importlib.import_module("backend.app.services.nemo_guardrails_service")
@@ -310,6 +311,79 @@ class TestAgentStreamEndpoint:
         response = _build_agent_stream_response(
             "test-collection",
             AgentSearchRequest(query="What changed?", stream=True),
+        )
+
+        assert response.media_type == "text/event-stream"
+        assert response.headers.get("Cache-Control") == "no-cache"
+        assert response.headers.get("X-Accel-Buffering") == "no"
+        assert response.ping_interval == SSE_HEARTBEAT_INTERVAL_SECONDS
+
+        heartbeat_event = response.ping_message_factory()
+        assert heartbeat_event.event == "heartbeat"
+        assert json.loads(heartbeat_event.data) == {"message": "keepalive"}
+
+
+class TestDriftStreamEndpoint:
+    """Test POST /drift/stream SSE contract."""
+
+    @pytest.mark.asyncio
+    async def test_drift_stream_returns_event_stream_headers(self):
+        mock_search_response = MagicMock()
+        mock_search_response.response = "drift stream chunk"
+        mock_search_response.context_data = {}
+
+        with patch("backend.app.routers.search.query_service") as mock_query:
+            mock_query.drift_search = AsyncMock(return_value=mock_search_response)
+
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                response = await client.post(
+                    "/api/collections/test-collection/search/drift/stream",
+                    json={"query": "What changed?"},
+                )
+
+        assert response.status_code == 200
+        assert response.headers.get("content-type", "").startswith("text/event-stream")
+        assert response.headers.get("cache-control") == "no-cache"
+        assert response.headers.get("x-accel-buffering") == "no"
+
+    @pytest.mark.asyncio
+    async def test_drift_stream_emits_content_and_done_events(self):
+        mock_search_response = MagicMock()
+        mock_search_response.response = "drift answer"
+        mock_search_response.context_data = {"entities": {"a": {"name": "A"}}}
+
+        with patch("backend.app.routers.search.query_service") as mock_query:
+            mock_query.drift_search = AsyncMock(return_value=mock_search_response)
+
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                async with client.stream(
+                    "POST",
+                    "/api/collections/test-collection/search/drift/stream",
+                    json={"query": "Explain GraphRAG"},
+                ) as response:
+                    body = (await response.aread()).decode()
+
+        assert response.status_code == 200
+        assert "event: status" in body
+        assert "event: content" in body
+        assert json.dumps({"delta": "drift answer"}) in body
+        assert "event: done" in body
+        assert '"method_used": "drift"' in body
+
+    def test_build_direct_stream_response_configures_heartbeat_events(self):
+        response = _build_direct_stream_response(
+            collection_id="test-collection",
+            request=DriftSearchRequest(query="What changed?"),
+            method=SearchMethod.DRIFT,
+            search_call=AsyncMock(),
         )
 
         assert response.media_type == "text/event-stream"

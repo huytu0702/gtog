@@ -144,6 +144,13 @@ curl -X POST http://localhost:8000/api/collections/my_docs/search/drift \
   -d '{"query": "What are the connections between entities?"}'
 ```
 
+#### DRIFT Search Stream
+```bash
+curl -N -X POST http://localhost:8000/api/collections/my_docs/search/drift/stream \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What are the connections between entities?"}'
+```
+
 ## API Endpoints
 
 ### Collections
@@ -166,6 +173,7 @@ curl -X POST http://localhost:8000/api/collections/my_docs/search/drift \
 - `POST /api/collections/{id}/search/local` - Local search
 - `POST /api/collections/{id}/search/tog` - ToG search
 - `POST /api/collections/{id}/search/drift` - DRIFT search
+- `POST /api/collections/{id}/search/drift/stream` - DRIFT search over SSE with keepalive heartbeats
 - `GET /api/collections/{id}/search/agent/stream?query=...` - EventSource SSE stream
 
 ## Project Structure

@@ -498,6 +498,94 @@ export function CollectionChat({ collection }: CollectionChatProps) {
         }
     }, [collection.id, convHistory, convSummary, updateConversation, updateStreamingMessage]);
 
+    const handleDriftStream = React.useCallback(async (query: string) => {
+        setIsStreaming(true);
+        const abortController = new AbortController();
+        streamAbortRef.current = abortController;
+
+        setMessages((prev) => {
+            const startIndex = prev.length + 1;
+            streamingMessageIndexRef.current = startIndex;
+            return [
+                ...prev,
+                { role: 'user', content: query },
+                {
+                    role: 'bot',
+                    content: '',
+                    method: 'drift',
+                    statusSteps: [{ step: 'searching', message: 'Searching knowledge graph...', method: 'drift' }],
+                    currentStep: 'searching',
+                },
+            ];
+        });
+
+        let finalResponse = '';
+
+        try {
+            await searchApi.driftStreamPost(
+                collection.id,
+                query,
+                {
+                    onStatus: (event) => {
+                        const mappedMessage = formatStatusMessage(event);
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            currentStep: event.step,
+                            method: event.method ?? 'drift',
+                            statusSteps: [{ step: event.step, message: mappedMessage, method: event.method ?? 'drift' }],
+                        }));
+                    },
+                    onContent: (event) => {
+                        finalResponse += event.chunk;
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            content: finalResponse,
+                        }));
+                    },
+                    onDone: (event) => {
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            content: finalResponse || message.content || 'No response content returned.',
+                            currentStep: undefined,
+                            context: event.context_data ?? null,
+                            method: event.method_used || 'drift',
+                            statusSteps: event.router_reasoning
+                                ? [{
+                                    step: 'reasoning',
+                                    message: `[${(event.method_used || 'drift').toUpperCase()} search: ${event.router_reasoning}]`,
+                                    method: event.method_used || 'drift',
+                                }]
+                                : undefined,
+                        }));
+                    },
+                    onError: (event) => {
+                        streamAbortRef.current?.abort();
+                        updateStreamingMessage((message) => ({
+                            ...message,
+                            currentStep: undefined,
+                            streamError: event.error,
+                            content: message.content ? message.content : `Error: ${event.error}`,
+                        }));
+                    },
+                },
+                abortController.signal,
+            );
+        } catch (error) {
+            if ((error as Error).name !== 'AbortError') {
+                updateStreamingMessage((message) => ({
+                    ...message,
+                    currentStep: undefined,
+                    streamError: (error as Error).message,
+                    content: message.content ? message.content : `Error: ${(error as Error).message}`,
+                }));
+            }
+        } finally {
+            setIsStreaming(false);
+            streamAbortRef.current = null;
+            streamingMessageIndexRef.current = null;
+        }
+    }, [collection.id, updateStreamingMessage]);
+
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || searchMutation.isPending || isStreaming) return;
@@ -507,6 +595,11 @@ export function CollectionChat({ collection }: CollectionChatProps) {
 
         if (method === 'agent') {
             await handleAgentStream(query);
+            return;
+        }
+
+        if (method === 'drift') {
+            await handleDriftStream(query);
             return;
         }
 

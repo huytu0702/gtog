@@ -162,3 +162,77 @@ def test_delete_collection_outputs_returns_zero_for_empty_versions(
 
     assert deleted_count == 0
     cosmos_ctor.assert_not_called()
+
+
+def test_delete_collection_outputs_succeeds_without_client_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+    repo = PipelineOutputRepository()
+
+    class FakeDatabaseClient:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def delete_container(self, name: str) -> None:
+            self.deleted.append(name)
+
+    class FakeCosmosClient:
+        def __init__(self, database_client: FakeDatabaseClient) -> None:
+            self._database_client = database_client
+
+        def get_database_client(self, name: str) -> FakeDatabaseClient:
+            assert name == "gtog-control"
+            return self._database_client
+
+    database_client = FakeDatabaseClient()
+    cosmos_client = FakeCosmosClient(database_client)
+
+    with patch.object(repo, "_create_cosmos_client", return_value=cosmos_client):
+        deleted_count = repo.delete_collection_outputs(
+            collection_id="Collection_1",
+            versions=["v1"],
+        )
+
+    assert deleted_count == 1
+    assert database_client.deleted == ["pipeline-collection-1-v1"]
+
+
+def test_delete_collection_outputs_closes_client_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+    repo = PipelineOutputRepository()
+    database_client = MagicMock()
+    cosmos_client = MagicMock()
+    cosmos_client.get_database_client.return_value = database_client
+
+    with patch.object(repo, "_create_cosmos_client", return_value=cosmos_client):
+        deleted_count = repo.delete_collection_outputs(
+            collection_id="Collection_1",
+            versions=["v1"],
+        )
+
+    assert deleted_count == 1
+    database_client.delete_container.assert_called_once_with("pipeline-collection-1-v1")
+    cosmos_client.close.assert_called_once_with()
+
+
+def test_delete_collection_outputs_closes_client_when_delete_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+    repo = PipelineOutputRepository()
+    database_client = MagicMock()
+    database_client.delete_container.side_effect = RuntimeError("boom")
+    cosmos_client = MagicMock()
+    cosmos_client.get_database_client.return_value = database_client
+
+    with patch.object(repo, "_create_cosmos_client", return_value=cosmos_client):
+        with pytest.raises(RuntimeError, match="boom"):
+            repo.delete_collection_outputs(
+                collection_id="Collection_1",
+                versions=["v1"],
+            )
+
+    cosmos_client.close.assert_called_once_with()

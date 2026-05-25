@@ -366,3 +366,78 @@ def test_delete_collection_vector_documents_returns_zero_when_container_missing(
                 deleted_count = delete_collection_vector_documents("c1")
 
     assert deleted_count == 0
+
+
+def test_delete_collection_vector_documents_succeeds_without_client_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+
+    class FakeContainerClient:
+        def read(self) -> None:
+            return None
+
+        def query_items(self, *, query, parameters, enable_cross_partition_query):
+            assert query == "SELECT c.id, c.partitionKey FROM c WHERE c.collectionId = @collectionId"
+            assert parameters == [{"name": "@collectionId", "value": "c1"}]
+            assert enable_cross_partition_query is True
+            return [{"id": "doc-1", "partitionKey": "pk-1"}]
+
+        def delete_item(self, *, item, partition_key) -> None:
+            assert item == "doc-1"
+            assert partition_key == "pk-1"
+
+    class FakeDatabaseClient:
+        def get_container_client(self, name: str) -> FakeContainerClient:
+            assert name == "vectors"
+            return FakeContainerClient()
+
+    class FakeCosmosClient:
+        def get_database_client(self, name: str) -> FakeDatabaseClient:
+            assert name == "gtog-control"
+            return FakeDatabaseClient()
+
+    with patch(
+        "backend.app.vector_stores.scoped_cosmosdb.resolve_cosmos_connection_string",
+        return_value="AccountEndpoint=https://localhost:8081/;AccountKey=key;",
+    ):
+        with patch(
+            "backend.app.vector_stores.scoped_cosmosdb.cosmos_client_kwargs",
+            return_value={"enable_endpoint_discovery": False},
+        ):
+            with patch(
+                "backend.app.vector_stores.scoped_cosmosdb.CosmosClient.from_connection_string",
+                return_value=FakeCosmosClient(),
+            ):
+                deleted_count = delete_collection_vector_documents("c1")
+
+    assert deleted_count == 1
+
+
+def test_delete_collection_vector_documents_closes_client_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "azure_cosmos_database_name", "gtog-control")
+    container_client = MagicMock()
+    container_client.query_items.return_value = []
+    database_client = MagicMock()
+    database_client.get_container_client.return_value = container_client
+    cosmos_client = MagicMock()
+    cosmos_client.get_database_client.return_value = database_client
+
+    with patch(
+        "backend.app.vector_stores.scoped_cosmosdb.resolve_cosmos_connection_string",
+        return_value="AccountEndpoint=https://localhost:8081/;AccountKey=key;",
+    ):
+        with patch(
+            "backend.app.vector_stores.scoped_cosmosdb.cosmos_client_kwargs",
+            return_value={"enable_endpoint_discovery": False},
+        ):
+            with patch(
+                "backend.app.vector_stores.scoped_cosmosdb.CosmosClient.from_connection_string",
+                return_value=cosmos_client,
+            ):
+                deleted_count = delete_collection_vector_documents("c1")
+
+    assert deleted_count == 0
+    cosmos_client.close.assert_called_once_with()
